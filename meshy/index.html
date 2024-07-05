@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no">
+    
+    <style type="text/css">
+      body {
+        background-color:black;
+        margin: 0;
+        padding: 0;
+        overflow: hidden; /* Prevent scrolling when in fullscreen */
+      }
+      canvas {
+        padding: 0;
+        margin: auto;
+        display: block;
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        right: 0;
+      }
+    </style>
+
+    <style> 
+      .prevent-select {
+        -webkit-user-select: none; /* Safari */
+        -ms-user-select: none; /* IE 10 and IE 11 */
+        user-select: none; /* Standard syntax */
+      }
+    </style>
+    
+
+    <script>
+      // Generates a random hash and token id each time you reload, 
+      // in the following format:
+      // let tokenData = {"hash":"0xd9134c11cd5ed9798ea0811364d63bd850c69c5d13383c9983ade39847e9ea86","tokenId":"99000000"};
+      
+      function genTokenData(projectNum) {
+        let data = {};
+        let hash = "0x";
+        for (var i = 0; i < 64; i++){
+          hash += Math.floor(Math.random() * 16).toString(16);
+        }
+        data.hash = hash;
+        data.tokenId = (projectNum * 1000000 + Math.floor(Math.random() * 1000)).toString();
+        return data;
+      }
+      let tokenData = genTokenData(99);
+    </script>
+
+    <script src="sketch.js"></script>
+
+
+  </head>
+  <body class="prevent-select">
+  </body>
+</html>
