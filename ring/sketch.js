@@ -1,4 +1,4 @@
-// Signet Ring Band Generator - Version 10/17/2024
+// Zen's Signet Ring Band Generator - Version 10/17/2024
 // A simple tool for parametric design of ring bands.
 // Instructions: Press "Play" (▶) button to run.
 // Print the downloaded PNG image at 4"x2" (288ppi).
@@ -532,7 +532,7 @@ function saveOutputPDF(){
   dateStr += ":" + nf(minute(),2); 
   dateStr += ":" + nf(second(),2); 
   
-  doc.text("Created with the Signet Ring Band Generator:", 1,1.0);
+  doc.text("Created with Zen's Signet Ring Band Generator:", 1,1.0);
   doc.text("https://editor.p5js.org/golan/sketches/agU6jerpg",   1,1.3); 
   doc.text("Generated on: " + dateStr, 1,1.6);
 
