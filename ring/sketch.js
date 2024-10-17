@@ -267,7 +267,14 @@ function createOffscreenImage(){
     offscreen.text(str, blm / 2, ly + 2);
     let ristr = int(ringSize) + "";
     if ((ringSize%1.0) > 0){
-      ristr += ((ringSize%1.0) === 0.5) ? "½" : "¼"; 
+      let frac = (ringSize%1.0);
+      if (frac === 0.5){
+        ristr += "½";
+      } else if (frac === 0.25){
+        ristr += "¼";
+      } else if (frac === 0.75){
+        ristr += "¾";
+      }
     }
     ristr += "."; 
     offscreen.text("US ring size (nominal): " + ristr, blm/2,ly-2);
@@ -533,7 +540,7 @@ function saveOutputPDF(){
   dateStr += ":" + nf(second(),2); 
   
   doc.text("Created with Zen's Signet Ring Band Generator:", 1,1.0);
-  doc.text("https://editor.p5js.org/golan/sketches/agU6jerpg",   1,1.3); 
+  doc.text("https://golanlevin.github.io/ring",   1,1.3); 
   doc.text("Generated on: " + dateStr, 1,1.6);
 
   let diagramImgData = offscreen.canvas.toDataURL('image/png');
