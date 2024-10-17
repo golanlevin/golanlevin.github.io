@@ -198,7 +198,7 @@ function drawSliderLabels(){
   let rs = nf(ringSize, 1,2);
   
   textAlign(CENTER);
-  text("Signet Ring Band Generator", width / 2, textY-sliderDy);
+  text("Zen's Signet Ring Band Generator", width / 2, textY-sliderDy);
 
   textAlign(LEFT);
   text("A. minBandWidth (mm) = " + ibwm, 192,textY);
