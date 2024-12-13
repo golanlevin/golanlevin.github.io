@@ -1,20 +1,24 @@
-// ZEN'S SUPER-ELLIPSE MAKER 3000+ 
+// ZEN'S SUPER-ELLIPSE GENERATOR 3000+ 
 // Generates ellipses, superellipses, and rectangles.
 // Press "Download PNG" or the 's' key to export an image.
 // Math at: https://en.wikipedia.org/wiki/Superellipse
 // By Golan Levin; CC0: No Rights Reserved. 
-// Version: 8 September 2024 • For Z.L.
+// Version: 13 December 2024 • For Z.L.
+p5.disableFriendlyErrors = true; 
 
 let sliderAspect;
 let sliderExponent; 
 let sliderDivider;
 let buttonPng; 
+let buttonSvg;
 let checkboxAxes;
 let checkboxSnap;
 let checkboxCirc;
 let isHovered = false;
+let bDoExportSvg = false; 
+let svgFilename = "ellipse.svg";
 
-let bShowAxes = false;
+let bShowAxes = true;
 let bEnableSnap = true; 
 let bCircAxes = false;
 let offscreen; 
@@ -66,11 +70,17 @@ function setup() {
   checkboxCirc = createCheckbox("", bCircAxes);
   checkboxCirc.position(339,uiy+70);
   
-  buttonPng = createButton('Download PNG');
+  buttonPng = createButton('⬇png');
   buttonPng.position(18, uiy+48);
-  buttonPng.mousePressed(saveOutput);
+  buttonPng.mousePressed(savePngOutput);
   buttonPng.mouseOver(() => isHovered = true);
   buttonPng.mouseOut(() => isHovered = false);
+  
+  buttonSvg = createButton('⬇svg'); 
+  buttonSvg.position(18+60, uiy+48);
+  buttonSvg.mousePressed(saveSvgOutput);
+  buttonSvg.mouseOver(() => isHovered = true);
+  buttonSvg.mouseOut(() => isHovered = false);
   
   for (let i=0; i<vals.length; i++){
     eccs[i] = sqrt(1.0 - sq(1.0/vals[i])); 
@@ -108,12 +118,22 @@ function draw() {
   let ew = eh/aspectRatio;
   let ey = offscreen.height/2;
   let ex = offscreen.width/2; 
-
+  
   offscreen.clear();
   offscreen.push(); 
   offscreen.translate(ex,ey); 
-  generateSuperEllipse(ew,eh);
+  generateSuperEllipse(ew,eh, offscreen);
   offscreen.pop();
+  
+  if (bDoExportSvg){
+    beginRecordSVG(this, svgFilename);
+    push(); 
+    translate(ex,ey); 
+    generateSuperEllipse(ew,eh, this);
+    pop();
+    endRecordSVG();
+    bDoExportSvg = false;
+  }
   
   drawShape(ew,eh); 
   image(offscreen, margin,height-oh-margin); 
@@ -125,7 +145,7 @@ function draw() {
   let expStr = (exponent > 500) ? "∞" : nf(exponent,1,2);
   textSize(14); 
   textStyle(BOLD); 
-  text("ZEN'S SUPER-ELLIPSE MAKER 3000+", 19, 30); 
+  text("ZEN'S SUPER-ELLIPSE GENERATOR 3000+", 19, 30); 
   textSize(12); 
   textStyle(NORMAL); 
   text("Aspect Ratio: " + ratStr, 19,uiy); 
@@ -143,6 +163,7 @@ function draw() {
 
 //=============================================
 function drawShape(ew,eh){
+  // Purely visual, just makes a nice white background oval
   push(); 
   let ey = margin + height-width + offscreen.height/2;
   translate(width/2,ey); 
@@ -171,19 +192,19 @@ function drawShape(ew,eh){
 }
 
 //=============================================
-function generateSuperEllipse(ew,eh){
-  offscreen.noFill();  
-  offscreen.stroke(0);
-  offscreen.strokeWeight(1.0); 
+function generateSuperEllipse(ew,eh, gfx){
+  gfx.noFill();  
+  gfx.stroke(0);
+  gfx.strokeWeight(1.0); 
   
   if (exponent < 2.001){
-    offscreen.ellipseMode(CENTER);
-    offscreen.ellipse(0,0, ew,eh); 
+    gfx.ellipseMode(CENTER);
+    gfx.ellipse(0,0, ew,eh); 
   } else if (exponent > 500){
-    offscreen.rectMode(CENTER);
-    offscreen.rect(0,0, ew,eh); 
+    gfx.rectMode(CENTER);
+    gfx.rect(0,0, ew,eh); 
   } else {
-    offscreen.beginShape();
+    gfx.beginShape();
     for (let i=0; i<nPoints; i++){
       let t = map(i, 0,nPoints, 0, TWO_PI); 
       let c = pow(abs(cos(t)), exponent);
@@ -191,36 +212,36 @@ function generateSuperEllipse(ew,eh){
       let r = pow(c+s, -1.0/exponent);
       px = ew/2 * r * cos(t); 
       py = eh/2 * r * sin(t); 
-      offscreen.vertex(px,py); 
+      gfx.vertex(px,py); 
     }
-    offscreen.endShape(CLOSE); 
+    gfx.endShape(CLOSE); 
   }
   
   if (checkboxAxes.checked()){
-    offscreen.strokeWeight(0.25); 
+    gfx.strokeWeight(0.25); 
 
     // X and Y axes
-    offscreen.strokeWeight(0.5); 
-    offscreen.line(-ew/2, 0, ew/2, 0); 
-    offscreen.line(0, -eh/2, 0, eh/2);
+    gfx.strokeWeight(0.5); 
+    gfx.line(-ew/2, 0, ew/2, 0); 
+    gfx.line(0, -eh/2, 0, eh/2);
     
     // Ellipse foci
     let fy = sqrt(sq(eh/2) - sq(ew/2));
-    offscreen.circle(0,-fy, 7); 
-    offscreen.circle(0,fy, 7); 
+    gfx.circle(0,-fy, 7); 
+    gfx.circle(0,fy, 7); 
     
     // Concentrics
     let divi = int(sliderDivider.value());
     if (checkboxCirc.checked()){
       for (let i=divi%2; i<divi; i+=2){
-        offscreen.circle(0,0, ew*(i/divi)); 
+        gfx.circle(0,0, ew*(i/divi)); 
       }
       if (aspectRatio >=1.25){
-        offscreen.circle(0,0, ew); 
+        gfx.circle(0,0, ew); 
       }
     } else {
       for (let j=divi%2; j<divi; j+=2){
-        offscreen.beginShape();
+        gfx.beginShape();
         for (let i=0; i<nPoints; i++){
           let t = map(i, 0,nPoints, 0, TWO_PI); 
           let c = pow(abs(cos(t)), exponent);
@@ -228,9 +249,9 @@ function generateSuperEllipse(ew,eh){
           let r = pow(c+s, -1.0/exponent);
           px = ew*(j/divi)/2 * r * cos(t); 
           py = eh*(j/divi)/2 * r * sin(t); 
-          offscreen.vertex(px,py); 
+          gfx.vertex(px,py); 
         }
-        offscreen.endShape(CLOSE); 
+        gfx.endShape(CLOSE); 
       }
     }
     
@@ -238,11 +259,11 @@ function generateSuperEllipse(ew,eh){
     // Snap ticks
     if (!isHovered){
       let k=3;
-      offscreen.strokeWeight(0.25); 
+      gfx.strokeWeight(0.25); 
       for (let i=0; i< eccs.length; i++){
         let e = eccs[i];
-        offscreen.line(-k,e*eh/2,k,e*eh/2); 
-        offscreen.line(-k,-e*eh/2,k,-e*eh/2); 
+        gfx.line(-k,e*eh/2,k,e*eh/2); 
+        gfx.line(-k,-e*eh/2,k,-e*eh/2); 
       }
     }
   }
@@ -251,13 +272,18 @@ function generateSuperEllipse(ew,eh){
 //=============================================
 function keyPressed(){
   if ((key=='S') || (key=='s')){
+    // image PNG
     saveOutput(); 
+  }
+  if ((key=='V') || (key=='v')){
+    // vector SVG
+    bDoExportSvg = true; 
   }
 }
 
 //=============================================
-function saveOutput(){
-  let str = "ell_";
+function savePngOutput(){
+  let str = "ellipse_";
   str += year() + nf(month(),2) + nf(day(),2);
   str += nf(hour(),2) + nf(minute(),2);
   str += "_ratio" + nf(aspectRatio,1,3);
@@ -272,4 +298,15 @@ function saveOutput(){
   output.clear();
   output.image(offscreen,dx,0);
   output.save(str);
+}
+
+//=============================================
+function saveSvgOutput(){
+  svgFilename = "ellipse_";
+  svgFilename += year() + nf(month(),2) + nf(day(),2);
+  svgFilename += nf(hour(),2) + nf(minute(),2);
+  svgFilename += "_ratio" + nf(aspectRatio,1,3);
+  svgFilename += "_pow" + nf(exponent,1,2);
+  svgFilename += ".svg";
+  bDoExportSvg = true;
 }
