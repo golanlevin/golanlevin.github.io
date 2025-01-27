@@ -1,4 +1,4 @@
-// Zen's Signet Ring Band Generator - Version 10/17/2024
+// Zen's Signet Ring Band Generator - Version 1/26/2025
 // A simple tool for parametric design of ring bands.
 // Instructions: Press "Play" (▶) button to run.
 // Print the downloaded PNG image at 4"x2" (288ppi).
@@ -7,14 +7,19 @@
 // This software is licensed: Creative Commons CC-BY 4.0
 // https://creativecommons.org/licenses/by/4.0/deed.en
 //
-// CAUTION CAUTION CAUTION CAUTION CAUTION CAUTION
+// CAUTION CAUTION CAUTION CAUTION CAUTION CAUTION:
 // The data used here produces rings that may run
 // as much as ~2 sizes too small, in practice!!
+//
+// NOTE: This software has the following dependencies: 
+// p5.js         v.1.11.2, https://github.com/processing/p5.js
+// p5.EasyCam.js v.1.2.3,  https://github.com/freshfork/p5.EasyCam
+// p5.plotSvg.js v.0.1.2,  https://github.com/golanlevin/p5.plotSvg
+// jsPDF         v.2.5.2,  https://github.com/parallax/jsPDF
 //
 // US Ring Size data is taken from the following sites:
 // https://www.carreracasting.com/charts/ring-size and
 // https://www.brilliance.com/ring-size-conversion-chart
-//
 const USRingSizesInMm = {
    "3.00": 14.05,
    "3.25": 14.24,
@@ -67,11 +72,6 @@ const USRingSizesInMm = {
   "15.00": 24.00,
 };
 
-// NOTE: This software has the following dependencies: 
-// p5.js v.1.10.0, https://github.com/processing/p5.js
-// p5.EasyCam.js v.1.2.3, https://github.com/freshfork/p5.EasyCam
-// jsPDF v.2.5.2, https://github.com/parallax/jsPDF
-
 const ppi = 72;
 const ppmm = ppi / 25.4;
 const nSegs = 72;
@@ -90,6 +90,7 @@ let offscreen;
 let theCanvas;
 let myButtonPNG;
 let myButtonPDF;
+// let myButtonSVG;
 let myFlipSeamCheckbox; 
 let myOrthoCheckbox; 
 let easycam;
@@ -101,6 +102,7 @@ let sliderD;
 let sliderE;
 let sliderF;
 let sliderG;
+let jobInput; 
 
 //------------------------------------------------------------------
 function preload(){
@@ -189,16 +191,16 @@ function drawSliderLabels(){
   fill(0);
   noStroke();
   
-  
   let textY = sliderY + 13;
   let ibwm = nf(minBandWidthMm, 1,1); 
   let abwm = nf(maxBandWidthMm, 1,1);
-  let bdm = nf(bandDiamMm, 1,2);
+  let bdm = nf(bandDiamMm, 1,1);
   let bthm = nf(bandThicknessMm, 1,1);
   let rs = nf(ringSize, 1,2);
   
-  textAlign(CENTER);
-  text("Zen's Signet Ring Band Generator", width / 2, textY-sliderDy);
+  textAlign(LEFT);
+  text("Zen's Ring Band Generator", 12, textY-sliderDy);
+  text("Job Name:", 192, textY-sliderDy);
 
   textAlign(LEFT);
   text("A. minBandWidth (mm) = " + ibwm, 192,textY);
@@ -277,8 +279,14 @@ function createOffscreenImage(){
       }
     }
     ristr += "."; 
-    offscreen.text("US ring size (nominal): " + ristr, blm/2,ly-2);
-    offscreen.text("CAUTION: Ring size may run small!", blm/2,ly-5);
+    let titleStr = "Zen's Ring Band Generator";
+    let jobStr = jobInput.value();
+    if (jobStr.length > 0){
+      titleStr += " • Job: "  + jobStr;
+    }
+    offscreen.text(titleStr, blm/2,ly-5);
+    offscreen.text("US ring size (may run small!): " + ristr, blm/2,ly-2);
+    
     
     // Verts: 
     offscreen.push();
@@ -322,18 +330,57 @@ function createOffscreenImage(){
   if (bDrawGrid){
     offscreen.noFill();
     offscreen.stroke(0);
-    offscreen.strokeWeight(0.25 / scaleFactor);
-    offscreen.line(0, 0, blm, 0);
-    offscreen.line(0, 0 - minBandWidthMm/2, blm, 0 - minBandWidthMm/2);
-    offscreen.line(0, 0 + minBandWidthMm/2, blm, 0 + minBandWidthMm/2);
+    offscreen.strokeWeight(0.20 / scaleFactor);
+    
+    let bDrawHorizontals = true; 
+    if (bDrawHorizontals){
+      offscreen.line(0, 0, blm, 0);
+      offscreen.line(0, 0 - minBandWidthMm/2, blm, 0 - minBandWidthMm/2);
+      offscreen.line(0, 0 + minBandWidthMm/2, blm, 0 + minBandWidthMm/2);
+      if (minBandWidthMm >= 8.0){
+        offscreen.line(0, 0 - minBandWidthMm/4, blm, 0 - minBandWidthMm/4);
+        offscreen.line(0, 0 + minBandWidthMm/4, blm, 0 + minBandWidthMm/4);
+      }
+    }
+    
+    let bDrawMainContourOffsets = true; 
+    if (bDrawMainContourOffsets){
+      offscreen.beginShape(); 
+      for (let i = 0; i <= nSegs; i++) {
+        let px = map(i, 0, nSegs, 0, blm);
+        let j = (bFlipSeamLocation) ? (i + nSegs/2)%nSegs : i;
+        let pyA = rungs[j]; 
+        offscreen.vertex(px, pyA - 1);
+      }
+      offscreen.endShape();
+      offscreen.beginShape(); 
+      for (let i = nSegs; i >= 0; i--) {
+        let px = map(i, 0, nSegs, 0, blm);
+        let j = (bFlipSeamLocation) ? (i + nSegs/2)%nSegs : i;
+        let pyB = 0 - rungs[j];
+        offscreen.vertex(px, pyB + 1);
+      }
+      offscreen.endShape();
+    }
+    
     if (bFlipSeamLocation){
       offscreen.arc(blm,0, maxVal,maxVal, radians(90),radians(270)); 
       offscreen.arc(0,0,   maxVal,maxVal, radians(-90),radians(90)); 
-      offscreen.arc(blm,0, maxVal/2,maxVal/2, radians(90),radians(270)); 
-      offscreen.arc(0,0,   maxVal/2,maxVal/2, radians(-90),radians(90));
+      offscreen.arc(blm,0, maxVal*0.50,maxVal*0.50, radians(90),radians(270)); 
+      offscreen.arc(0,0,   maxVal*0.50,maxVal*0.50, radians(-90),radians(90));
+      if (maxBandWidthMm >= 20){
+        offscreen.arc(blm,0, maxVal*0.25,maxVal*0.25, radians(90),radians(270)); 
+        offscreen.arc(0,0,   maxVal*0.25,maxVal*0.25, radians(-90),radians(90));
+        offscreen.arc(blm,0, maxVal*0.75,maxVal*0.75, radians(90),radians(270)); 
+        offscreen.arc(0,0,   maxVal*0.75,maxVal*0.75, radians(-90),radians(90));
+      }
     } else {
       offscreen.circle(blm / 2, 0, maxVal);
-      offscreen.circle(blm / 2, 0, maxVal / 2);
+      offscreen.circle(blm / 2, 0, maxVal * 0.50);
+      if (maxBandWidthMm >= 20){
+        offscreen.circle(blm / 2, 0, maxVal * 0.25);
+        offscreen.circle(blm / 2, 0, maxVal * 0.75);
+      }
     }
     for (let i = 0; i < nSegs; i += 6) {
       let px = map(i, 0, nSegs, 0, blm);
@@ -380,7 +427,7 @@ function displayRing3D(){
   rect(vp[0], vp[1]+0*(height-easyCamH), vp[2], vp[3]);
   pop(); 
   filter(BLUR, 5);
-  
+
   // Draw a crisp white one
   push(); 
   resetMatrix();
@@ -389,7 +436,6 @@ function displayRing3D(){
   texture(easycam.graphics);
   rect(vp[0], vp[1]+0*(height-easyCamH), vp[2], vp[3]);
   pop();
-  
   tint(255);
 }
 
@@ -415,9 +461,8 @@ function drawRing3D(){
   pg.rotateX(radians(-85)); 
   pg.scale(6);
   pg.strokeWeight(1);
-  
   pg.fill(255);
-  pg.stroke(0, 0, 0, 50);
+  pg.stroke(0,0,0, 50);
 
   pg.beginShape(QUAD_STRIP);
   for (let i = 0; i <= nSegs; i++) {
@@ -572,23 +617,27 @@ function saveOutputPNG() {
   offscreen.save(outputFilename);
 }
 
+function saveOutputSVG(){
+  // Not working yet - waiting for user-defined SVG canvas dimensions
+  // See https://github.com/golanlevin/p5.plotSvg/issues/2
+}
+
 //------------------------------------------------------------------
 function makeOutputFilename(){
   let ringSize_ = sliderD.value();
-  let bandDiamMm_ = USRingSizesInMm[nf(ringSize, 1,2)];
-  let bandLengthMm_   = bandDiamMm * TWO_PI;
   let minBandWidthMm_ = nf(sliderA.value(), 1,1);
-  let maxBandWidthMm_ = nf(sliderB.value(), 1,1);
-  let shapeFactor1_   = nf(sliderC.value(), 1,2);
-  let shapeFactor2_   = nf(sliderF.value(), 1,2);
-  let shapeFactor3_   = nf(sliderG.value(), 1,2);
+  
+  let str = "ring_"; 
+  let jobStr = jobInput.value();
+  if (jobStr.length > 0){
+    str = jobStr;
+    str += "_";
+  }
 
-  let str = "ring_" + ringSize_ + "_";
-  str += minBandWidthMm_ + "-";
-  str += maxBandWidthMm_ + "_";
-  str += shapeFactor1_ + "_";
-  str += shapeFactor2_ + "_";
-  str += shapeFactor3_; 
+  str += ringSize_ + "_";
+  str += minBandWidthMm_ + "_";
+  str += year() + nf(month(), 2) + nf(day(), 2) + "_"; 
+  str += nf(hour(),2) + nf(minute(), 2); 
   
   return str; 
 }
@@ -608,15 +657,36 @@ function AdjustableCenterDoubleExponentialSigmoid(x, a, b) {
   return y;
 }
 
+
 //------------------------------------------------------------------
 function createUserInterfaceElements(){
+  
+  jobInput = createInput('');
+  jobInput.position(250, 2);
+  jobInput.size(115, 12);
+  jobInput.attribute('maxlength', '10'); // Limit to 10 characters
+  jobInput.style('font-size', '10px'); 
+  jobInput.input(() => {
+    jobInput.value(jobInput.value().toUpperCase());
+    let val = jobInput.value();
+    jobInput.value(val.replace(/ /g, '_'));
+  });
+
+  
   myButtonPNG = createButton("⬇PNG");
   myButtonPNG.position(192, 155);
   myButtonPNG.mousePressed(saveOutputPNG);
   
   myButtonPDF = createButton("⬇PDF");
-  myButtonPDF.position(255, 155);
+  myButtonPDF.position(253, 155);
   myButtonPDF.mousePressed(saveOutputPDF);
+  
+  /*
+  myButtonSVG = createButton("⬇SVG");
+  myButtonSVG.position(313, 155);
+  myButtonSVG.mousePressed(saveOutputSVG);
+  */
+  
   
   myFlipSeamCheckbox = createCheckbox();
   myFlipSeamCheckbox.position(10, 158);
