@@ -1,4 +1,4 @@
-// Zen's Signet Ring Band Generator - Version 1/26/2025
+// Zen's Signet Ring Band Generator - Version 2/3/2025
 // A simple tool for parametric design of ring bands.
 // Instructions: Press "Play" (▶) button to run.
 // Print the downloaded PNG image at 4"x2" (288ppi).
@@ -82,9 +82,10 @@ const easyCamH = 165;
 
 let rungs = [];
 let bandDiamMm, bandLengthMm, scaleFactor;
-let shapeFactor1, shapeFactor2, shapeFactor3; 
+let shapeFactor1, shapeFactor3; 
 let minBandWidthMm, maxBandWidthMm, bandThicknessMm; 
 let ringSize, maxVal, minVal;
+let offsetWidth;
 
 let offscreen;
 let theCanvas;
@@ -154,7 +155,7 @@ function computeRingShape(){
   minBandWidthMm = sliderA.value();
   maxBandWidthMm = sliderB.value();
   shapeFactor1 = sliderC.value();
-  shapeFactor2 = sliderF.value();
+  offsetWidth = sliderF.value();
   shapeFactor3 = sliderG.value();
   bandThicknessMm = sliderE.value();
   scaleFactor = ppmm;
@@ -167,7 +168,7 @@ function computeRingShape(){
     let fun = 0.5 + 0.5 * cos(theta + PI);
     fun = AdjustableCenterDoubleExponentialSigmoid(
       fun,
-      shapeFactor2,
+      0, /* used to be shapeFactor2; no more */
       shapeFactor3
     );
     fun = pow(fun, shapeFactor1);
@@ -213,7 +214,7 @@ function drawSliderLabels(){
   textY += sliderDy;
   text("E. shapeFactor1 = " + nf(shapeFactor1, 1,2), 192,textY);
   textY += sliderDy;
-  text("F. shapeFactor2 = " + nf(shapeFactor2, 1,2), 192,textY);
+  text("F. offsetWidth (mm) = " + nf(offsetWidth, 1,2), 192,textY);
   textY += sliderDy;
   text("G. shapeFactor3 = " + nf(shapeFactor3, 1,2), 192,textY);
   text("Flip Seam", 30, 171);
@@ -247,18 +248,19 @@ function createOffscreenImage(){
     offscreen.line(0, ly - 3, 0, ly + 3);
     offscreen.line(blm, ly - 3, blm, ly + 3);
     
-    let vx=9;
-    offscreen.line(blm+vx, 0 - maxVal/2, blm+vx,     maxVal/2);
+    let vx=7;
+    offscreen.line(0-vx, 0 - maxVal/2, 0-vx,     maxVal/2);
     if ((2 * maxVal * scaleFactor - 8) > (textWidth(nf(maxVal, 1,1)) )){
-      offscreen.line(blm+vx, 0 - maxVal/2, blm+vx+3, 0 - maxVal/2);
-      offscreen.line(blm+vx,     maxVal/2, blm+vx+3,     maxVal/2);
+      offscreen.line(0-vx, 0 - maxVal/2, 0-vx+3, 0 - maxVal/2);
+      offscreen.line(0-vx,     maxVal/2, 0-vx+3,     maxVal/2);
     }
     let bDrawMinTicks = false;
     if ((2 * minVal * scaleFactor - 8) > (textWidth(nf(minVal,1,1)) )){
-      offscreen.line(blm+vx, 0 - minVal/2, blm+vx-3, 0 - minVal/2);
-      offscreen.line(blm+vx,     minVal/2, blm+vx-3,     minVal/2);
+      offscreen.line(0-vx, 0 - minVal/2, 0-vx-3, 0 - minVal/2);
+      offscreen.line(0-vx,     minVal/2, 0-vx-3,     minVal/2);
       bDrawMinTicks = true;
     }
+    
     offscreen.fill(0);
     offscreen.noStroke();
     offscreen.textAlign(CENTER, CENTER);
@@ -288,9 +290,9 @@ function createOffscreenImage(){
     offscreen.text("US ring size (may run small!): " + ristr, blm/2,ly-2);
     
     
-    // Verts: 
+    // Vertical ticks
     offscreen.push();
-    offscreen.translate(blm + vx, 0);
+    offscreen.translate(0 - vx, 0);
     offscreen.rotate(-PI / 2);
     offscreen.textAlign(CENTER, CENTER);
     offscreen.text(nf(maxVal, 1, 1), 0, 2);
@@ -302,6 +304,7 @@ function createOffscreenImage(){
       offscreen.text(nf(humph,1,1), 0-(maxVal/2+0.1), -2);
     }
     offscreen.pop();
+    
   }
   
   let bDrawMainContour = true;
@@ -350,7 +353,7 @@ function createOffscreenImage(){
         let px = map(i, 0, nSegs, 0, blm);
         let j = (bFlipSeamLocation) ? (i + nSegs/2)%nSegs : i;
         let pyA = rungs[j]; 
-        offscreen.vertex(px, pyA - 1);
+        offscreen.vertex(px, pyA - offsetWidth);
       }
       offscreen.endShape();
       offscreen.beginShape(); 
@@ -358,25 +361,32 @@ function createOffscreenImage(){
         let px = map(i, 0, nSegs, 0, blm);
         let j = (bFlipSeamLocation) ? (i + nSegs/2)%nSegs : i;
         let pyB = 0 - rungs[j];
-        offscreen.vertex(px, pyB + 1);
+        offscreen.vertex(px, pyB + offsetWidth);
       }
       offscreen.endShape();
     }
     
     if (bFlipSeamLocation){
-      offscreen.arc(blm,0, maxVal,maxVal, radians(90),radians(270)); 
-      offscreen.arc(0,0,   maxVal,maxVal, radians(-90),radians(90)); 
-      offscreen.arc(blm,0, maxVal*0.50,maxVal*0.50, radians(90),radians(270)); 
-      offscreen.arc(0,0,   maxVal*0.50,maxVal*0.50, radians(-90),radians(90));
+      let a90 = radians(90);
+      let a270 = radians(270);
+      let a90n = radians(-90);
+      let roff = maxVal-offsetWidth*2;
+      offscreen.arc(blm,0, maxVal,maxVal, a90,a270); 
+      offscreen.arc(0,0,   maxVal,maxVal, a90n,a90); 
+      offscreen.arc(blm,0, maxVal*0.50,maxVal*0.50, a90,a270); 
+      offscreen.arc(0,0,   maxVal*0.50,maxVal*0.50, a90n,a90);
+      offscreen.arc(blm,0, roff,roff, a90,a270); 
+      offscreen.arc(0,0,   roff,roff, a90n,a90); 
       if (maxBandWidthMm >= 20){
-        offscreen.arc(blm,0, maxVal*0.25,maxVal*0.25, radians(90),radians(270)); 
-        offscreen.arc(0,0,   maxVal*0.25,maxVal*0.25, radians(-90),radians(90));
-        offscreen.arc(blm,0, maxVal*0.75,maxVal*0.75, radians(90),radians(270)); 
-        offscreen.arc(0,0,   maxVal*0.75,maxVal*0.75, radians(-90),radians(90));
+        offscreen.arc(blm,0, maxVal*0.25,maxVal*0.25, a90,a270); 
+        offscreen.arc(0,0,   maxVal*0.25,maxVal*0.25, a90n,a90);
+        offscreen.arc(blm,0, maxVal*0.75,maxVal*0.75, a90,a270); 
+        offscreen.arc(0,0,   maxVal*0.75,maxVal*0.75, a90n,a90);
       }
-    } else {
+    } else { // usual case
       offscreen.circle(blm / 2, 0, maxVal);
       offscreen.circle(blm / 2, 0, maxVal * 0.50);
+      offscreen.circle(blm / 2, 0, maxVal - offsetWidth*2);
       if (maxBandWidthMm >= 20){
         offscreen.circle(blm / 2, 0, maxVal * 0.25);
         offscreen.circle(blm / 2, 0, maxVal * 0.75);
@@ -396,8 +406,8 @@ function createOffscreenImage(){
     offscreen.noStroke();
     offscreen.fill(0);
     offscreen.push();
-    offscreen.scale(0.5);
-    offscreen.translate(5, 40);
+    offscreen.scale(0.4);
+    offscreen.translate(640,20); //5, 40);
     offscreen.textAlign(LEFT, CENTER);
     offscreen.textFont(myFont);
     let dyt = 12; 
@@ -407,7 +417,7 @@ function createOffscreenImage(){
     offscreen.text("C: " + nf(ringSize,       1, 2), 3, 3*dyt);
     offscreen.text("D: " + nf(bandThicknessMm,1, 1), 3, 4*dyt);
     offscreen.text("E: " + nf(shapeFactor1,   1, 2), 3, 5*dyt);
-    offscreen.text("F: " + nf(shapeFactor2,   1, 2), 3, 6*dyt);
+    offscreen.text("F: " + nf(offsetWidth,    1, 2), 3, 6*dyt);
     offscreen.text("G: " + nf(shapeFactor3,   1, 2), 3, 7*dyt);
     offscreen.pop();
   }
@@ -693,6 +703,7 @@ function createUserInterfaceElements(){
   myOrthoCheckbox = createCheckbox("", true);
   myOrthoCheckbox.position(100, 158);
 
+  // min, max, [value], [step])
   let sy = sliderY;
   sliderA = createSlider(2, 10, 4, 0.1);
   sliderA.position(10, sy).size(175);
@@ -704,7 +715,7 @@ function createUserInterfaceElements(){
   sliderE.position(10, (sy += sliderDy)).size(175);
   sliderC = createSlider(1.0, 12,  3.0, 0.1);
   sliderC.position(10, (sy += sliderDy)).size(175);
-  sliderF = createSlider(0.0, 1.0, 0.0, 0.02);
+  sliderF = createSlider(0.0, 4.0, 1.0, 0.02);
   sliderF.position(10, (sy += sliderDy)).size(175);
   sliderG = createSlider(0.0, 1.0, 0.5, 0.02);
   sliderG.position(10, (sy += sliderDy)).size(175);
