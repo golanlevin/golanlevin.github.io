@@ -1,9 +1,12 @@
-// ZEN'S SUPER-ELLIPSE GENERATOR 3000+ 
+// ZEN'S SUPER-ELLIPSE GENERATOR v.2025.4  
 // Generates ellipses, superellipses, and rectangles.
 // Press "Download PNG" or the 's' key to export an image.
 // Math at: https://en.wikipedia.org/wiki/Superellipse
+//
 // By Golan Levin; CC0: No Rights Reserved. 
-// Version: 13 December 2024 • For Z.L.
+// Version: 29 April 2025 • For Z.L.
+// Uses: p5.js v.1.11.5 and p5.plotsvg v.0.1.4
+
 p5.disableFriendlyErrors = true; 
 
 let sliderAspect;
@@ -14,6 +17,7 @@ let buttonSvg;
 let checkboxAxes;
 let checkboxSnap;
 let checkboxCirc;
+let checkboxRect;
 let isHovered = false;
 let bDoExportSvg = false; 
 let svgFilename = "ellipse.svg";
@@ -21,6 +25,7 @@ let svgFilename = "ellipse.svg";
 let bShowAxes = true;
 let bEnableSnap = true; 
 let bCircAxes = false;
+let bShowRect = false;
 let offscreen; 
 
 let aspectRatio; 
@@ -69,6 +74,9 @@ function setup() {
   
   checkboxCirc = createCheckbox("", bCircAxes);
   checkboxCirc.position(339,uiy+70);
+  
+  checkboxRect = createCheckbox("", bShowRect);
+  checkboxRect.position(300,uiy+70);
   
   buttonPng = createButton('⬇png');
   buttonPng.position(18, uiy+48);
@@ -145,7 +153,7 @@ function draw() {
   let expStr = (exponent > 500) ? "∞" : nf(exponent,1,2);
   textSize(14); 
   textStyle(BOLD); 
-  text("ZEN'S SUPER-ELLIPSE GENERATOR 3000+", 19, 30); 
+  text("ZEN'S SUPER-ELLIPSE GENERATOR • v.2025.4", 19, 30); 
   textSize(12); 
   textStyle(NORMAL); 
   text("Aspect Ratio: " + ratStr, 19,uiy); 
@@ -154,10 +162,14 @@ function draw() {
   text("Draw Axes", 156,uiy+63); 
   text("Div/" + int(sliderDivider.value()), 329,uiy+63); 
   text("⌖", 328, uiy+82);
+  text("▯", 296, uiy+83);
   
-  let ecc = sqrt(1.0 - sq(ew/eh)); 
-  text("Eccentricity: " + nf(ecc,1,3), width/2, uiy); 
-
+  let a = eh;
+  let b = ew; 
+  let k = sqrt(1.0 - sq(b/a)); // Eccentricity
+  let e2 = sqrt(a*a - b*b)/b; // Second Eccentricity, e'
+  let f = (a-b)/a; // Flattening
+  text("Eccentricity: " + nf(k,1,3), width/2, uiy);
 }
 
 
@@ -195,8 +207,14 @@ function drawShape(ew,eh){
 function generateSuperEllipse(ew,eh, gfx){
   gfx.noFill();  
   gfx.stroke(0);
-  gfx.strokeWeight(1.0); 
   
+  if (checkboxRect.checked() && (exponent < 500)){
+    gfx.strokeWeight(0.25); 
+    gfx.rectMode(CENTER);
+    gfx.rect(0,0, ew,eh);
+  }
+  
+  gfx.strokeWeight(1.0); 
   if (exponent < 2.001){
     gfx.ellipseMode(CENTER);
     gfx.ellipse(0,0, ew,eh); 
