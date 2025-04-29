@@ -12,6 +12,9 @@
 //
 */
 // p5.plotSvg: a Plotter-Oriented SVG Exporter for p5.js
+// by Golan Levin (@golanlevin)
+// v.0.1.4, April 6, 2025
+// For p5.js versions 1.4.2–1.11.3
 
 (function(global) {
   // Create a namespace for the library
@@ -32,9 +35,12 @@
   let _svgIndentType = p5plotSvg.SVG_INDENT_SPACES; 
   let _svgIndentAmount = 2; 
   let _svgPointRadius = 0.25; // Default radius for point representation
-  let _svgDPI = 96; // Default DPI value
+  let _svgDPI = 96; // Default DPI value. Set from DPCM if needed.
+  let _svgWidth = 816; // Default width for SVG output (8.5" at 96 DPI)
+  let _svgHeight = 1056; // Default height for SVG output (11" at 96 DPI)
   let _svgDefaultStrokeColor = 'black';
   let _svgCurrentStrokeColor = _svgDefaultStrokeColor;
+  let _svgBackgroundColor = null;
   let _svgDefaultStrokeWeight = 1;
 
   // Internal variables, not to be accessed directly
@@ -47,6 +53,7 @@
   let _shapeKind = "poly";
   let _bRecordingSvg = false; 
   let _bRecordingSvgBegun = false;
+  let _bCustomSizeSet = false;
   let _pointsSetCount = 0; 
   let _linesSetCount = 0; 
   let _trianglesSetCount = 0; 
@@ -218,38 +225,38 @@
    * Reverts all overrides, returning p5.js functions to their standard behavior.
    */
   function restoreP5Functions(){
-    window.arc = _originalArcFunc;
-    window.bezier = _originalBezierFunc;
-    window.circle = _originalCircleFunc;
-    window.curve = _originalCurveFunc;
-    window.ellipse = _originalEllipseFunc;
-    window.line = _originalLineFunc;
-    window.point = _originalPointFunc;
-    window.quad = _originalQuadFunc;
-    window.rect = _originalRectFunc;
-    window.square = _originalSquareFunc;
-    window.triangle = _originalTriangleFunc;
-    window.bezierDetail = _originalBezierDetailFunc;
-    window.curveTightness = _originalCurveTightnessFunc;
+    _p5Instance.arc = _originalArcFunc;
+    _p5Instance.bezier = _originalBezierFunc;
+    _p5Instance.circle = _originalCircleFunc;
+    _p5Instance.curve = _originalCurveFunc;
+    _p5Instance.ellipse = _originalEllipseFunc;
+    _p5Instance.line = _originalLineFunc;
+    _p5Instance.point = _originalPointFunc;
+    _p5Instance.quad = _originalQuadFunc;
+    _p5Instance.rect = _originalRectFunc;
+    _p5Instance.square = _originalSquareFunc;
+    _p5Instance.triangle = _originalTriangleFunc;
+    _p5Instance.bezierDetail = _originalBezierDetailFunc;
+    _p5Instance.curveTightness = _originalCurveTightnessFunc;
     
-    window.beginShape = _originalBeginShapeFunc;
-    window.vertex = _originalVertexFunc;
-    window.bezierVertex = _originalBezierVertexFunc;
-    window.quadraticVertex = _originalQuadraticVertexFunc;
-    window.curveVertex = _originalCurveVertexFunc; 
-    window.endShape = _originalEndShapeFunc; 
+    _p5Instance.beginShape = _originalBeginShapeFunc;
+    _p5Instance.vertex = _originalVertexFunc;
+    _p5Instance.bezierVertex = _originalBezierVertexFunc;
+    _p5Instance.quadraticVertex = _originalQuadraticVertexFunc;
+    _p5Instance.curveVertex = _originalCurveVertexFunc; 
+    _p5Instance.endShape = _originalEndShapeFunc; 
     
-    window.describe = _originalDescribeFunc; 
-    window.push = _originalPushFunc; 
-    window.pop = _originalPopFunc; 
-    window.scale = _originalScaleFunc; 
-    window.translate = _originalTranslateFunc; 
-    window.rotate = _originalRotateFunc;
-    window.shearX = _originalShearXFunc;
-    window.shearY = _originalShearYFunc;
-    window.text = _originalTextFunc;
-    window.stroke = _originalStrokeFunc; 
-    window.colorMode = _originalColorModeFunc; 
+    _p5Instance.describe = _originalDescribeFunc; 
+    _p5Instance.push = _originalPushFunc; 
+    _p5Instance.pop = _originalPopFunc; 
+    _p5Instance.scale = _originalScaleFunc; 
+    _p5Instance.translate = _originalTranslateFunc; 
+    _p5Instance.rotate = _originalRotateFunc;
+    _p5Instance.shearX = _originalShearXFunc;
+    _p5Instance.shearY = _originalShearYFunc;
+    _p5Instance.text = _originalTextFunc;
+    _p5Instance.stroke = _originalStrokeFunc; 
+    _p5Instance.colorMode = _originalColorModeFunc; 
   }
 
 
@@ -261,8 +268,8 @@
    * @see {@link https://p5js.org/reference/p5/arc/}
    */
   function overrideArcFunction() {
-    _originalArcFunc = window.arc;
-    window.arc = function(x, y, w, h, start, stop, mode = OPEN, detail = 0) {
+    _originalArcFunc = _p5Instance.arc;
+    _p5Instance.arc = function(x, y, w, h, start, stop, mode = OPEN, detail = 0) {
       if (_bRecordingSvg) {
         if (detail !== undefined && p5.instance._renderer.drawingContext instanceof WebGLRenderingContext) {
           console.warn("arc() detail is currently unsupported in SVG output.");
@@ -282,8 +289,8 @@
    * @see {@link https://p5js.org/reference/p5/bezier/}
    */
   function overrideBezierFunction(){
-    _originalBezierFunc = window.bezier;
-    window.bezier = function(x1, y1, x2, y2, x3, y3, x4, y4) {
+    _originalBezierFunc = _p5Instance.bezier;
+    _p5Instance.bezier = function(x1, y1, x2, y2, x3, y3, x4, y4) {
       if (_bRecordingSvg) {
         let transformMatrix = captureCurrentTransformMatrix();
         _commands.push({ type: 'bezier', x1, y1, x2, y2, x3, y3, x4, y4, transformMatrix });
@@ -302,8 +309,8 @@
    * @see {@link https://p5js.org/reference/p5/circle/}
    */
   function overrideCircleFunction(){
-    _originalCircleFunc = window.circle;
-    window.circle = function(x, y, d) {
+    _originalCircleFunc = _p5Instance.circle;
+    _p5Instance.circle = function(x, y, d) {
       if (_bRecordingSvg) { 
         let transformMatrix = captureCurrentTransformMatrix();
         
@@ -338,8 +345,8 @@
    * @see {@link https://p5js.org/reference/#/p5/curve}
    */
   function overrideCurveFunction() {
-    _originalCurveFunc = window.curve;
-    window.curve = function(x1, y1, x2, y2, x3, y3, x4, y4) {
+    _originalCurveFunc = _p5Instance.curve;
+    _p5Instance.curve = function(x1, y1, x2, y2, x3, y3, x4, y4) {
       if (_bRecordingSvg) {
         
         // Adjust control points based on the current tightness setting
@@ -367,8 +374,8 @@
    * @see {@link https://p5js.org/reference/p5/ellipse/}
   */
   function overrideEllipseFunction(){
-    _originalEllipseFunc = window.ellipse;
-    window.ellipse = function(x, y, w, h, detail = 0) {
+    _originalEllipseFunc = _p5Instance.ellipse;
+    _p5Instance.ellipse = function(x, y, w, h, detail = 0) {
       if (_bRecordingSvg) {
         if (detail !== undefined && _p5Instance._renderer.drawingContext instanceof WebGLRenderingContext) {
           console.warn("ellipse() detail is currently unsupported in SVG output.");
@@ -410,8 +417,8 @@
    * @see {@link https://p5js.org/reference/p5/line/}
    */
   function overrideLineFunction() {
-    _originalLineFunc = window.line;
-    window.line = function(x1, y1, x2, y2) {
+    _originalLineFunc = _p5Instance.line;
+    _p5Instance.line = function(x1, y1, x2, y2) {
       if (_bRecordingSvg) { 
         let transformMatrix = captureCurrentTransformMatrix();
         _commands.push({ type: 'line', x1, y1, x2, y2, transformMatrix });
@@ -428,8 +435,8 @@
    * @see {@link https://p5js.org/reference/p5/point/}
    */
   function overridePointFunction() {
-    _originalPointFunc = window.point;
-    window.point = function(x, y) {
+    _originalPointFunc = _p5Instance.point;
+    _p5Instance.point = function(x, y) {
       if (_bRecordingSvg) {
         let transformMatrix = captureCurrentTransformMatrix();
         _commands.push({ type: 'point', x, y, radius: _svgPointRadius, transformMatrix });
@@ -446,8 +453,8 @@
    * @see {@link https://p5js.org/reference/p5/quad/}
    */
   function overrideQuadFunction(){
-    _originalQuadFunc = window.quad;
-    window.quad = function(x1, y1, x2, y2, x3, y3, x4, y4) {
+    _originalQuadFunc = _p5Instance.quad;
+    _p5Instance.quad = function(x1, y1, x2, y2, x3, y3, x4, y4) {
       if (_bRecordingSvg) { 
         let transformMatrix = captureCurrentTransformMatrix();
         _commands.push({ type: 'quad', x1, y1, x2, y2, x3, y3, x4, y4, transformMatrix });
@@ -466,8 +473,8 @@
    * @see {@link https://p5js.org/reference/p5/rect/}
    */
   function overrideRectFunction() {
-    _originalRectFunc = window.rect;
-    window.rect = function(x, y, w, h, tl, tr, br, bl) {
+    _originalRectFunc = _p5Instance.rect;
+    _p5Instance.rect = function(x, y, w, h, tl, tr, br, bl) {
       if (_bRecordingSvg) {
         if (arguments.length === 3) { h = w; }
         
@@ -518,8 +525,8 @@
    * @see {@link https://p5js.org/reference/p5/square/}
    */
   function overrideSquareFunction(){
-    _originalSquareFunc = window.square;
-    window.square = function(x, y, s, tl,tr,br,bl) {
+    _originalSquareFunc = _p5Instance.square;
+    _p5Instance.square = function(x, y, s, tl,tr,br,bl) {
       if (_bRecordingSvg) { 
         let w = s; 
         let h = s; 
@@ -566,8 +573,8 @@
    * @see {@link https://p5js.org/reference/p5/triangle/}
    */
   function overrideTriangleFunction(){
-    _originalTriangleFunc = window.triangle;
-    window.triangle = function(x1, y1, x2, y2, x3, y3) {
+    _originalTriangleFunc = _p5Instance.triangle;
+    _p5Instance.triangle = function(x1, y1, x2, y2, x3, y3) {
       if (_bRecordingSvg) {
         let transformMatrix = captureCurrentTransformMatrix();
         _commands.push({ type: 'triangle', x1, y1, x2, y2, x3, y3, transformMatrix });
@@ -584,8 +591,8 @@
    * https://p5js.org/reference/p5/bezierDetail/
    */
   function overrideBezierDetailFunction() {
-    _originalBezierDetailFunc = window.bezierDetail;
-    window.bezierDetail = function(detailLevel) { // Check if the renderer is WEBGL
+    _originalBezierDetailFunc = _p5Instance.bezierDetail;
+    _p5Instance.bezierDetail = function(detailLevel) { // Check if the renderer is WEBGL
       if (p5.instance._renderer.drawingContext instanceof WebGLRenderingContext) {
         console.warn("bezierDetail() is currently unsupported in SVG output.");
       }
@@ -601,8 +608,8 @@
    * @see {@link https://p5js.org/reference/p5/curveTightness/}
    */
   function overrideCurveTightnessFunction() {
-    _originalCurveTightnessFunc = window.curveTightness;
-    window.curveTightness = function(tightness) {
+    _originalCurveTightnessFunc = _p5Instance.curveTightness;
+    _p5Instance.curveTightness = function(tightness) {
       if (_bRecordingSvg) { 
         _svgCurveTightness = tightness;
       }
@@ -618,8 +625,8 @@
    * @see {@link https://p5js.org/reference/p5/beginShape/}
    */
   function overrideBeginShapeFunction() {
-    _originalBeginShapeFunc = window.beginShape;
-    window.beginShape = function(kind) {
+    _originalBeginShapeFunc = _p5Instance.beginShape;
+    _p5Instance.beginShape = function(kind) {
       if (_bRecordingSvg) { 
         _vertexStack = []; // Start with an empty vertex stack
         _shapeMode = "simple"; // Assume simple mode initially
@@ -644,8 +651,8 @@
    * @see {@link https://p5js.org/reference/p5/vertex/}
    */
   function overrideVertexFunction() {
-    _originalVertexFunc = window.vertex;
-    window.vertex = function(x, y) {
+    _originalVertexFunc = _p5Instance.vertex;
+    _p5Instance.vertex = function(x, y) {
       if (_bRecordingSvg) {
         _vertexStack.push({ type: 'vertex', x, y });
       }
@@ -662,8 +669,8 @@
    */
   function overrideBezierVertexFunction() {
     // Override `bezierVertex()` and mark shape as complex
-    _originalBezierVertexFunc = window.bezierVertex;
-    window.bezierVertex = function(x2, y2, x3, y3, x4, y4) {
+    _originalBezierVertexFunc = _p5Instance.bezierVertex;
+    _p5Instance.bezierVertex = function(x2, y2, x3, y3, x4, y4) {
       if (_bRecordingSvg) {
         _shapeMode = 'complex'; // Switch to complex mode
         _vertexStack.push({ type: 'bezier', x2, y2, x3, y3, x4, y4 });
@@ -681,8 +688,8 @@
    */
   function overrideQuadraticVertexFunction() {
     // Override `quadraticVertex()` and mark shape as complex
-    _originalQuadraticVertexFunc = window.quadraticVertex;
-    window.quadraticVertex = function(cx, cy, x, y) {
+    _originalQuadraticVertexFunc = _p5Instance.quadraticVertex;
+    _p5Instance.quadraticVertex = function(cx, cy, x, y) {
       if (_bRecordingSvg) {
         _shapeMode = 'complex'; // Switch to complex mode
         _vertexStack.push({ type: 'quadratic', cx, cy, x, y });
@@ -700,8 +707,8 @@
    */
   function overrideCurveVertexFunction() {
     // Override `curveVertex()` and mark shape as complex
-    _originalCurveVertexFunc = window.curveVertex;
-    window.curveVertex = function(x, y) {
+    _originalCurveVertexFunc = _p5Instance.curveVertex;
+    _p5Instance.curveVertex = function(x, y) {
       if (_bRecordingSvg) {
         _shapeMode = 'complex'; // Switch to complex mode
         
@@ -735,8 +742,8 @@
    * @see {@link https://p5js.org/reference/p5/endShape/}
    */
   function overrideEndShapeFunction() {
-    _originalEndShapeFunc = window.endShape;
-    window.endShape = function(mode) {
+    _originalEndShapeFunc = _p5Instance.endShape;
+    _p5Instance.endShape = function(mode) {
       if (_bRecordingSvg && _vertexStack.length > 0) {
         let transformMatrix = captureCurrentTransformMatrix();
         
@@ -802,8 +809,8 @@
    * @see {@link https://p5js.org/reference/p5/describe/}
    */
   function overrideDescribeFunction() {
-    _originalDescribeFunc = window.describe;
-    window.describe = function(description) {
+    _originalDescribeFunc = _p5Instance.describe;
+    _p5Instance.describe = function(description) {
       if (_bRecordingSvg) {
         if (description && description.trim().length > 0){
           // Push a command to the stack for generating an SVG `desc` element
@@ -822,9 +829,9 @@
    * @see {@link https://p5js.org/reference/p5/push/}
    */
   function overridePushFunction(){
-    _originalPushFunc = window.push;
+    _originalPushFunc = _p5Instance.push;
     _bTransformsExist = true; 
-    window.push = function() {
+    _p5Instance.push = function() {
       if (_bRecordingSvg) {
         _commands.push({ type: 'push' });
       }
@@ -840,9 +847,9 @@
    * @see {@link https://p5js.org/reference/p5/pop/}
    */
   function overridePopFunction(){
-    _originalPopFunc = window.pop;
+    _originalPopFunc = _p5Instance.pop;
     _bTransformsExist = true; 
-    window.pop = function() {
+    _p5Instance.pop = function() {
       if (_bRecordingSvg) {
         _commands.push({ type: 'pop' });
       }
@@ -858,9 +865,9 @@
    * @see {@link https://p5js.org/reference/p5/scale/}
    */
   function overrideScaleFunction(){
-    _originalScaleFunc = window.scale;
+    _originalScaleFunc = _p5Instance.scale;
     _bTransformsExist = true; 
-    window.scale = function(sx, sy) {
+    _p5Instance.scale = function(sx, sy) {
       if (_bRecordingSvg) {
         _commands.push({ type: 'scale', sx, sy: sy || sx });
       }
@@ -876,9 +883,9 @@
    * @see {@link https://p5js.org/reference/p5/translate/}
    */
   function overrideTranslateFunction(){
-    _originalTranslateFunc = window.translate;
+    _originalTranslateFunc = _p5Instance.translate;
     _bTransformsExist = true; 
-    window.translate = function(tx, ty) {
+    _p5Instance.translate = function(tx, ty) {
       if (_bRecordingSvg) {
         _commands.push({ type: 'translate', tx, ty });
       }
@@ -894,9 +901,9 @@
    * https://p5js.org/reference/p5/rotate/
    */
   function overrideRotateFunction(){
-    _originalRotateFunc = window.rotate;
+    _originalRotateFunc = _p5Instance.rotate;
     _bTransformsExist = true; 
-    window.rotate = function(angle) {
+    _p5Instance.rotate = function(angle) {
       if (_bRecordingSvg) {
         _commands.push({ type: 'rotate', angle });
       }
@@ -912,9 +919,9 @@
    * @see {@link https://p5js.org/reference/p5/shearX/}
    */
   function overrideShearXFunction(){
-    _originalShearXFunc = window.shearX;
+    _originalShearXFunc = _p5Instance.shearX;
     _bTransformsExist = true; 
-    window.shearX = function(angle) {
+    _p5Instance.shearX = function(angle) {
       if (_bRecordingSvg) {
         _commands.push({ type: 'shearx', angle });
       }
@@ -930,9 +937,9 @@
    * @see {@link https://p5js.org/reference/p5/shearY/}
    */
   function overrideShearYFunction(){
-    _originalShearYFunc = window.shearY;
+    _originalShearYFunc = _p5Instance.shearY;
     _bTransformsExist = true; 
-    window.shearY = function(angle) {
+    _p5Instance.shearY = function(angle) {
       if (_bRecordingSvg) {
         _commands.push({ type: 'sheary', angle });
       }
@@ -950,8 +957,8 @@
    * @see {@link https://p5js.org/reference/p5/text/}
    */
   function overrideTextFunction() {
-    _originalTextFunc = window.text;
-    window.text = function(content, x, y, maxWidth, maxHeight) {
+    _originalTextFunc = _p5Instance.text;
+    _p5Instance.text = function(content, x, y, maxWidth, maxHeight) {
       if (_bRecordingSvg) {
         // Warn if maxWidth or maxHeight are provided
         if (typeof maxWidth !== 'undefined' || typeof maxHeight !== 'undefined') {
@@ -996,11 +1003,16 @@
     svgContent += `<!-- ${new Date().toString()} -->\n`;
     svgContent += `<!-- DPI: ${_svgDPI} -->\n`;
     
-    let widthInches = _p5Instance.width / _svgDPI;
-    let heightInches = _p5Instance.height / _svgDPI;
+    let svgW = _bCustomSizeSet ? _svgWidth : _p5Instance.width; 
+    let svgH = _bCustomSizeSet ? _svgHeight : _p5Instance.height;
+    let widthInches = svgW / _svgDPI;
+    let heightInches = svgH / _svgDPI;
     svgContent += `<svg xmlns="http://www.w3.org/2000/svg" `;
     svgContent += `width="${widthInches}in" height="${heightInches}in" `;
-    svgContent += `viewBox="0 0 ${_p5Instance.width} ${_p5Instance.height}"`;
+    svgContent += `viewBox="0 0 ${svgW} ${svgH}"`;
+    if (_svgBackgroundColor) {
+      svgContent += ` style="background-color: ${_svgBackgroundColor}"`;
+    }
     svgContent += `>\n`;
     
     svgContent += `  <style>
@@ -1160,7 +1172,6 @@
     svgContent = ""; 
     _commands = [];
     _vertexStack = []; 
-    _transformStack = [];
   }
 
 
@@ -1641,6 +1652,45 @@
 
   /**
    * @public
+   * Sets the background color for the exported SVG.
+   * This adds a `style="background-color: ..."` attribute to the root <svg> element.
+   * This color does not interfere with plotter output and is purely for visualization.
+   * Note that this color may not be visible in all SVG viewers.
+   * @param {string} col - The background color to set, in valid CSS color format.
+   */
+  p5plotSvg.setSvgBackgroundColor = function(col) {
+    // Use a temporary element to validate if the provided color is valid
+    const isColorValid = (color) => {
+      const temp = document.createElement('div');
+      temp.style.color = color;
+      return temp.style.color !== ''; // If valid, the style will apply
+    };
+
+    if (typeof col === 'string' && isColorValid(col)) {
+      _svgBackgroundColor = col;
+    } else {
+      console.warn("Invalid background color. Provide a valid CSS color string (e.g., 'ivory', '#FFFFF0', 'rgb(255,255,240)').");
+    }
+  }
+
+  /**
+   * @public
+   * Sets the dimensions of the SVG document in pixels/dots. 
+   * Note that graphics are not scaled to fit this size; they may extend beyond the specified dimensions.
+   * If this is not set, the system will default to the main canvas dimensions (i.e. from `createCanvas()`).
+   * @param {number} w - The SVG document width in pixels/dots. Must be a positive number.
+   * @param {number} h - The SVG document height in pixels/dots. Must be a positive number.
+   */
+  p5plotSvg.setSVGDocumentSize = function (w, h){
+    if ((typeof w === 'number' && w > 0) && (typeof h === 'number' && h > 0)){
+      _bCustomSizeSet = true;
+      _svgWidth = w;
+      _svgHeight = h;
+    }
+  }
+
+  /**
+   * @public
    * Sets the resolution for the exported SVG file in dots per inch (DPI).
    * This value is used to determine the scaling of units (pixels to physical dimensions) in the SVG output.
    * @param {number} dpi - The resolution in dots per inch. Must be a positive number.
@@ -1650,6 +1700,22 @@
       _svgDPI = dpi;
     } else {
       console.warn("Invalid DPI value. Please provide a positive number.");
+    }
+  }
+
+
+  /**
+   * @public
+   * Sets the resolution for the exported SVG file in dots per centimeter (DPCM).
+   * This value is used to determine the scaling of units (pixels to physical dimensions) in the SVG output. 
+   * The default resolution is 243.84 dpcm (equivalent to 96 dpi). 
+   * @param {number} dpcm - The resolution in dots per centimeter. Must be a positive number.
+   */
+  p5plotSvg.setSvgResolutionDPCM = function(dpcm) {
+    if (typeof dpcm === 'number' && dpi > 0) {
+      _svgDPI = dpcm * 2.54;
+    } else {
+      console.warn("Invalid DPCM value. Please provide a positive number.");
     }
   }
 
@@ -2480,8 +2546,8 @@
    * whose values are in the range of 0-255 are supported.
    */
   function overrideColorModeFunction() {
-    _originalColorModeFunc = window.colorMode;
-    window.colorMode = function() {
+    _originalColorModeFunc = _p5Instance.colorMode;
+    _p5Instance.colorMode = function() {
       console.warn("p5.plotSvg: Only CSS named colors, hex colors, and RGB/gray colors whose values are in the range of 0-255 are supported for SVG output.");
       _originalColorModeFunc.apply(this, arguments);
     };
@@ -2497,8 +2563,8 @@
    * hex colors, or RGB/gray values.
    */
   function overrideStrokeFunction() {
-    _originalStrokeFunc = window.stroke;
-    window.stroke = function(...args) {
+    _originalStrokeFunc = _p5Instance.stroke;
+    _p5Instance.stroke = function(...args) {
       if (_bRecordingSvg) {
         let scol;
 
@@ -2617,13 +2683,17 @@
   // Expose public functions to the namespace
   global.p5plotSvg = p5plotSvg;
 
-  // Attach functions to the global scope for easier access
+  // Attach functions to the global scope for easier access. 
+  // Repeat this pattern for any other functions you wish to expose globally
   global.beginRecordSVG = p5plotSvg.beginRecordSVG;
   global.pauseRecordSVG = p5plotSvg.pauseRecordSVG;
   global.endRecordSVG = p5plotSvg.endRecordSVG;
+  global.setSVGDocumentSize = p5plotSvg.setSVGDocumentSize;
+  global.setSvgResolutionDPI = p5plotSvg.setSvgResolutionDPI;
+  global.setSvgResolutionDPCM = p5plotSvg.setSvgResolutionDPCM;
   global.setSvgDefaultStrokeWeight = p5plotSvg.setSvgDefaultStrokeWeight;
   global.setSvgDefaultStrokeColor = p5plotSvg.setSvgDefaultStrokeColor;
-  global.setSvgResolutionDPI = p5plotSvg.setSvgResolutionDPI;
+  global.setSvgBackgroundColor = p5plotSvg.setSvgBackgroundColor;
   global.setSvgIndent = p5plotSvg.setSvgIndent;
   global.setSvgFlattenTransforms = p5plotSvg.setSvgFlattenTransforms;
   global.setSvgCoordinatePrecision = p5plotSvg.setSvgCoordinatePrecision;
@@ -2636,9 +2706,6 @@
   global.SVG_INDENT_SPACES = p5plotSvg.SVG_INDENT_SPACES;
   global.SVG_INDENT_NONE = p5plotSvg.SVG_INDENT_NONE;
   global.SVG_INDENT_TABS = p5plotSvg.SVG_INDENT_TABS;
-
-
-  // Repeat this pattern for any other functions you wish to expose globally
 
   // Support CommonJS and ES6 modules
   if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
