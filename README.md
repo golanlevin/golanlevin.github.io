@@ -1,6 +1,6 @@
 # golanlevin.github.io
 
-A website by Golan Levin
+A website by Golan Levin 
 
 ---
 
