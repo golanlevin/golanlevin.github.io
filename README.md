@@ -12,14 +12,14 @@ A website by Golan Levin
 
 ### Code
 
-* [p5.plotSvg](https://github.com/golanlevin/p5.plotSvg): Plotter-oriented SVG export for p5.js
-* [p5-single-line-font-resources](https://github.com/golanlevin/p5-single-line-font-resources): Monoline vector fonts for p5.js
+* [p5.plotSvg](https://github.com/golanlevin/p5.plotSvg/blob/main/README.md): Plotter-oriented SVG export for p5.js
+* [p5-single-line-font-resources](https://github.com/golanlevin/p5-single-line-font-resources/blob/main/README.md): Monoline vector fonts for p5.js
 
 
 ### Courses
 
-* [Drawing with Machines](https://github.com/golanlevin/DrawingWithMachines)
-* [Experimental Capture](https://github.com/golanlevin/ExperimentalCapture)
+* [Drawing with Machines](https://github.com/golanlevin/DrawingWithMachines/blob/main/README.md)
+* [Experimental Capture](https://github.com/golanlevin/ExperimentalCapture/blob/master/README.md)
 
 
 ### Software
