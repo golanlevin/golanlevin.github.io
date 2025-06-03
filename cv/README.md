@@ -6,22 +6,32 @@ Bantam Artist/Educator's Residency, July 2025
 
 ---
 
+## Books 
+
+* Golan Levin and Tega Brain. [*Code as Creative Medium: A Handbook for Computational Art and Design*](https://mitpress.mit.edu/9780262542043/code-as-creative-medium/). The MIT Press, 2021. ISBN: 9780262542043.
+* Golan Levin, Lia, Adrian Ward, and Meta. [*4x4 Generative Design: Beyond Photoshop (with Auto-Illustrator, Java, DBN, Lingo): Life/Oblivion*](https://www.amazon.com/Generative-Design-Auto-Illustrator-Java-Lingo/dp/1903450470). Friends of Ed, 2002. ISBN: 9781903450475.
+
+
 ## Solo and Two-Person Exhibitions
 
-* Golan Levin: Drawing with Machines. Center for Machine Arts, Peekskill, New York. 2026.
-* Golan Levin. Aksioma Project Space, Ljubljana, Slovenia. 2014. 
-* The Gesture in Paint and Software: Helen Levin and Golan Levin. Staten Island Museum, 2012. 
-* Golan Levin: Eyecode: Works by Golan Levin. Beall Center for Art and Technology, Irvine, CA. 2011. 
-* Golan Levin: Looking at Looking at Looking. Pittsburgh Center for the Arts. 2011. 
-* Golan Levin. Arts West Gallery, Elon University, Elon, NC. 2011. 
-* Golan Levin. Kiasma Mediatheque, Kiasma Art Center, Helsinki, Finland, 2010. 
-* Golan Levin. bitforms gallery, New York City, 2007. 
-* Golan Levin / Zachary Lieberman. NTT InterCommunications Center (ICC), Tokyo, Japan, 2006. 
-* Golan Levin / Casey Reas. bitforms gallery, New York City, 2002. 
-* Golan Levin / Anne-Katrin Grotepass. Moving Image Gallery, New York City, 2001.
+* *Golan Levin: Drawing with Machines*. Center for Machine Arts, Peekskill, New York. 2026.
+* [*Golan Levin: Cytographia*](https://www.artblocks.io/collection/cytographia-by-golan-levin). Artblocks Curated Channel. 1/2024.
+* *Golan Levin*. Aksioma Project Space, Ljubljana, Slovenia. 2014. 
+* *The Gesture in Paint and Software: Helen Levin and Golan Levin*. Staten Island Museum, 2012. 
+* *Eyecode: Works by Golan Levin*. Beall Center for Art and Technology, Irvine, CA. 2011. 
+* *Golan Levin: Looking at Looking at Looking*. Pittsburgh Center for the Arts. 2011. 
+* *Golan Levin*. Arts West Gallery, Elon University, Elon, NC. 2011. 
+* *Golan Levin*. Kiasma Mediatheque, Kiasma Art Center, Helsinki, Finland, 2010. 
+* *Golan Levin*. bitforms gallery, New York City, 2007. 
+* *Golan Levin / Zachary Lieberman*. NTT InterCommunications Center (ICC), Tokyo, Japan, 2006. 
+* *Golan Levin / Casey Reas*. bitforms gallery, New York City, 2002. 
+* *Golan Levin / Anne-Katrin Grotepass*. Moving Image Gallery, New York City, 2001.
 
 
 ## Group Exhibitions
+
+
+
 
 <!-- 
 https://flong.com/archive/bio/exhibitions/index.html
@@ -33,6 +43,7 @@ https://flong.com/archive/bio/exhibitions/index.html
 
 **2024** 
 
+* [*Small Batch: A Dataset Farmer’s Market*](https://www.instagram.com/p/DDfjHGTxT1L/?img_index=2), LARPA, Brooklyn, 12/15/2024.
 * [*INFLUENTIA: Le Random’s Collections and Digital Generative Art History*](https://volumedao.xyz/le-randoms-event-20231206/). IEGO Art Gallery, Taipei. 12/8/2023 - 1/7/2024.
 * [*Awaken, Metamagical Hands*](https://gazelliarthouse.com/exhibitions/184-awaken-metamagical-hands-robbie-barrat-joshua-davis-golan-levin-lia-lauren/), Gazelli Art House, London. 
 
@@ -388,7 +399,7 @@ https://flong.com/archive/bio/exhibitions/index.html
 
 **2025**
 
-* "Some Generative AI Exercises in Creative Coding", [2025 Learning To Teach Creative Technologies with Generative AI](https://wp.nyu.edu/ltt2025/schedule-at-a-glance/), NYU, 1/17/2025.
+* "Generative AI in Creative Coding Education", [2025 Learning To Teach Creative Technologies with Generative AI](https://wp.nyu.edu/ltt2025/schedule-at-a-glance/), NYU, 1/17/2025.
 
 **2024**
 
@@ -404,4 +415,85 @@ https://flong.com/archive/bio/exhibitions/index.html
 * Keynote Lecture. [Future Ideations Camp Vol.1: Import](https://ccbt.rekibun.or.jp/en/events/future-ideations-camp01), Civic Creative Base Tokyo (CCBT), Shibuya, Tokyo. Organized by the Tokyo Metropolitan Government and Arts Council. 2/24/2023.
 
 
-Learning to Teach
+---
+
+## Educational Workshops
+
+* *Computational Thinking with Drinking Games.* Civic Creative Base Tokyo (CCBT), Shibuya, Tokyo. 2/2023.
+* *Drawing with Machines.* Anderson Ranch Arts Center, Snowmass Village, Colorado. 7/2022.
+* *OpenFrameworks, t-SNE, and Visual Culture.* Art Center NABI, Seoul, Korea. 11/2016.
+* *Experimental Capture Workshop.* Anderson Ranch Arts Center, Snowmass Village, Colorado. 7/2016.
+* *Computational Thinking with Drinking Games.* Osaka Knowledge Capital, Osaka, Japan. 11/2014.
+* *Critical 3D Printing Workshop.* FutureEverything Festival, Manchester, 4/2014.
+* *Computer Vision in Interactive Arts* (with Kyle McDonald). Resonate Festival, Belgrade, Serbia, 3/2013.
+* *Signal Processing Workshop.* Eyeo 2012 Festival, Walker Art Center, Minneapolis, 6/5/2012.
+* *Computational Information Visualization Workshop.* CIID, Copenhagen, Denmark, 3/2012.
+* *Interaction Design with Computer Vision.* Eyeo Festival, Minneapolis. 6/2011.
+* *Computational Arts Workshop.* Elon University. Elon, NC. 3/2011.
+* *Computational Arts Workshop.* RIT, Rochester, NY. 3/2011.
+* *Computational Arts Workshop.* Baltan Laboratories, Eindhoven, The Netherlands. 10/2010.
+* *Computational Arts Workshop.* Rocky Mountain College of Art and Design, Denver, Colorado. 10/2010.
+* *Computational Arts Workshop.* Haute École D’Art et De Design, Genève, Switzerland. 5/2010.
+* *Computational Arts Workshop.* Rice University, Houston, Texas. 4/2010.
+* *Computational Arts Workshop.* Ontario College of Art and Design, Ontario, Canada. 2/2010.
+* *Computational Arts Workshop.* Future Places Festival, Porto, Portugal. 10/2009.
+* *Computer Vision and Interactive Arts Workshop.* Columbia College of Chicago. 9/2009.
+* *Computational Arts Workshop.* Utah State University Visiting Artist Program, 4/2009.
+* *Information Visualization Workshop.* Wallst.com, Colorado, 8/2008.
+* *Computational Arts Workshop.* Anderson Ranch Arts Center, Colorado, 8/2008.
+* *Computational Arts Workshop.* Shakerag Workshop Center, Tennessee, 6/2008.
+* *Computational Arts Workshop.* DesignWeek Monterrey, Mexico, 11/2006.
+* *Computational Arts Workshop.* Kunsthøgskolen i Oslo (KHiO), Norway, 9/2005.
+* *Computational Arts Workshop.* AIGA Digital Information Design Camp, 7/2005.
+* *Computational Arts Workshop.* Fabrica Research and Development Centre, Treviso, Italy. 10/2004.
+
+---
+
+## Awards and Recognitions
+
+* [Honorable Mention](https://archive.aec.at/prix/211586/), Computer Animation, Prix Ars Electronica 2015. 9/2015.
+* [Core77 Design Awards: Winner, DIY Category](https://web.archive.org/web/20210922025310/https://designawards.core77.com/2014/recipients/neolucida/), 2014.
+* Design Museum London, *Designs of the Year 2013* (finalist), Digital category.
+* FastCompany Design's [*32 Favorite Products from 2012*](https://web.archive.org/web/20130123132511/http://www.fastcodesign.com/1671488/our-32-favorite-products-from-2012#14)
+* Creative Application's [*#1 of 10 Most Memorable Projects of 2012*](https://www.creativeapplications.net/news/10-best-and-most-memorable-projects-of-2012/)
+* Finalist, [2012 World Technology Awards](https://web.archive.org/web/20130913142336/http://wtn.net/summit2012/winners.php).
+* [Award of Distinction [2nd prize]](https://archive.aec.at/prix/194227/), Hybrid Art, Prix Ars Electronica 2012. 9/2012.
+* [Honorable Mention](https://archive.aec.at/prix/127919/), Interactive Art, Prix Ars Electronica 2009. 9/2009.
+* Grand Kam Fan Award, as contributor to McCann ELEMENTS campaign, 11/2008.
+* Webby Award, NetArt Category, 2007 Webby Awards. 5/2007.
+* Elected as WTN Fellow, Arts Category, 2005 World Technology Awards. 6/2005.
+* TR100, Technology Review's "100 Top Young Innovators Under 35", 10/2004.
+* [Honorable Mention](https://archive.aec.at/prix/112930/), Interactive Art, Prix Ars Electronica 2004. 9/2004.
+* [Award of Distinction [2nd prize]](https://webarchive.ars.electronica.art/en/archives/picture_ausgabe_02_new.asp%3FiAreaID=84&showAreaID=84&page=1&pagesize=20&order=source.html), Net Vision / Net Excellence, Prix Ars Electronica 2003. 9/2003.
+* Bronze Medalist, ID Magazine Interaction Design Awards. 11/2002.
+* [Honorable Mention](https://archive.aec.at/prix/151744/), Interactive Art, Prix Ars Electronica 2002. 9/2002.
+* Contributor to [*Carnivore*, Golden Nica](https://archive.aec.at/prix/150800/), Net Excellence, Prix Ars Electronica, 9/2002.
+* New Artist Under 30, Print Magazine. 4/2002.
+* [Honorable Mention](https://archive.transmediale.de/content/audiovisual-environment-suite), Interactive Art Prize, Berlin Transmediale.01. 2/2001.
+* [Award of Distinction [2nd prize]](https://archive.aec.at/prix/148664/), Interactive Art, Prix Ars Electronica 2000. 9/2000.
+* Best of Interactive Category, BitByBitDigital juried exhibition. 10/2000.
+* Winner, *Communication Arts Interactive Design Annual 6*. 9/2000.
+* Bronze Medalist, ID Magazine Interaction Design Awards. 6/2000.
+* Winner, ASCI Digital2000 Competition. 6/2000.
+* Honorary Mention, Tokyo Type Director's Club Awards. 4/2000.
+* Merrill-Lynch Student Fellowship. 1999-2000.
+* IBM Student Fellowship, 1998-1999.
+* National Semifinalist, Westinghouse Science Competition. 12/1989.
+
+---
+
+## Artist Grants
+
+* Pennsylvania Council on the Arts (PCA) 2008 Fellowship award, New Technologies / Other Genres, 2/2008.
+* Berkman Faculty Development Grant, Carnegie Mellon University, 12/2006.
+* Artist's Grant, Emerging Fields Category, Creative Capital Foundation. 2/2006.
+* Artist's Grant, New York State Council on the Arts. 8/2003.
+* Artist's Grant, Rockefeller Foundation Multi-Arts Production Fund. 7/2003.
+* Artist's Grant, The Daniel Langlois Foundation. 5/2003.
+* Artist's Grant, Arts Council England, National Touring Programme. 1/2003.
+* Artist's Grant, New York State Council on the Arts. 2/2002.
+* Artist's Grant, The Greenwall Foundation. 2/2002.
+* Artist's Grant, The Daniel Langlois Foundation. 5/2001.
+* Artist's Grant, The Greenwall Foundation. 5/2001.
+* Artist's Grant, MIT Council for the Arts. 11/1991.
+
