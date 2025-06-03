@@ -7,7 +7,7 @@ A website by Golan Levin
 ### Projects
 
 * [Meshy](meshy/index.html) (1998, 2024)
-* [Interpolation in Computer Art: A Pedagogical Sketchbook](interpolation_sketchbook/README.md) (2017, 2021)
+* [Interpolation in Computer Art: A Pedagogical Sketchbook](https://github.com/golanlevin/interpolation_sketchbook/README.md) (2017, 2021)
 
 
 ### Code
