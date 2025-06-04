@@ -1,4 +1,8 @@
-# AB Setup 
+# Meshy 
+
+Golan Levin, 1998
+
+---
 
 #### Project Description
 
@@ -32,7 +36,7 @@ This official NFT version of Meshy was commissioned by Verisart and Gazelli Art 
 ---
 
 
-# Standalone iOS App: 
+## Standalone iOS App Instructions: 
 
 July 2024
 
