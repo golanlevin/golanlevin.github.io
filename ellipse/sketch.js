@@ -1,11 +1,11 @@
-// ZEN'S SUPER-ELLIPSE GENERATOR v.2025.4  
+// ZEN'S SUPER-ELLIPSE GENERATOR v.2025.06.17
 // Generates ellipses, superellipses, and rectangles.
 // Press "Download PNG" or the 's' key to export an image.
 // Math at: https://en.wikipedia.org/wiki/Superellipse
 //
 // By Golan Levin; CC0: No Rights Reserved. 
-// Version: 29 April 2025 • For Z.L.
-// Uses: p5.js v.1.11.5 and p5.plotsvg v.0.1.4
+// Version: 17 June 2025 • For Z.L.
+// Uses: p5.js v.1.11.8 and p5.plotsvg v.0.1.4
 
 p5.disableFriendlyErrors = true; 
 
@@ -18,6 +18,7 @@ let checkboxAxes;
 let checkboxSnap;
 let checkboxCirc;
 let checkboxRect;
+let jobInput; 
 let isHovered = false;
 let bDoExportSvg = false; 
 let svgFilename = "ellipse.svg";
@@ -59,7 +60,7 @@ function setup() {
   sliderAspect.position(15,uiy+2);
   
   sliderExponent = createSlider(0,1, 0, 0.001);
-  sliderExponent.style('width', '237px');
+  sliderExponent.style('width', '175px');
   sliderExponent.position(15,uiy+22);
   
   sliderDivider = createSlider(3,9, 4, 1);
@@ -70,7 +71,7 @@ function setup() {
   checkboxAxes.position(134,uiy+49);
   
   checkboxSnap = createCheckbox("", bEnableSnap);
-  checkboxSnap.position(339,uiy-13);
+  checkboxSnap.position(339,uiy+22);
   
   checkboxCirc = createCheckbox("", bCircAxes);
   checkboxCirc.position(339,uiy+70);
@@ -89,6 +90,17 @@ function setup() {
   buttonSvg.mousePressed(saveSvgOutput);
   buttonSvg.mouseOver(() => isHovered = true);
   buttonSvg.mouseOut(() => isHovered = false);
+  
+  jobInput = createInput('');
+  jobInput.position(239, 43);
+  jobInput.size(110, 12);
+  jobInput.attribute('maxlength', '12'); // Limit to 10 characters
+  jobInput.style('font-size', '10px'); 
+  jobInput.input(() => {
+    let val = jobInput.value();
+    jobInput.value(val.replace(/ /g, '_'));
+  });
+
   
   for (let i=0; i<vals.length; i++){
     eccs[i] = sqrt(1.0 - sq(1.0/vals[i])); 
@@ -136,7 +148,8 @@ function draw() {
   if (bDoExportSvg){
     beginRecordSVG(this, svgFilename);
     push(); 
-    translate(ex,ey); 
+    // translate(ex,ey); 
+    translate(ew/2,ey); 
     generateSuperEllipse(ew,eh, this);
     pop();
     endRecordSVG();
@@ -146,30 +159,31 @@ function draw() {
   drawShape(ew,eh); 
   image(offscreen, margin,height-oh-margin); 
   
-  fill(0); 
-  noStroke(); 
-  let ratStr = nf(aspectRatio, 1,3) + " ";
-  ratStr += ((whichRatio >= 0) ? rats[whichRatio] : "");
-  let expStr = (exponent > 500) ? "∞" : nf(exponent,1,2);
-  textSize(14); 
-  textStyle(BOLD); 
-  text("ZEN'S SUPER-ELLIPSE GENERATOR • v.2025.4", 19, 30); 
-  textSize(12); 
-  textStyle(NORMAL); 
-  text("Aspect Ratio: " + ratStr, 19,uiy); 
-  text("Snap", 310,uiy); 
-  text("Exponent: " + expStr, 263,uiy+36); 
-  text("Draw Axes", 156,uiy+63); 
-  text("Div/" + int(sliderDivider.value()), 329,uiy+63); 
-  text("⌖", 328, uiy+82);
-  text("▯", 296, uiy+83);
   
   let a = eh;
   let b = ew; 
   let k = sqrt(1.0 - sq(b/a)); // Eccentricity
   let e2 = sqrt(a*a - b*b)/b; // Second Eccentricity, e'
   let f = (a-b)/a; // Flattening
-  text("Eccentricity: " + nf(k,1,3), width/2, uiy);
+  
+  fill(0); 
+  noStroke(); 
+  let ratStr = nf(aspectRatio, 1,3);
+  ratStr += ((whichRatio >= 0) ? (" " + rats[whichRatio]): "");
+  let expStr = (exponent > 500) ? "∞" : nf(exponent,1,2);
+  textSize(14); 
+  textStyle(BOLD); 
+  text("ZEN'S SUPER-ELLIPSE GENERATOR • v.2025.06", 19, 30); 
+  textSize(12); 
+  textStyle(NORMAL); 
+  text("Aspect: " + ratStr + ";  𝑒 : " + nf(k,1,3), 19,uiy); 
+  text("Job: ", 213,uiy); 
+  text("Snap", 310,uiy+36); 
+  text("Exponent: " + expStr, 200,uiy+36); 
+  text("Draw Axes", 156,uiy+63); 
+  text("Div/" + int(sliderDivider.value()), 329,uiy+63); 
+  text("⌖", 328, uiy+82);
+  text("▯", 296, uiy+83);
 }
 
 
@@ -207,6 +221,7 @@ function drawShape(ew,eh){
 function generateSuperEllipse(ew,eh, gfx){
   gfx.noFill();  
   gfx.stroke(0);
+  let jobStr = jobInput.value();
   
   if (checkboxRect.checked() && (exponent < 500)){
     gfx.strokeWeight(0.25); 
@@ -241,7 +256,13 @@ function generateSuperEllipse(ew,eh, gfx){
     // X and Y axes
     gfx.strokeWeight(0.5); 
     gfx.line(-ew/2, 0, ew/2, 0); 
-    gfx.line(0, -eh/2, 0, eh/2);
+    gfx.line(0,-10, 0,eh/2);
+    if (jobStr.length == 0){
+      gfx.line(0,-eh/2, 0,0);
+    } else {
+      gfx.line(0,-eh/2, 0,-28);
+    }
+    
     
     // Ellipse foci
     let fy = sqrt(sq(eh/2) - sq(ew/2));
@@ -272,7 +293,6 @@ function generateSuperEllipse(ew,eh, gfx){
         gfx.endShape(CLOSE); 
       }
     }
-    
 
     // Snap ticks
     if (!isHovered){
@@ -284,20 +304,32 @@ function generateSuperEllipse(ew,eh, gfx){
         gfx.line(-k,-e*eh/2,k,-e*eh/2); 
       }
     }
+    
+  }
+  
+  if (jobStr.length > 0){
+    gfx.noStroke(); 
+    gfx.fill(0); 
+    gfx.textAlign(CENTER); 
+    gfx.text(jobStr, 0,0-textDescent()-textAscent()); 
+    gfx.textAlign(LEFT); 
   }
 }
 
 //=============================================
+/*
 function keyPressed(){
   if ((key=='S') || (key=='s')){
     // image PNG
-    saveOutput(); 
+    // savePngOutput(); 
   }
   if ((key=='V') || (key=='v')){
     // vector SVG
-    bDoExportSvg = true; 
+    // bDoExportSvg = true; 
   }
 }
+*/
+
 
 //=============================================
 function savePngOutput(){
@@ -305,7 +337,13 @@ function savePngOutput(){
   str += year() + nf(month(),2) + nf(day(),2);
   str += nf(hour(),2) + nf(minute(),2);
   str += "_ratio" + nf(aspectRatio,1,3);
-  str += "_pow" + nf(exponent,1,2);
+  if (exponent > 2.0){
+    str += "_pow" + nf(exponent,1,2);
+  }
+  let jobStr = jobInput.value();
+  if (jobStr.length > 0){
+    str += "_"  + jobStr;
+  }
   str += ".png";
   
   let oh = offscreen.height;
@@ -324,7 +362,13 @@ function saveSvgOutput(){
   svgFilename += year() + nf(month(),2) + nf(day(),2);
   svgFilename += nf(hour(),2) + nf(minute(),2);
   svgFilename += "_ratio" + nf(aspectRatio,1,3);
-  svgFilename += "_pow" + nf(exponent,1,2);
+  if (exponent > 2.0){
+    svgFilename += "_pow" + nf(exponent,1,2);
+  }
+  let jobStr = jobInput.value();
+  if (jobStr.length > 0){
+    svgFilename += "_"  + jobStr;
+  }
   svgFilename += ".svg";
   bDoExportSvg = true;
 }
