@@ -14,7 +14,7 @@ Bantam Artist/Educator's Residency, July 2025
 
 ## Solo and Two-Person Exhibitions
 
-* *Golan Levin: Drawing with Machines*. Center for Machine Arts, Peekskill, New York. 2026.
+* *Drawing with Machines: Golan Levin & Students*. Center for Machine Arts, Peekskill, New York. 1/2026.
 * [*Golan Levin: Cytographia*](https://www.artblocks.io/collection/cytographia-by-golan-levin). Artblocks Curated Channel. 1/2024.
 * *Golan Levin*. Aksioma Project Space, Ljubljana, Slovenia. 2014. 
 * *The Gesture in Paint and Software: Helen Levin and Golan Levin*. Staten Island Museum, 2012. 
@@ -39,6 +39,8 @@ https://flong.com/archive/bio/exhibitions/index.html
 
 **2025** 
 
+* [*Art on Tezos: Berlin*](https://x.com/artontezos_/status/1984269437516812779), [Schlachter 151](https://www.instagram.com/schlachter_151/), Berlin,  11/6/2025 – 11/9/2025.
+* [*Drawn to Teach: An Educators Showcase of Pen Plotting*](https://www.instagram.com/p/DMLImOVulos/), Bantam Tools Machine Arts Gallery, Peekskill, NY. 7/18/2025 – 8/3/2025.
 * [*Pirouette: Turning Points in Design*](https://press.moma.org/exhibition/pirouette/). Museum of Modern Art, New York City, 1/26/2025 – 11/15/2025.
 
 **2024** 
@@ -105,11 +107,11 @@ https://flong.com/archive/bio/exhibitions/index.html
 
 **2013**
 
-* INTER[IN]VENTION / INTER[IN]VENÇÃO. Curated by Bernhard Serexhe / ZKM. Fundação Eugénio de Almeida, Évora, Portugal. (Messa di Voce) 11/29/2013 - 4/13/2014.
-* F.A.T. Gold: Free Art and Technology. MU ArtSpace, Eindhoven, Netherlands. 11/2013 - 1/2014.
-* Exposición: Render. Animación Digital: Cuerpos continuos. Espacio Fundación Telefónica, Lima, Peru. 9/5/2013 - 9/28/2013.
-* Radical Fictions: IV Mostra de Arte Digital, Instituto Tomie Ohtake, São Paulo, Brazil. 10/9/2013 - 11/3/2013.
-* Arte y Tecnología: Artists as Catalysts. AlhóndigaBilbao, Bilbao, Spain. 7/4/2013 - 9/1/2013.
+* [*INTER[IN]VENTION / INTER[IN]VENÇÃO*](https://web.archive.org/web/20150423152007/http://www.fundacaoeugeniodealmeida.pt/forum/zkm--media-museum-exhibition/907.htm). [Curated](http://www.fundacaoeugeniodealmeida.pt/files/615da5ebd59ed9272557df7ed7e8cdc7abae7875.pdf) by Bernhard Serexhe / ZKM. Fundação Eugénio de Almeida, Évora, Portugal. (Messa di Voce) 11/29/2013 - 4/13/2014.
+* [*F.A.T. Gold: Free Art and Technology*](https://web.archive.org/web/20151010173145/http://www.mu.nl/nl/muenmeer/58/). MU ArtSpace, Eindhoven, Netherlands. 11/2013 - 1/2014.
+* [*Exposición: Render. Animación Digital: Cuerpos continuos*](https://web.archive.org/web/20140308152121/http://espacio.fundaciontelefonica.com.pe/event/render-animacion-digital-cuerpos-continuos/). Espacio Fundación Telefónica, Lima, Peru. 9/5/2013 - 9/28/2013.
+* [*Radical Fictions: IV Mostra de Arte Digital*](https://web.archive.org/web/20140419201023/http://www.mostradeartedigital.com.br/2013-artistas/golan-levin-and-shawn-sims.html), Instituto Tomie Ohtake, São Paulo, Brazil. 10/9/2013 - 11/3/2013.
+* [*Arte y Tecnología: Artists as Catalysts*](https://web.archive.org/web/20130406035112/http://www.alhondigabilbao.com:80/programacion/arte-y-tecnologia). AlhóndigaBilbao, Bilbao, Spain. 7/4/2013 - 9/1/2013.
 * CLICK Festival: F.A.T. Lab (Too Lazy to Fail). Elsinore, Denmark, 5/8/2013-5/12/2013.
 * Datascape. The Block, Queensland University of Technology’s Creative Industries Precinct, Brisbane, Australia. 4/16/2013 - 4/27/2013.
 * Designs of the Year, London Design Museum, London. 3/20/2013 - 7/7/2013.
@@ -399,6 +401,9 @@ https://flong.com/archive/bio/exhibitions/index.html
 
 **2025**
 
+* Artist talk, [Master of Arts in Interaction Design (MAIND)](https://maind.supsi.ch/master-interaction-design/en),  Scuola Universitaria Professionale della Svizzera Italiana (SUPSI / University of Applied Sciences and Arts of Southern Switzerland), 11/20/2025.
+* [Artist talk](https://www.instagram.com/p/DPou_JAkbxi/), Computation Technology & Culture Lecture Series, RISD, 10/16/2025.
+* "Drawing with Machines", visiting lecture to [Drawing++](https://drawingpp.media.mit.edu/) course, MIT Media Lab, 10/8/2025 /
 * "Generative AI in Creative Coding Education", [2025 Learning To Teach Creative Technologies with Generative AI](https://wp.nyu.edu/ltt2025/schedule-at-a-glance/), NYU, 1/17/2025.
 
 **2024**
