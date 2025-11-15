@@ -14,6 +14,8 @@
 
 ### Creative Coding Course Archives
 
+* 2025: [Creative Coding](https://github.com/golanlevin/60-212/tree/main/2025) (60-212)
+* 2024: [Creative Coding](https://github.com/golanlevin/60-212/tree/main/2024) (60-212)
 * 2023: [Creative Coding](https://golancourses.net/fall23/) (60-212)
 * 2022: [Interactivity and Computation](https://courses.ideate.cmu.edu/60-212/s2022/) (60-212)
 * 2020: [Interactivity and Computation](https://courses.ideate.cmu.edu/60-212/f2020/) (60-212)

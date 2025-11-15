@@ -6,6 +6,7 @@ A website by Golan Levin
 
 ### Projects
 
+* [Directrix](directrix/index.html) (1998, 2025)
 * [Meshy](meshy/index.html) (1998, 2024)
 * [Interpolation in Computer Art: A Pedagogical Sketchbook](https://github.com/golanlevin/interpolation_sketchbook/blob/main/README.md) (2017, 2021)
 
@@ -18,6 +19,7 @@ A website by Golan Levin
 
 ### Courses
 
+* [Index of courses taught at CMU, 2004-](courses/README.md)
 * [Drawing with Machines](https://github.com/golanlevin/DrawingWithMachines/blob/main/README.md)
 * [Experimental Capture](https://github.com/golanlevin/ExperimentalCapture/blob/master/README.md)
 
