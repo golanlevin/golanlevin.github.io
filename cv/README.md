@@ -39,6 +39,7 @@ https://flong.com/archive/bio/exhibitions/index.html
 
 **2025** 
 
+* [*Pioneers Series*](https://objkt.com/galleries/pioneers). *Objkt.com*, Curated by Kika Nicolela. 11/2025.
 * [*Art on Tezos: Berlin*](https://x.com/artontezos_/status/1984269437516812779), [Schlachter 151](https://www.instagram.com/schlachter_151/), Berlin,  11/6/2025 – 11/9/2025.
 * [*Drawn to Teach: An Educators Showcase of Pen Plotting*](https://www.instagram.com/p/DMLImOVulos/), Bantam Tools Machine Arts Gallery, Peekskill, NY. 7/18/2025 – 8/3/2025.
 * [*Pirouette: Turning Points in Design*](https://press.moma.org/exhibition/pirouette/). Museum of Modern Art, New York City, 1/26/2025 – 11/15/2025.
@@ -418,6 +419,13 @@ https://flong.com/archive/bio/exhibitions/index.html
 
 * Artist Talk. [Creativity in the Age of AI: AI Impacting Arts, Arts Impacting AI](https://hai.stanford.edu/events/spring-symposium-creativity-age-ai-ai-impacting-arts-arts-impacting-ai?section=meet-the-speakers). Stanford University HAI, 5/24/2023. 
 * Keynote Lecture. [Future Ideations Camp Vol.1: Import](https://ccbt.rekibun.or.jp/en/events/future-ideations-camp01), Civic Creative Base Tokyo (CCBT), Shibuya, Tokyo. Organized by the Tokyo Metropolitan Government and Arts Council. 2/24/2023.
+
+---
+
+## Press
+
+* Simone Brauner, "[Touching Grass: Golan Levin on Systems Re-Pairing](https://www.art-magazine.ai/artist-directory/feature/golan-levin---touching-grass)" ([PDF](../press/2025/2025_golan_levin_ai_art_magazine.pdf)). *The AI Art Magazine*, 11/2025. 
+* Merve Güven Özkerim, "[Beyond Representation: A Conversation with Golan Levin on Generative Art and Blockchain](https://hyperrhiz.io/hyperrhiz29/3-chaos-order/3-interview.html)" ([PDF](../press/2025/2025_golan_levin_hyperrhiz.pdf)). *Hyperrhiz* 29, 10/2025. 
 
 
 ---
