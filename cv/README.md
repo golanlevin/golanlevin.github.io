@@ -2,6 +2,7 @@
 
 <!--
 Bantam Artist/Educator's Residency, July 2025
+Collections: Cooper-Hewitt, MoMA, 
 -->
 
 ---
@@ -14,7 +15,7 @@ Bantam Artist/Educator's Residency, July 2025
 
 ## Solo and Two-Person Exhibitions
 
-* *Drawing with Machines: Golan Levin & Students*. Center for Machine Arts, Peekskill, New York. 1/2026.
+* [*Drawing with Machines: Golan Levin and Students of the CMU Machine Drawing Lab*](https://bantamtools.com/blogs/gallery/cmu-drawing-with-machines-at-the-bantam-tools-machine-arts-gallery). Bantam Machine Arts Gallery, Peekskill, New York, 1/9/2026 – 1/31/2026.
 * [*Golan Levin: Cytographia*](https://www.artblocks.io/collection/cytographia-by-golan-levin). Artblocks Curated Channel. 1/2024.
 * *Golan Levin*. Aksioma Project Space, Ljubljana, Slovenia. 2014. 
 * *The Gesture in Paint and Software: Helen Levin and Golan Levin*. Staten Island Museum, 2012. 
@@ -31,17 +32,20 @@ Bantam Artist/Educator's Residency, July 2025
 ## Group Exhibitions
 
 
-
-
 <!-- 
 https://flong.com/archive/bio/exhibitions/index.html
 -->
+
+**2026**
+
+* [*Cycles*](https://denison.edu/places/museum/exhibitions), Denison Museum, Denison University, Granville, Ohio. 8/30/2026 – 12/1/2026.
+* [*Drawing with Machines: Golan Levin and Students of the CMU Machine Drawing Lab*](https://bantamtools.com/blogs/gallery/cmu-drawing-with-machines-at-the-bantam-tools-machine-arts-gallery). Bantam Machine Arts Gallery, Peekskill, New York, 1/9/2026 – 1/31/2026.
 
 **2025** 
 
 * [*Pioneers Series*](https://objkt.com/galleries/pioneers). *Objkt.com*, Curated by Kika Nicolela. 11/2025.
 * [*Art on Tezos: Berlin*](https://x.com/artontezos_/status/1984269437516812779), [Schlachter 151](https://www.instagram.com/schlachter_151/), Berlin,  11/6/2025 – 11/9/2025.
-* [*Drawn to Teach: An Educators Showcase of Pen Plotting*](https://www.instagram.com/p/DMLImOVulos/), Bantam Tools Machine Arts Gallery, Peekskill, NY. 7/18/2025 – 8/3/2025.
+* [*Drawn to Teach: An Educators Showcase of Pen Plotting*](https://www.instagram.com/p/DMLImOVulos/), Bantam Machine Arts Gallery, Peekskill, New York. 7/18/2025 – 8/3/2025.
 * [*Pirouette: Turning Points in Design*](https://press.moma.org/exhibition/pirouette/). Museum of Modern Art, New York City, 1/26/2025 – 11/15/2025.
 
 **2024** 
@@ -60,40 +64,43 @@ https://flong.com/archive/bio/exhibitions/index.html
 * A2P
 * TheFEN
 
+**2019**
+
+* [*3D. Imprimir el Mundo*](https://www.fundaciontelefonica.com.mx/exposiciones/3denmx/), Universum Museo de las ciencias de la UNAM, Mexico City, Mexico. [9/13/2019-2/2/2020](https://web.archive.org/web/20210418181548/https://www.fundaciontelefonica.com.mx/exposiciones/3denmx/).
 
 **2018**
 
-* Design Does at Museu del Disseny de Barcelona, Barcelona, Spain. 3/23/2018 - 5/13/2018. (Free Universal Construction Kit).
-* An Atlas of Commoning, at The Institut for International Cultural Relations, Berlin, Germany. 6/2018.
-* Hello World: Code and Design, University of Technology Sydney (UTS) Gallery, Sydney, Australia. 7/24/2018-9/14/2018.
+* [*Design Does*](https://designdoes.es/exhibitions/) at Museu del Disseny de Barcelona, Barcelona, Spain. 3/23/2018 - 5/13/2018. (Free Universal Construction Kit).
+* [*An Atlas of Commoning*](https://archplus.net/en/commoning/en/), at The Institut for International Cultural Relations, Berlin, Germany. 6/2018.
+* [*Hello World: Code and Design*](https://www.uts.edu.au/globalassets/sites/default/files/2023-10/1uts-gallery_hello-world_2018.pdf), University of Technology Sydney (UTS) Gallery, Sydney, Australia. 7/24/2018–9/14/2018.
 
 **2017**
 
-* Why Future Still Needs Us: AI and Humanity and Machination at Robotronica Festival, QUT Art Museum, Brisbane, Australia. (Terrapattern) 8/19/2017 - 10/29/2017.
-* Gesten: Gestern - Heute - Übermorgen. Saxon/Chemnitz Museum of Industry, Chemnitz, Germany. (Augmented Hand Series) 11/16/2017 - 3/4/2018.
-* NODE17 (Node Forum for Digital Arts). Künstlerhaus Mousonturm, Frankfurt am Main, Germany. (Free Universal Construction Kit) 6/26/2017-7/2/2017.
-* 3D, Printing the World. Curated by Carmen Baselga and Héctor Serrano. Espacio Fundación Telefónica, Madrid, Spain. (Free Universal Construction Kit) 6/14/2017 - 9/14/2017.
-* Affiliations Exhibition: Remix and Intervene: Computing Sound and Visual Poetry. At ELO (Electronic Literature Organization) Conference 2017. Palacete dos Viscondes de Balsemao, University Fernando Pessoa, Porto, Portugal. Curated by Daniela Cortes Maduro and Alvaro Seica. (Ursonography) 7/19/2017 - 7/21/2017.
+* [*Why Future Still Needs Us: AI and Humanity*](https://www.artmuseum.qut.edu.au/__data/assets/pdf_file/0004/944284/WhyFutureStillNeedsUs.pdf) at Robotronica Festival, QUT Art Museum, Brisbane, Australia. (*Terrapattern*) 8/19/2017 - 10/29/2017.
+* [*Gesten: Gestern - Heute - Übermorgen*](https://ars.electronica.art/aeblog/en/2017/12/05/gestures/). Saxon/Chemnitz Museum of Industry, Chemnitz, Germany. (*Augmented Hand Series*) 11/16/2017 - 3/4/2018.
+* [*NODE17 (Node Forum for Digital Arts)*](https://nodeforum.org/activities/festival/node17/). Künstlerhaus Mousonturm, Frankfurt am Main, Germany. (*Free Universal Construction Kit*) 6/26/2017-7/2/2017.
+* [*3D, Printing the World*](https://espacio.fundaciontelefonica.com/en/evento/3d-printing-the-world/). Curated by Carmen Baselga and Héctor Serrano. Espacio Fundación Telefónica, Madrid, Spain. (*Free Universal Construction Kit*) 6/14/2017 - 9/14/2017.
+* [*Affiliations Exhibition: Remix and Intervene: Computing Sound and Visual Poetry*](https://web.archive.org/web/20190324130911/https://conference.eliterature.org/2017/exhibits). At ELO (Electronic Literature Organization) Conference 2017. Palacete dos Viscondes de Balsemao, University Fernando Pessoa, Porto, Portugal. Curated by Daniela Cortes Maduro and Alvaro Seica. (*Ursonography*) 7/19/2017 - 7/21/2017.
 
 **2016**
 
-* Day for Night Festival, Houston, Texas. (Ghost Pole Propagator II) 12/14/2016 - 12/18/2016.
-* Why Future Still Needs Us: AI and Humanity. Art Center NABI, Seoul, Korea. Curated by DooEun Choi. (Terrapattern) 11/15/2016 - 1/20/2017.
-* Climactic: Post Normal Design. Miller Gallery, Carnegie Mellon University, Pittsburgh. (The Free Universal Construction Kit) 11/4/2016 - 12/11/2016.
-* Making a Difference / A Difference in Making. Red Dot Design Museum, Essen, Germany. 9/27/2016 - 10/30/2016.
-* New Gameplay. Curated by Bernhard Serexhe / ZKM. Nam June Paik Art Center, Yongin, South Korea. (Messa di Voce) 7/20/2016 - 2/19/2017.
-* HUMAN FACTOR – Endless Prototyping, organized by Ars Electronica. DRIVE. Volkswagen Group Forum, Berlin, Germany. (The Free Universal Construction Kit) 7/1/2016 - 8/27/2016.
-* Alt-AI Exhibition. School for Poetic Computation, NYC. 5/20/2016 - 5/22/2016.
-* Extra Ghosts, La Gaîté Lyrique, Paris. (Augmented Hand Series) 4/1/2016 - 8/14/2016.
-* Meta.Morf 2016: Nice to Be in Orbit! Trondheim Biennale for Art and Technology, Trondheim, Norway. (Moon Drawings) 3/10/2016 - 5/8/2016.
+* [*Day for Night Festival*](https://web.archive.org/web/20170411062038/http://www.dayfornight.io/light/golan-nevin/), Houston, Texas. (*Ghost Pole Propagator II*) 12/14/2016 - 12/18/2016.
+* [*Why Future Still Needs Us: AI and Humanity*](https://web.archive.org/web/20170610130712/http://www.nabi.or.kr/english/project/current_read.nab?idx=541). Art Center NABI, Seoul, Korea. Curated by DooEun Choi. (*Terrapattern*) 11/15/2016 - 1/20/2017.
+* [*Climactic: Post Normal Design*](https://miller-ica.cmu.edu/exhibitions/climactic-post-normal-design). Miller Gallery, Carnegie Mellon University, Pittsburgh. (The Free Universal Construction Kit) 11/4/2016 - 12/11/2016.
+* [*Making a Difference / A Difference in Making*](https://www.red-dot-design-museum.org/essen/press/archive-red-dot-design-museum-essen/materialise-brings-making-a-difference-/-a-difference-in-making-exhibition-to-the-red-dot-design-museum-essen). Red Dot Design Museum, Essen, Germany. 9/27/2016 - 10/30/2016.
+* [*New Gameplay*](https://web.archive.org/web/20170627164858/https://njpac-en.ggcf.kr/archives/exhibit/new-gameplay). Curated by Bernhard Serexhe / ZKM. Nam June Paik Art Center, Yongin, South Korea. (Messa di Voce) 7/20/2016 - 2/19/2017.
+* [*HUMAN FACTOR – Endless Prototyping*](https://ars.electronica.art/mediaservice/de/2016/07/01/human-factor/), organized by Ars Electronica. DRIVE. Volkswagen Group Forum, Berlin, Germany. (The Free Universal Construction Kit) 7/1/2016 - 8/27/2016.
+* [*Alt-AI Exhibition*](https://genekogan.com/alt-AI/#exhibition). School for Poetic Computation, NYC. 5/20/2016 - 5/22/2016.
+* [*Extra Fantômes*](https://web.archive.org/web/20190716101231/https://www.gaite-lyrique.net/en/event/extra-fantomes), La Gaîté Lyrique, Paris. (Augmented Hand Series) 4/1/2016 - 8/14/2016.
+* [*Meta.Morf 2016: Nice to Be in Orbit!*](https://metamorf.no/2016/indexa96d.html?page_id=556) Trondheim Biennale for Art and Technology, Trondheim, Norway. (Moon Drawings) 3/10/2016 - 5/8/2016.
 
 **2015**
 
-* Ars Electronica Festival. Ars Electronica Center and Offenes Kulturhaus, Linz, Austria. (Augmented Hand Series) 9/1/2015 - 2/10/2016.
-* This Is for Everyone: Design Experiments for the Common Good, MoMA (NYC), Curated by Paola Antonelli. 2/2015 – 1/2016.
-* F.A.T. GOLD: San Francisco, Gray Area Foundation for the Arts, San Francisco. Curated by Lindsay Howard. 5/21/2015 - 5/31/2015.
-* Making a Difference / A Difference in Making: Exploring the Added Value of 3D Printing, Bozar Center of Fine Arts, Palais Des Beaux-Arts, Brussels, Belgium. Curated by Marta Malé-Alemany, 4/24/2015 - 6/7/2015.
-* Short Cuts, Kunsthaus CentrePasquArt, Biel/Bienne, Switzerland. 4/19/2015 – 6/14/2015.
+* [*Ars Electronica Festival*](https://archive.aec.at/prix/211586/). Ars Electronica Center and Offenes Kulturhaus, Linz, Austria. (Augmented Hand Series) 9/1/2015 - 2/10/2016.
+* [*This Is for Everyone: Design Experiments for the Common Good*](https://www.moma.org/calendar/exhibitions/1501), MoMA (NYC), Curated by Paola Antonelli. 2/2015 – 1/2016.
+* [*F.A.T. GOLD: San Francisco*](https://web.archive.org/web/20150802000519/http://grayareafestival.io/exhibition/), Gray Area Foundation for the Arts, San Francisco. Curated by Lindsay Howard. 5/21/2015 - 5/31/2015.
+* [*Making a Difference / A Difference in Making: Exploring the Added Value of 3D Printing*](https://web.archive.org/web/20150422020957/http://www.a-difference-in-making.com/), Bozar Center of Fine Arts, Palais Des Beaux-Arts, Brussels, Belgium. Curated by Marta Malé-Alemany, 4/24/2015 - 6/7/2015.
+* [*Short Cuts*](https://web.archive.org/web/20160403063607/http://pasquart.ch/files/Exhibitions/2015/ShortCuts/Short_Cuts_webPressRelease_EN.pdf), Kunsthaus CentrePasquArt, Biel/Bienne, Switzerland. 4/19/2015 – 6/14/2015.
 * Creative Technologies, Macy Gallery, Columbia University, New York City, 6/1/2015 – 6/22/2015.
 * Komponiertisch (Scrapple), Universum Bremen, Germany. 3/2015 (acquisition).
 * The Informed Body – NODE15 Exhibition, NODE 2015 Conference, Frankfurt, Germany. 4/27/2015 - 5/3/2015.
@@ -400,11 +407,15 @@ https://flong.com/archive/bio/exhibitions/index.html
 
 ## Public Lectures and Presentations
 
+**2026**
+
+* "Datasets as Medium: Teaching the Full ML Pipeline from Collection to Synthesis", [2026 Learning To Teach: (Re)Designing Creative Tech Pedagogy for the GenAI Era](https://wp.nyu.edu/ltt2026/), NYU, 1/17/2025.
+
 **2025**
 
 * Artist talk, [Master of Arts in Interaction Design (MAIND)](https://maind.supsi.ch/master-interaction-design/en),  Scuola Universitaria Professionale della Svizzera Italiana (SUPSI / University of Applied Sciences and Arts of Southern Switzerland), 11/20/2025.
-* [Artist talk](https://www.instagram.com/p/DPou_JAkbxi/), Computation Technology & Culture Lecture Series, RISD, 10/16/2025.
-* "Drawing with Machines", visiting lecture to [Drawing++](https://drawingpp.media.mit.edu/) course, MIT Media Lab, 10/8/2025 /
+* [Artist talk](https://www.instagram.com/p/DPou_JAkbxi/), Computation Technology & Culture Lecture Series, RISD, Providence, 10/16/2025.
+* "Drawing with Machines", visiting lecture to [Drawing++](https://drawingpp.media.mit.edu/) course, MIT Media Lab, 10/8/2025. 
 * "Generative AI in Creative Coding Education", [2025 Learning To Teach Creative Technologies with Generative AI](https://wp.nyu.edu/ltt2025/schedule-at-a-glance/), NYU, 1/17/2025.
 
 **2024**
