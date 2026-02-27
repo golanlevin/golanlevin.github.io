@@ -145,10 +145,10 @@ https://flong.com/archive/bio/exhibitions/index.html
 * [*Disruptions: Museum As Manufacturer*](https://fromkeetra.com/museum-as-manufacturer/), Museum of Arts and Design, NYC, 3/12/2013 - 6/09/2013.
 * [*Scrapple*](https://web.archive.org/web/20190917050028/https://www.exploratorium.edu/exhibits/scrapple), San Francisco Exploratorium, San Francisco, CA. Acquisition. 4/12/2013.
 * [*See Yourself Sensing*](https://web.archive.org/web/20130316123758/http://www.sjsu.edu/art/events/openings/). San Jose State University, California. Curated by Madeline Schwartzman. 3/1/2013 - 3/20/2013.
-* Singularité Exposition, Biennale Internationale Design Saint-Étienne, France. 3/14/2013 - 3/31/2013.
-* Spontaneous Interventions: Design Actions for the Common Good, Chicago Cultural Center, 5/24/13 - 9/1/2013.
-* The Lab, organized by Ars Electronica, at ITU Telecom World 2013, 11/19/2013 - 11/22/2013, Bangkok, Thailand.
-* The Science of Digital Fabrication Center for Bits and Atoms, MIT, 3/7/2013.
+* [*Singularité Exposition*](https://www.biennale-design.com/saint-etienne/2013/fr/annuaire/?e=2), Biennale Internationale Design Saint-Étienne, France. 3/14/2013 - 3/31/2013.
+* [*Spontaneous Interventions: Design Actions for the Common Good*](http://www.spontaneousinterventions.org/project/qr_hobo_codes), Chicago Cultural Center, 5/24/13 - 9/1/2013.
+* [*The Lab*](https://web.archive.org/web/20131204183750/http://world2013.itu.int/event/the-lab/), [organized by Ars Electronica](https://web.archive.org/web/20140420114906/http://export.aec.at/itu2013/), at ITU Telecom World 2013, 11/19/2013 - 11/22/2013, Bangkok, Thailand.
+* [*The Science of Digital Fabrication* (Exhibition)](https://cba.mit.edu/events/13.03.scifab/). Center for Bits and Atoms, MIT, 3/7/2013.
 
 
 **2012**
