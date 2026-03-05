@@ -1,20 +1,53 @@
-# Golan Levin CV
+# Curriculum Vitae
+
+Golan Levin<br />
+CMU School of Art<br />
+4919 Frew Street, CFA-300<br />
+Pittsburgh, PA 15213<br />
+United States
+
+---
+
+**Contents:**
+
+* Books
+* Solo and Two-Person Exhibitions
+* Group Exhibitions
+* Public Lectures and Presentations
+* Awards and Recognitions
+* Educational Workshops
+* Press
+* Awards and Recognitions
+* Grants
 
 <!--
 Bantam Artist/Educator's Residency, July 2025
-Collections: Cooper-Hewitt, MoMA, 
 Eyeo 
 OSSTA
 https://studioforcreativeinquiry.org/pdf/ossta-report.pdf
 
 
 Permanent Collections: 
+* Cooper-Hewitt
+* MoMA, 
+* Whitney,
+* San Francisco Exploratorium
+* Bremen
+San Jose Tech Museum of Innovation Re:Face by Golan Levin and Zachary Lieberman 2012
 
-San Francisco Exploratorium
-San Jose Tech Museum of Innovation
-Bremen
-Cooper Hewitt
-MoMA
+
+Creative Coding - #LTT2021
+Art && Code Homemade Curatorial
+Intervalien Grant $30K
+Shall Make, Shall Be
+NEA Grants
+RIYR Fellowships curation'
+OSSTA Remote Residency
+Processing Community Day pcdpittsburgh.wordpress.com
+PEmbroider
+Vers un imaginaire numérique - Daniel Cardoso curator Theodora, Centre de Design de l’UQAM, Merce's Isosurface
+Teenie Harris project at Carnegie Museum of Art
+
 
 
 -->
@@ -50,10 +83,12 @@ MoMA
 
 <!-- 
 https://flong.com/archive/bio/exhibitions/index.html
+https://flong.com/archive/calendar/archive/2007/index.html
 -->
 
 **2026**
 
+<!-- Whitney Museum CODeDOC/Artport 25th Anniversary -->
 * [*Cycles*](https://denison.edu/places/museum/exhibitions), Denison Museum, Denison University, Granville, Ohio. 8/30/2026 – 12/1/2026.
 * [*Drawing with Machines: Golan Levin and Students of the CMU Machine Drawing Lab*](https://bantamtools.com/blogs/gallery/cmu-drawing-with-machines-at-the-bantam-tools-machine-arts-gallery). Bantam Machine Arts Gallery, Peekskill, New York, 1/9/2026 – 1/31/2026.
 
@@ -63,22 +98,29 @@ https://flong.com/archive/bio/exhibitions/index.html
 * [*Art on Tezos: Berlin*](https://x.com/artontezos_/status/1984269437516812779), [Schlachter 151](https://www.instagram.com/schlachter_151/), Berlin,  11/6/2025 – 11/9/2025.
 * [*Drawn to Teach: An Educators Showcase of Pen Plotting*](https://www.instagram.com/p/DMLImOVulos/), Bantam Machine Arts Gallery, Peekskill, New York. 7/18/2025 – 8/3/2025.
 * [*Pirouette: Turning Points in Design*](https://press.moma.org/exhibition/pirouette/). Museum of Modern Art, New York City, 1/26/2025 – 11/15/2025.
+* [Designing the Computational Image](), screening at [Berlin STS-Hub 2025](https://sts-hub.de/25/exhibition.html) 3/11/2025-3/14/2025. *Merce's Isosurface*.
 
 **2024** 
 
 * [*Small Batch: A Dataset Farmer’s Market*](https://www.instagram.com/p/DDfjHGTxT1L/?img_index=2), LARPA, Brooklyn, 12/15/2024.
 * [*INFLUENTIA: Le Random’s Collections and Digital Generative Art History*](https://volumedao.xyz/le-randoms-event-20231206/). IEGO Art Gallery, Taipei. 12/8/2023 – 1/7/2024.
-* [*Awaken, Metamagical Hands*](https://gazelliarthouse.com/exhibitions/184-awaken-metamagical-hands-robbie-barrat-joshua-davis-golan-levin-lia-lauren/), Gazelli Art House, London. 
+* [*Awaken, Metamagical Hands*](https://gazelliarthouse.com/exhibitions/184-awaken-metamagical-hands-robbie-barrat-joshua-davis-golan-levin-lia-lauren/), Gazelli Art House, London, 7/19/2024 – 9/21/2024.
 
 **2022**
 
 * [*The Art of Tinkering*](https://web.archive.org/web/20220902230859/https://www.exploratorium.edu/tinker), San Francisco Exploratorium, 6/18/2022 - 9/5/2022. 
-* Feral File 
+* [*Feral File: On Screen Presence*](https://feralfile.com/explore/exhibitions/on-screen-presence-kpb). Online, curated by Regina Harsanyi. 6/2/2022. *The Interfered Microscopy Plot*.
 
 **2021** 
 
-* A2P
-* TheFEN
+* [*The FEN (Coordinated NFT Drop)*](https://web.archive.org/web/20211028083743/https://kellyrichardson.net/project/the-fen/). HicEtNunc.com, online; curated by Juliette Bibasse and Joanie Lemercier.
+* [Vers un imaginaire numérique](https://centrededesign.com/vers-un-imaginaire-numerique/), Centre de Design a l’UQAM, Montreal, Canada. 9/15/2021–11/7/2021. [Curated](https://web.archive.org/web/20211203203238/https://centrededesign.com/vers-un-imaginaire-numerique/) by Daniel Cardoso-Llach and Theodora Vardouli. *Merce's Isosurface*.
+
+**2020**
+
+* [*A2P (artist-to-peer network): An experiment in artist-to-artist collecting*](https://a2p.bitmark.com/v2/artworks). Online; curated by Casey Reas, Iris Long, and Carol Sabbadini. 4/19/2020.
+* [*AI Art Gallery: NeurIPS Workshop on Machine Learning for Creativity and Design*](https://www.aiartonline.com/highlights-2020/golan-levin-and-lingdong-huang/). 12/7/2020 – 12/11/2020. Online; curated by Luba Elliott. *Ambigrammatic Figures*.
+* [ML × Art](https://mlart.co/item/a-collection-of-_ambigrammatic_-images_-generated-with-a-gan_-legible-as-faces-in-both-upside-down-and-right-side-up-orientations). Online; curated by Emil Wallner. *Ambigrammatic Figures*.
 
 **2019**
 
@@ -86,12 +128,13 @@ https://flong.com/archive/bio/exhibitions/index.html
 
 **2018**
 
-* [*Design Does*](https://designdoes.es/exhibitions/) at Museu del Disseny de Barcelona, Barcelona, Spain. 3/23/2018 – 5/13/2018. (Free Universal Construction Kit).
-* [*An Atlas of Commoning*](https://archplus.net/en/commoning/en/), at The Institut for International Cultural Relations, Berlin, Germany. 6/2018.
+* [*Design Does*](https://designdoes.es/exhibitions/) at Museu del Disseny de Barcelona, Barcelona, Spain. (*Free Universal Construction Kit*) 3/23/2018 – 5/13/2018.
+* [*An Atlas of Commoning*](https://archplus.net/en/commoning/en/), at The Institut for International Cultural Relations, Berlin, Germany. (*Free Universal Construction Kit*) 6/2018.
 * [*Hello World: Code and Design*](https://www.uts.edu.au/globalassets/sites/default/files/2023-10/1uts-gallery_hello-world_2018.pdf), University of Technology Sydney (UTS) Gallery, Sydney, Australia. 7/24/2018 – 9/14/2018.
 
 **2017**
 
+* [*Designing the Computational Image, Imagining Computational Design*](http://grahamfoundation.org/grantees/5577-designing-the-computational-image-imagining-computational-design). Miller ICA Gallery at Carnegie Mellon University, Pittsburgh. Curated by Daniel Cardoso Llach. (*Merce's Isosurface*) 9/22/2017 – 11/12/2017.
 * [*Why Future Still Needs Us: AI and Humanity*](https://www.artmuseum.qut.edu.au/__data/assets/pdf_file/0004/944284/WhyFutureStillNeedsUs.pdf) at Robotronica Festival, QUT Art Museum, Brisbane, Australia. (*Terrapattern*) 8/19/2017 – 10/29/2017.
 * [*Gesten: Gestern - Heute - Übermorgen*](https://ars.electronica.art/aeblog/en/2017/12/05/gestures/). Saxon/Chemnitz Museum of Industry, Chemnitz, Germany. (*Augmented Hand Series*) 11/16/2017 – 3/4/2018.
 * [*NODE17 (Node Forum for Digital Arts)*](https://nodeforum.org/activities/festival/node17/). Künstlerhaus Mousonturm, Frankfurt am Main, Germany. (*Free Universal Construction Kit*) 6/26/2017–7/2/2017.
@@ -137,14 +180,14 @@ https://flong.com/archive/bio/exhibitions/index.html
 * [*Radical Fictions: IV Mostra de Arte Digital*](https://web.archive.org/web/20140419201023/http://www.mostradeartedigital.com.br/2013-artistas/golan-levin-and-shawn-sims.html), Instituto Tomie Ohtake, São Paulo, Brazil. 10/9/2013 - 11/3/2013.
 * [*Arte y Tecnología: Artists as Catalysts*](https://web.archive.org/web/20130406035112/http://www.alhondigabilbao.com:80/programacion/arte-y-tecnologia). AlhóndigaBilbao, Bilbao, Spain. 7/4/2013 - 9/1/2013.
 * [*CLICK Festival: F.A.T. Lab (Too Lazy to Fail)*](http://clickfestival.dk/program-2013/f-a-t-lab-too-lazy-to-fail). Elsinore, Denmark, 5/8/2013-5/12/2013.
-* [*Datascape*](https://eprints.qut.edu.au/76413/3/datascape_floor.pdf). The Block, Queensland University of Technology’s Creative Industries Precinct, Brisbane, Australia. 4/16/2013 - 4/27/2013.
+* [*Datascape*](https://eprints.qut.edu.au/76413/3/datascape_floor.pdf). The Block, Queensland University of Technology’s Creative Industries Precinct, Brisbane, Australia. 4/16/2013 - 4/27/2013. *The Dumpster*.
 * [*Designs of the Year*](https://web.archive.org/web/20130325182701/http://designmuseum.org/exhibitions/2013/designs-of-the-year-2013), London Design Museum, London. 3/20/2013 - 7/7/2013. (Free Universal Construction Kit)
 * [*Digital Cultures in the Age of Big Data*](http://www.bgsu.edu/departments/acs/digitalcultures/page128826.html), Bowling Green State University, Bowling Green, OH. 5/13/2013 - 5/17/2013.
 * [*F.A.T. Gold: Five Years of Notorious R&D*](https://web.archive.org/web/20130603060640/http://eyebeam.org/events/fat-gold). Eyebeam Center for Art and Technology, New York City. 4/1/2013 - 4/20/2013. 
-* [*Flow, Just Flow: Variations on a Theme*](https://web.archive.org/web/20130807114926/https://museums.richmond.edu/exhibitions/museum-of-art/Flow-variations-on-a-theme.html). University of Richmond Museum, Virginia. 1/29/2013 - 6/28/2013.
+* [*Flow, Just Flow: Variations on a Theme*](https://web.archive.org/web/20130807114926/https://museums.richmond.edu/exhibitions/museum-of-art/Flow-variations-on-a-theme.html). University of Richmond Museum, Virginia, curated by Elizabeth Schlatter. 1/29/2013 - 6/28/2013. *The Dumpster*.
 * [*Disruptions: Museum As Manufacturer*](https://fromkeetra.com/museum-as-manufacturer/), Museum of Arts and Design, NYC, 3/12/2013 - 6/09/2013.
 * [*Scrapple*](https://web.archive.org/web/20190917050028/https://www.exploratorium.edu/exhibits/scrapple), San Francisco Exploratorium, San Francisco, CA. Acquisition. 4/12/2013.
-* [*See Yourself Sensing*](https://web.archive.org/web/20130316123758/http://www.sjsu.edu/art/events/openings/). San Jose State University, California. Curated by Madeline Schwartzman. 3/1/2013 - 3/20/2013.
+* [*See Yourself Sensing*](https://web.archive.org/web/20130316123758/http://www.sjsu.edu/art/events/openings/). San Jose State University, California. Curated by Madeline Schwartzman. 3/1/2013 - 3/20/2013. *Eyecode*.
 * [*Singularité Exposition*](https://www.biennale-design.com/saint-etienne/2013/fr/annuaire/?e=2), Biennale Internationale Design Saint-Étienne, France. 3/14/2013 - 3/31/2013.
 * [*Spontaneous Interventions: Design Actions for the Common Good*](http://www.spontaneousinterventions.org/project/qr_hobo_codes), Chicago Cultural Center, 5/24/13 - 9/1/2013.
 * [*The Lab*](https://web.archive.org/web/20131204183750/http://world2013.itu.int/event/the-lab/), [organized by Ars Electronica](https://web.archive.org/web/20140420114906/http://export.aec.at/itu2013/), at ITU Telecom World 2013, 11/19/2013 - 11/22/2013, Bangkok, Thailand.
@@ -153,11 +196,11 @@ https://flong.com/archive/bio/exhibitions/index.html
 
 **2012**
 
-* AI-Plus. National Taiwan Museum of Fine Arts, Taiwan. 11/24/2012 - 2/17/2013.
-* Coded Perception, SETUP Medialab, Utrecht, the Netherlands. 10/26/2012 - 11/18/2012.
-* SPEED SHOW: GML, part of Backjumps - ’Rock The Block’. Berlin. Curated by Aram Bartholl. 10/3/2012.
+* AI-Plus. National Taiwan Museum of Fine Arts, Taiwan. 11/24/2012 - 2/17/2013. Curated by Hui-Ching Hsieh. *Self-Adherence*.
+* Coded Perception, SETUP Medialab, Utrecht, the Netherlands. 10/26/2012 - 11/18/2012. *Eyecode*.
+* SPEED SHOW: GML, part of [*Backjumps - Rock The Block*](https://www.flickr.com/photos/bartholl/albums/72157631682603000/). Berlin. Curated by Aram Bartholl. 10/3/2012. 
 * Ars Electronica Festival, Linz, Austria. 8/30/2012 - 9/3/2012.
-* Spontaneous Interventions: Design Actions for the Common Good, United States Pavilion, 13th Venice Architecture Biennale, Venice, Italy. 8/29/2012 - 11/25/2012.
+* Spontaneous Interventions: Design Actions for the Common Good, United States Pavilion, 13th Venice Architecture Biennale, Venice, Italy. 8/29/2012 - 11/25/2012. *QR Codes for Digital Nomads*.
 * Lampo exhibition, Aurum Culture Center, Pescara, Italy, in association with Metro Olografix 2012. 8/25/2012.
 * Mixed Signals: Boston Cyberarts at Atlantic Wharf. Atlantic Wharf, Boston. Curated by George Fifield and Heidi Kayser. (Eyecode) 2/27/2012 - 4/13/2012.
 * Tech Museum of Innovation, San Jose, CA. 2/22/2012. Acquisition.
@@ -237,14 +280,15 @@ https://flong.com/archive/bio/exhibitions/index.html
 **2007**
 
 * Golan Levin, bitforms gallery, NYC. (Solo exhibition) 11/30/2007 - 1/12/2008.
-* Ars Electronica Exhibition at Florence Biennale, Florence, Italy: AVES. 12/2007.
-* iDAT (Interactive Design Art and Technology), Singapore Science Centre, Singapore: Scrapple. 11/9/2007 - 1/1/2008.
+* [*Ars Electronica Exhibition at Florence Biennale*](https://web.archive.org/web/20080122051047/http://www.florencebiennale.org/ing_ars.html), Florence, Italy: *AVES*. 12/2007.
+* [*iDAT (Interactive Design Art and Technology)*](http://idat.wikidot.com/about-arts-electronica), Singapore Science Centre, Singapore: *Scrapple*. 11/9/2007 - 1/1/2008.
 * Shanghai eArts, Shanghai Science and Technology Museum, China: Hidden Worlds of Noise and Voice.
 * 10/19/2007 - 10/23/2007.
 * FAD (Festival de Arte Digital), Casa do Conde, Belo Horizonte, Brazil: Floccus. 9/29/2007.
 * Experimenta Playground: International Biennial of Media Art, Arts Centre BlackBox, Melbourne, Australia: MIS. 8/25/2007 - 9/23/2007.
 * Agosto Digital 2007: Arte y nuevas tecnologías, Centro Cultural España Córdoba, Córdoba, Argentina: MIS. 8/12/2007.
-* Alive Liquid Interactive Creative Expressive ("A.L.I.C.E Museum") exhibition, Hangaram Design Museum, Seoul Art Center, Seoul, Korea: MIS. 6/1/2007 - 6/22/2007.
+* [*Batteries Not Included*](https://users.sussex.ac.uk/~ronc/shrewsbury_open_2007.pdf), exhibition accompanying the Shrewsbury Darwin Summer Symposium 2007, Shrewsbury, UK, 7/13/2007. *Meshy*.
+* [*Alive Liquid Interactive Creative Expressive*](https://web.archive.org/web/20100805005850/http://www.sac.or.kr/eng/bannerPage2.jsp?htmlURL=/eng/lab2007/alice/index.html) ("A.L.I.C.E Museum") exhibition, Hangaram Design Museum, Seoul Art Center, Seoul, Korea: *The Manual Input Workstation*. 6/1/2007 - 6/22/2007.
 * Source Code: 10th Anniversary Exhibition. Eyebeam.org Center, NYC: JJ. 5/31/2007 - 8/10/2007.
 * Ars Electronica Museum of the Future, Linz, Austria: MIS, Scrapple. 5/15/2007 - 12/31/2008.
 * "Cumulus" opening exhibition, Danfoss Universe, Nordborg, Denmark: Scrapple. 5/5/2007.
@@ -254,7 +298,7 @@ https://flong.com/archive/bio/exhibitions/index.html
 * Cell Phone: Art and the Mobile Phone, Contemporary Museum, Baltimore. 1/21/2007 - 4/22/2007.
 * Pulse Art Fair, 69th Regiment Armory, New York City: GPP. 2/22/2007 - 2/25/2007.
 * Art Museum of Western Virginia, Roanoke, Virginia: Messa di Voce. 2/13/2007 - 2/18/2008.
-* The Dating Show, Gallery at 3rd Ward, Brooklyn, NYC: The Dumpster. 2/9/2007 - 3/23/2007.
+* [*The Dating Show*](https://web.archive.org/web/20100106060202/https://www.columbia.edu/cu/arthistory/pdf/dept_grad_dating_show.pdf), Gallery at 3rd Ward, Brooklyn, NYC: *The Dumpster*. 2/9/2007 - 3/23/2007. Curated by Emma Brasó, Dan Leers and Margot Norton.
 
 **2006**
 
@@ -379,7 +423,7 @@ https://flong.com/archive/bio/exhibitions/index.html
 * bitforms Inaugural Exhibition. bitforms gallery, NYC. 11/2001.
 * Net.Ephemera. Chapman Gallery, Salford University, Manchester, UK. 11/2001.
 * The Interaction ’01 Bienniale. Softopia Center/IAMAS, Ogaki, Japan. 10/2001.
-* Animations. P.S.1/MoMA Contemporary Art Center, NYC. 10/2001.
+* Animations. P.S.1/MoMA Contemporary Art Center, NYC. 10/2001. *Dakadaka*.
 * Tirana Biennale. Tirana, Albania. 9/2001.
 * Ars Electronica Festival. Linz, Austria. 9/2001.
 * NY Digital Salon: Selected Works. The Corning Gallery, NYC. 7/2001.
@@ -397,7 +441,7 @@ https://flong.com/archive/bio/exhibitions/index.html
 * New York Digital Salon Exhibition, New York City, 10/2000.
 * Digital2000. Technology Gallery, New York Hall of Science. 10/2000.
 * MIT ACG Retrospective. Herb Lubalin Center, Cooper Union, NYC. 9/2000.
-* Print on Screen. Ars Electronica Center, Linz, Austria. 9/2000.
+* Print on Screen. Ars Electronica Center, Linz, Austria. 9/2000. *Dakadaka*.
 * Prix Ars Electronica. O.K. Centrum Gegenwartskunst, Linz, Austria. 9/2000.
 * Siggraph 2000 Art Show. New Orleans, LA. 7/2000.
 * New Work from MIT. SEGA Joypolis Center, Tokyo, Japan, 7/2000.
@@ -447,6 +491,10 @@ https://flong.com/archive/bio/exhibitions/index.html
 
 * Artist Talk. [Creativity in the Age of AI: AI Impacting Arts, Arts Impacting AI](https://hai.stanford.edu/events/spring-symposium-creativity-age-ai-ai-impacting-arts-arts-impacting-ai?section=meet-the-speakers). Stanford University HAI, 5/24/2023. 
 * Keynote Lecture. [Future Ideations Camp Vol.1: Import](https://ccbt.rekibun.or.jp/en/events/future-ideations-camp01), Civic Creative Base Tokyo (CCBT), Shibuya, Tokyo. Organized by the Tokyo Metropolitan Government and Arts Council. 2/24/2023.
+
+**2017**
+
+* Artist talk. [Computational Design: Practices, Histories, Infrastructures](https://cmu-soa-archive.squarespace.com/symposium-computational-design) Symposium, Carnegie Mellon University College of Fine Arts, 10/7/2017.
 
 <!--
 2015 
@@ -530,7 +578,7 @@ https://nieuweinstituut.nl/en/projects/international-visitors-programme/zach-lie
 
 ---
 
-## Artist Grants
+## Grants
 
 * Pennsylvania Council on the Arts (PCA) 2008 Fellowship award, New Technologies / Other Genres, 2/2008.
 * Berkman Faculty Development Grant, Carnegie Mellon University, 12/2006.
