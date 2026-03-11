@@ -24,6 +24,7 @@ var _bPixelViewDragActive = false;    // true once mouse has moved >= 20px from 
 var _pixelViewClickOriginX = 0;
 var _pixelViewClickOriginY = 0;
 var _pixelViewClickBupId = DUMPSTER_INVALID;
+var bDrawDraft = true;
 
 //------------------------------------------------------------
 function preload() {
@@ -124,18 +125,20 @@ function draw() {
 
 
 function drawDraft(){
-  textFont("Helvetica");
-  textStyle(BOLD);
-  textSize(288); 
-  noStroke();
-  fill(255,255,255, 60); 
-  textAlign(CENTER);
-  push(); 
-  translate(width/2, height * 0.6); 
-  rotate(radians(-15));
-  text("DRAFT", 0,0); 
-  pop(); 
-  textAlign(LEFT);
+  if (bDrawDraft){
+    textFont("Helvetica");
+    textStyle(BOLD);
+    textSize(288); 
+    noStroke();
+    fill(255,255,255, 60); 
+    textAlign(CENTER);
+    push(); 
+    translate(width/2, height * 0.6); 
+    rotate(radians(-15));
+    text("DRAFT", 0,0); 
+    pop(); 
+    textAlign(LEFT);
+  }
 }
 
 //------------------------------------------------------------
@@ -310,6 +313,10 @@ function mouseMoved() {
 function keyPressed() {
   _lastInteractionTime = millis();
   PV.sendArrowKey(keyCode);
+
+  if (key == 'd')
+    bDrawDraft = !bDrawDraft;
+  }
 
   if (keyCode === ENTER && PV.bMouseInView) {
     const bupId = KOS.currentMouseoverBreakupIdWithOffset;
