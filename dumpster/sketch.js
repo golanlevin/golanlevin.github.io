@@ -314,7 +314,7 @@ function keyPressed() {
   _lastInteractionTime = millis();
   PV.sendArrowKey(keyCode);
 
-  if (key == 'd')
+  if (key == 'd'){
     bDrawDraft = !bDrawDraft;
   }
 
