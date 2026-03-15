@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plottimation Web Tool</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="js/opencv.js"></script>
+    <script src="js/gif.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="control-panel">
+        <div class="panel-head">
+          <h1 id="appTitle">Plottimation Tool</h1>
+          <p id="appLedePrimary" class="lede">
+            Build an animated GIF from a photo of a frame-sheet.
+          </p>
+          <p id="appLedeSecondary" class="lede">
+            v.1.0 • Golan Levin, 3/2026
+          </p>
+        </div>
+
+        <section class="control-group">
+          <div class="section-head">
+            <h2 id="photoHeading">Photo</h2>
+            <button id="loadDemoButton" class="header-button" type="button">Load Demo</button>
+          </div>
+          <label id="dropZone" class="drop-zone" for="fileInput">
+            <span class="drop-lead">Drop a photo or scan here,</span>
+            <span class="drop-lead">or click to choose a file.</span>
+            <span class="drop-note">Separate frames with small crosses.</span>
+            <span class="drop-note">Page should be in landscape orientation.</span>
+          </label>
+          <input id="fileInput" type="file" accept="image/*" />
+        </section>
+
+        <details class="control-group collapsible">
+          <summary id="layoutSummary">Layout</summary>
+          <div class="field-grid">
+            <label>
+              <span>Frame Columns</span>
+              <input id="frameCols" type="number" min="1" step="1" value="5" />
+            </label>
+            <label>
+              <span>Frame Rows</span>
+              <input id="frameRows" type="number" min="1" step="1" value="4" />
+            </label>
+          </div>
+          <label class="stack-label">
+            <span>Paper Size (Landscape)</span>
+            <select id="paperPreset">
+              <option value="letter" selected>Letter (11×8.5 in)</option>
+              <option value="legal">Legal (14×8.5 in)</option>
+              <option value="tabloid">Tabloid (17×11 in)</option>
+              <option value="9x12">9×12 in</option>
+              <option value="18x12">18×12 in</option>
+              <option value="24x18">24×18 in</option>
+              <option value="36x24">36×24 in</option>
+              <option value="a4">A4 (297×210 mm)</option>
+              <option value="a3">A3 (420×297 mm)</option>
+              <option value="a2">A2 (594×420 mm)</option>
+              <option value="a1">A1 (841×594 mm)</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          <div id="customPaperFields" class="field-grid" hidden>
+            <label>
+              <span>Sheet Width</span>
+              <input id="paperWidth" type="number" min="1" step="0.1" value="11" />
+            </label>
+            <label>
+              <span>Sheet Height</span>
+              <input id="paperHeight" type="number" min="1" step="0.1" value="8.5" />
+            </label>
+          </div>
+        </details>
+
+        <details class="control-group collapsible">
+          <summary id="detectionAlignmentSummary">Detection &amp; Alignment</summary>
+          <label class="stack-label">
+            <span>Thresholding Method</span>
+            <select id="thresholdMethod">
+              <option value="offset-peak" selected>Offset Peak</option>
+              <option value="otsu">Otsu</option>
+            </select>
+          </label>
+          <div class="slider-stack">
+            <label>
+              <span>Thresholding Offset <output id="thresholdOffsetValue">-20</output></span>
+              <input id="thresholdOffset" type="range" min="-128" max="128" step="1" value="-20" />
+            </label>
+            <label>
+              <span>Search Inset Margin <output id="paperMarginValue">80 px</output></span>
+              <input id="paperMargin" type="range" min="0" max="150" step="1" value="80" />
+            </label>
+            <label>
+              <span>Boundary Threshold <output id="boundarySensitivityValue">8.0</output></span>
+              <input id="boundarySensitivity" type="range" min="0" max="20" step="0.1" value="8.0" />
+            </label>
+            <label>
+              <span>Boundary Persistence <output id="boundaryPersistenceValue">7</output></span>
+              <input id="boundaryPersistence" type="range" min="1" max="15" step="1" value="7" />
+            </label>
+          </div>
+          <div class="slider-stack">
+            <label>
+              <span>Cross Region Size <output id="crossRoiScaleValue">-- px</output></span>
+              <input id="crossRoiScale" type="range" min="18" max="110" step="1" value="52" />
+            </label>
+          </div>
+          <label class="toggle">
+            <input id="useCrossAlignment" type="checkbox" checked />
+            <span>Use cross-based subpixel alignment</span>
+          </label>
+        </details>
+
+        <details class="control-group collapsible">
+          <summary id="appearanceSummary">
+            <span>Appearance</span>
+            <button id="resetAppearanceButton" class="summary-button" type="button">Reset</button>
+          </summary>
+          <div class="slider-stack">
+            <label>
+              <span>Brightness <output id="brightnessValue">+0</output></span>
+              <input id="brightness" type="range" min="-100" max="100" step="1" value="0" />
+            </label>
+            <label>
+              <span>Contrast <output id="contrastValue">+0</output></span>
+              <input id="contrast" type="range" min="-100" max="100" step="1" value="0" />
+            </label>
+            <label>
+              <span>Vibrance <output id="vibranceValue">+0</output></span>
+              <input id="vibrance" type="range" min="-100" max="100" step="1" value="0" />
+            </label>
+            <label>
+              <span>Color Temperature <output id="temperatureValue">+0</output></span>
+              <input id="temperature" type="range" min="-100" max="100" step="1" value="0" />
+            </label>
+          </div>
+          <label class="toggle">
+            <input id="invert" type="checkbox" />
+            <span>Invert</span>
+          </label>
+          <label class="stack-label">
+            <span>Resampling</span>
+            <select id="gifResampling">
+              <option value="linear" selected>Linear</option>
+              <option value="cubic">Cubic</option>
+            </select>
+          </label>
+        </details>
+
+        <details class="control-group collapsible">
+          <summary id="cropOutputSummary">
+            <span>Crop Output</span>
+            <button id="resetTrimButton" class="summary-button" type="button">Reset</button>
+          </summary>
+          <div class="field-grid">
+            <label>
+              <span>Crop Left</span>
+              <input id="cropLeft" type="number" min="0" step="1" value="0" />
+            </label>
+            <label>
+              <span>Crop Right</span>
+              <input id="cropRight" type="number" min="0" step="1" value="0" />
+            </label>
+            <label>
+              <span>Crop Top</span>
+              <input id="cropTop" type="number" min="0" step="1" value="0" />
+            </label>
+            <label>
+              <span>Crop Bottom</span>
+              <input id="cropBottom" type="number" min="0" step="1" value="0" />
+            </label>
+          </div>
+        </details>
+
+        <details class="control-group collapsible">
+          <summary id="gifExportSummary">GIF Export Options</summary>
+          <div class="field-grid">
+            <label>
+              <span>Frame Rate</span>
+              <input id="fps" type="number" min="1" max="60" step="1" value="20" />
+            </label>
+          </div>
+          <div class="slider-stack">
+            <label>
+              <span>Output Scale <output id="outputScaleValue">1.00 (--×--)</output></span>
+              <input id="outputScale" type="range" min="0.25" max="1.00" step="0.01" value="1.00" />
+            </label>
+          </div>
+          <div class="slider-stack">
+            <label>
+              <span>Encoding Quality (lower is better) <output id="gifQualityValue">10</output></span>
+              <input id="gifQuality" type="range" min="1" max="20" step="1" value="10" />
+            </label>
+          </div>
+          <label class="stack-label">
+            <span>Dithering</span>
+            <select id="gifDither">
+              <option value="off">Off</option>
+              <option value="FloydSteinberg">Standard (Floyd-Steinberg)</option>
+              <option value="FloydSteinberg-serpentine" selected>Smooth (Floyd-Steinberg Serpentine)</option>
+              <option value="Atkinson">Retro (Atkinson)</option>
+            </select>
+          </label>
+          <label class="toggle">
+            <input id="gifGlobalPalette" type="checkbox" />
+            <span>Use Global Palette</span>
+          </label>
+        </details>
+
+        <section class="control-group status-group">
+          <div class="section-head">
+            <h2 id="statusHeading">Status</h2>
+            <button id="tooltipToggleButton" class="summary-button" type="button">Enable Tooltips</button>
+          </div>
+          <pre id="statusText">Waiting for OpenCV…</pre>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <section class="viewer-card">
+          <header>
+            <h2 id="rawPhotoHeading">Raw Photo <span id="rawPhotoName" class="header-note"></span></h2>
+          </header>
+          <div class="viewer-stage">
+            <canvas id="rawCanvas"></canvas>
+          </div>
+        </section>
+
+        <section class="viewer-card">
+          <header>
+            <h2 id="rectifiedSheetHeading">Rectified Sheet</h2>
+          </header>
+          <div class="viewer-stage">
+            <canvas id="rectifiedCanvas"></canvas>
+          </div>
+        </section>
+
+        <section class="viewer-card">
+          <header>
+            <h2 id="crossRegionsHeading">Cross Regions</h2>
+          </header>
+          <div id="crossRoiGrid" class="cross-roi-grid"></div>
+        </section>
+
+        <section class="viewer-card">
+          <header>
+            <h2 id="animationPreviewHeading">Animation Preview</h2>
+            <button id="exportButton" class="header-button" type="button" disabled>Export GIF</button>
+          </header>
+          <div class="output-preview">
+            <canvas id="gifPreviewCanvas"></canvas>
+            <img id="gifImage" alt="Exported GIF preview" class="hidden" hidden />
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
