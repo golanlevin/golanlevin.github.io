@@ -1489,7 +1489,7 @@ function detectCrossAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, 
       colContrast >= 1.6 &&
       rowContrast >= 1.6 &&
       darkFrac >= 0.002 &&
-      darkFrac <= 0.25;
+      darkFrac <= 0.30;
 
     return {
       ...expected,
@@ -1498,6 +1498,8 @@ function detectCrossAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, 
       detectedY,
       dx,
       dy,
+      colContrast,
+      rowContrast,
       darkFrac,
       confidence: colContrast * rowContrast,
       accepted,

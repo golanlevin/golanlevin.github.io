@@ -777,7 +777,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
       }
       console.error(error);
       updateExportButtonLabel();
-      setStatus("Processing failed.\n" + (error?.message || String(error)));
+      setStatus("Unable to find page boundary. Try adjusting the Thresholding Offset and/or the Thresholding Method.\n(" + (error?.message || String(error)) + ")");
     }
   } finally {
     state.processing.active = false;
@@ -1056,7 +1056,14 @@ function renderCrossRoiGrid(alignmentInfo) {
       const tile = alignmentInfo.crossRoiTileMap.get(`${col},${row}`);
       if (tile) {
         tile.canvas.classList.add("cross-roi-tile");
-        tile.canvas.title = (tile.kind === "unrefined") ? "" : `(${col}, ${row}) ${tile.accepted ? "accepted" : "rejected"}`;
+        if (tile.kind === "unrefined") {
+          tile.canvas.title = "";
+        } else {
+          const colContrast = Number.isFinite(tile.colContrast) ? tile.colContrast.toFixed(2) : "--";
+          const rowContrast = Number.isFinite(tile.rowContrast) ? tile.rowContrast.toFixed(2) : "--";
+          const darkFrac = Number.isFinite(tile.darkFrac) ? tile.darkFrac.toFixed(4) : "--";
+          tile.canvas.title = `(${col}, ${row}) ${tile.accepted ? "accepted" : "rejected"} | col ${colContrast} | row ${rowContrast} | ink ${darkFrac}`;
+        }
         grid.appendChild(tile.canvas);
       } else {
         const spacer = document.createElement("div");
