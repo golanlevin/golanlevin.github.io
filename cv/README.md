@@ -1,6 +1,6 @@
 # Curriculum Vitae
 
-Golan Levin<br />
+**Golan Levin**<br />
 CMU School of Art<br />
 4919 Frew Street, CFA-300<br />
 Pittsburgh, PA 15213<br />
@@ -8,51 +8,45 @@ United States
 
 ---
 
-**Contents:**
+## Biography
 
-* Books
-* Solo and Two-Person Exhibitions
-* Group Exhibitions
-* Public Lectures and Presentations
-* Awards and Recognitions
-* Educational Workshops
-* Press
-* Awards and Recognitions
-* Grants
+Golan Levin is an artist, engineer, researcher and educator interested in new intersections of machine code, visual culture, and critical making. His work combines equal measures of the whimsical, the provocative, and the sublime in an eclectic variety of online, installation and performance media. Through responsive artifacts, virtual environments, and media provocations, Levin applies creative twists to digital technologies that highlight our relationship with machines, expand the vocabulary of human action, and awaken participants to their own potential as creative actors. 
 
-<!--
-Bantam Artist/Educator's Residency, July 2025
-Eyeo 
-OSSTA
-https://studioforcreativeinquiry.org/pdf/ossta-report.pdf
+Levin is [Professor of Computational Art in the School of Art](https://art.cmu.edu/people/golan-levin/) at Carnegie Mellon University, where he also holds courtesy appointments in [Architecture](https://www.architecture.cmu.edu/profiles/golan-levin), [Computer Science](https://www.csd.cs.cmu.edu/people/faculty/golan-levin), and [Design](https://www.design.cmu.edu/profiles/golan-levin). Golan's pedagogy is concerned with reclaiming computation as a medium of personal expression; he teaches “studio art courses in computer science” on themes like interactive new media art, generative form, and machine drawing. With Tega Brain, Levin is co-author of *Code as Creative Medium* (MIT Press, 2021), a guide to creative coding for software arts educators.
 
+---
 
-Permanent Collections: 
-* Cooper-Hewitt
-* MoMA, 
-* Whitney,
-* San Francisco Exploratorium
-* Bremen
-San Jose Tech Museum of Innovation Re:Face by Golan Levin and Zachary Lieberman 2012
+## Academic Appointments
 
+#### At Carnegie Mellon University
 
-Creative Coding - #LTT2021
-Art && Code Homemade Curatorial
-Intervalien Grant $30K
-Shall Make, Shall Be
-NEA Grants
-RIYR Fellowships curation'
-OSSTA Remote Residency
-Processing Community Day pcdpittsburgh.wordpress.com
-PEmbroider
-Vers un imaginaire numérique - Daniel Cardoso curator Theodora, Centre de Design de l’UQAM, Merce's Isosurface
-Teenie Harris project at Carnegie Museum of Art
+Faculty, School of Art, College of Fine Arts. January 2004–Present:
 
+* Professor of Computational Art, with Tenure. September 2017–Present.  
+* Associate Professor of Computational Art, with Tenure. September 2010–August 2017.  
+* Associate Professor of Computational Art. September 2007–August 2010.
+* Assistant Professor of Computational Art, January 2004–August 2007.
 
+Director, Frank-Ratchye STUDIO for Creative Inquiry at CMU. January 2009-August 2023.
 
--->
+* Served as the Director of the Frank-Ratchye STUDIO for Creative Inquiry, the research laboratory of CMU’s College of Fine Arts. As a flexible site for new modes of arts research and production, the STUDIO is dedicated to atypical, anti-disciplinary, and inter-institutional research at the intersection of arts, science, technology and culture. 
 
+Courtesy Appointments
 
+* At Carnegie Mellon University, I also hold secondary (courtesy) appointments in the School of Design, the School of Architecture, and the Computer Science Department. 
+
+#### Other Teaching Appointments
+
+* **Parsons School of Design**, Department of Design and Technology. Adjunct Professor, 2001-2003. 
+* **The Cooper Union**, School of Art. Adjunct Professor, 2001-2002. 
+* **Columbia University**, Department of Art. Adjunct Professor, 2000. 
+
+---
+
+## Education 
+
+* **Massachusetts Institute of Technology**, MIT Media Laboratory. Master of Science in Media Arts and Sciences, August 2000. Research area: Aesthetics and Computation (Advisor: John Maeda). MS Thesis: *Painterly Interfaces for Audiovisual Performance*. 
+* **Massachusetts Institute of Technology**. Bachelor of Science in Art and Design, June 1994. Minor in Music Theory and Composition. 
 
 ---
 
@@ -592,4 +586,52 @@ https://nieuweinstituut.nl/en/projects/international-visitors-programme/zach-lie
 * Artist's Grant, The Daniel Langlois Foundation. 5/2001.
 * Artist's Grant, The Greenwall Foundation. 5/2001.
 * Artist's Grant, MIT Council for the Arts. 11/1991.
+
+
+
+<!--
+
+**Contents:**
+
+* Books
+* Solo and Two-Person Exhibitions
+* Group Exhibitions
+* Public Lectures and Presentations
+* Awards and Recognitions
+* Educational Workshops
+* Press
+* Awards and Recognitions
+* Grants
+
+
+Bantam Artist/Educator's Residency, July 2025
+Eyeo 
+OSSTA
+https://studioforcreativeinquiry.org/pdf/ossta-report.pdf
+
+
+Permanent Collections: 
+* Cooper-Hewitt
+* MoMA, 
+* Whitney,
+* San Francisco Exploratorium
+* Bremen
+San Jose Tech Museum of Innovation Re:Face by Golan Levin and Zachary Lieberman 2012
+
+
+Creative Coding - #LTT2021
+Art && Code Homemade Curatorial
+Intervalien Grant $30K
+Shall Make, Shall Be
+NEA Grants
+RIYR Fellowships curation'
+OSSTA Remote Residency
+Processing Community Day pcdpittsburgh.wordpress.com
+PEmbroider
+Vers un imaginaire numérique - Daniel Cardoso curator Theodora, Centre de Design de l’UQAM, Merce's Isosurface
+Teenie Harris project at Carnegie Museum of Art
+
+
+
+-->
 
