@@ -196,7 +196,10 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
           config.frameRows,
           config.crossRoiScale,
           rectifiedWarp.gridBounds,
-          { includeCornerCrosses: rectifiedWarp.includeCornerCrosses }
+          {
+            includeCornerCrosses: rectifiedWarp.includeCornerCrosses,
+            detectCrossesWithConvolution: config.detectCrossesWithConvolution,
+          }
         )
       : buildUnrefinedCrossRegionInfo(
           rectifiedWarp.visionMat,
@@ -235,6 +238,7 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
       highPageWarpHeight: pageSizeHigh.height,
       alignmentInfo,
       frameCount: frames.length,
+      expectedFrameCount: config.frameCols * config.frameRows,
       rectifiedWidth: rectifiedWarp.styledMat.cols,
       rectifiedHeight: rectifiedWarp.styledMat.rows,
       animationWidth: frames[0]?.width || 0,
@@ -1339,6 +1343,7 @@ function buildUnrefinedCrossRegionInfo(rectifiedMat, cols, rows, reason = "disab
  */
 function buildCrossAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 0.75, gridBounds = null, options = {}) {
   const includeCornerCrosses = !!options.includeCornerCrosses;
+  const detectWithConvolution = !!options.detectCrossesWithConvolution;
   const bounds = gridBounds || { left: 0, top: 0, width: rectifiedMat.cols, height: rectifiedMat.rows };
   const expectedCrosses = getExpectedCrossLattice(bounds, cols, rows, includeCornerCrosses);
   if (expectedCrosses.length === 0) {
@@ -1353,7 +1358,16 @@ function buildCrossAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 0.75,
   try {
     // Inspect each expected interior lattice point independently so weak detections can be rejected one by one.
     for (const expected of expectedCrosses) {
-      const detection = detectCrossAtExpectedPosition(grayMat, expected, rectifiedMat.cols, rectifiedMat.rows, cols, rows, crossRoiScale);
+      const detection = detectCrossAtExpectedPosition(
+        grayMat,
+        expected,
+        rectifiedMat.cols,
+        rectifiedMat.rows,
+        cols,
+        rows,
+        crossRoiScale,
+        { detectWithConvolution }
+      );
       crossRoiTiles.push(detection);
       if (detection.accepted) detectedCrosses.push(detection);
       else rejectedCrosses.push(detection);
@@ -1439,13 +1453,17 @@ function getRectifiedCornerAnchors_old(bounds, cols, rows) {
  * @param {number} [crossRoiScale=0.75]
  * @returns {object}
  */
-function detectCrossAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, rows, crossRoiScale = 0.75) {
+function detectCrossAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, rows, crossRoiScale = 0.75, options = {}) {
   const cellW = sheetW / cols;
   const cellH = sheetH / rows;
   const roiHalf = Math.max(10, Math.round(Math.min(cellW, cellH) * 0.18 * crossRoiScale));
   const side = Math.max(1, roiHalf * 2 + 1);
   const roi = extractCenteredSquareRoi(grayMat, expected.x, expected.y, side);
   const mask = new cv.Mat();
+  const detectWithConvolution = !!options.detectWithConvolution;
+  const kernelMat = detectWithConvolution ? cv.matFromArray(25, 25, cv.CV_32F, crossKernel.flat()) : null;
+  const roi32 = detectWithConvolution ? new cv.Mat() : null;
+  const conv32 = detectWithConvolution ? new cv.Mat() : null;
 
   try {
     // Threshold the ROI, then measure horizontal and vertical stroke energy in central bands.
@@ -1471,9 +1489,37 @@ function detectCrossAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, 
       }
     }
 
-    // Refine the center with a weighted peak around the strongest row/column responses.
-    const peakX = getWeightedPeakIndex(smooth1D(colProfile, 5));
-    const peakY = getWeightedPeakIndex(smooth1D(rowProfile, 5));
+    let peakX;
+    let peakY;
+    let convolutionStrength = null;
+    if (detectWithConvolution) {
+      // Alternate localizer: run the same cross kernel inside the ROI, clamp to positive response,
+      // then find the strongest row/column energy around the resulting cross hotspot.
+      roi.convertTo(roi32, cv.CV_32F);
+      cv.filter2D(roi32, conv32, cv.CV_32F, kernelMat, new cv.Point(-1, -1), 0, cv.BORDER_CONSTANT);
+      const convData = conv32.data32F;
+      const convColProfile = new Float64Array(roiW);
+      const convRowProfile = new Float64Array(roiH);
+      let convScoreSum = 0;
+      for (let y = 0; y < roiH; y++) {
+        const rowOffset = y * roiW;
+        for (let x = 0; x < roiW; x++) {
+          // Score each ROI pixel by its zero-padded convolution response, clamped into [0, 255]
+          // and normalized into [0, 1], then average those scores across the whole ROI.
+          const value = Math.max(0, Math.min(255, convData[rowOffset + x]));
+          convScoreSum += value / 255;
+          convColProfile[x] += value;
+          convRowProfile[y] += value;
+        }
+      }
+      peakX = getWeightedPeakIndex(convColProfile);
+      peakY = getWeightedPeakIndex(convRowProfile);
+      convolutionStrength = convScoreSum / Math.max(1, roiW * roiH);
+    } else {
+      // Default localizer: weighted peaks from the thresholded horizontal/vertical stroke profiles.
+      peakX = getWeightedPeakIndex(smooth1D(colProfile, 5));
+      peakY = getWeightedPeakIndex(smooth1D(rowProfile, 5));
+    }
     const roiCenterX = (roiW - 1) * 0.5;
     const roiCenterY = (roiH - 1) * 0.5;
     const detectedX = expected.x + (peakX.position - roiCenterX);
@@ -1484,12 +1530,13 @@ function detectCrossAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, 
     const colContrast = peakX.value / Math.max(1e-6, averageArrayValue(colProfile));
     const rowContrast = peakY.value / Math.max(1e-6, averageArrayValue(rowProfile));
     const displacementLimit = Math.max(2.0, Math.min(cellW, cellH) * 0.08);
+    const maxDarkFrac = detectWithConvolution ? 0.5 : 0.30;
     const accepted =
       Math.hypot(dx, dy) <= displacementLimit &&
       colContrast >= 1.6 &&
       rowContrast >= 1.6 &&
       darkFrac >= 0.002 &&
-      darkFrac <= 0.30;
+      darkFrac <= maxDarkFrac;
 
     return {
       ...expected,
@@ -1501,6 +1548,7 @@ function detectCrossAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, 
       colContrast,
       rowContrast,
       darkFrac,
+      convolutionStrength,
       confidence: colContrast * rowContrast,
       accepted,
       canvas: buildCrossRoiCanvas(roi, peakX.position, peakY.position, accepted),
@@ -1508,6 +1556,9 @@ function detectCrossAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, 
   } finally {
     roi.delete();
     mask.delete();
+    kernelMat?.delete();
+    roi32?.delete();
+    conv32?.delete();
   }
 }
 
@@ -1813,6 +1864,7 @@ function buildStatusText({
   highPageWarpHeight,
   alignmentInfo,
   frameCount,
+  expectedFrameCount,
   rectifiedWidth,
   rectifiedHeight,
   animationWidth,
@@ -1829,8 +1881,7 @@ function buildStatusText({
     "Rectified sheet: " + rectifiedWidth + " × " + rectifiedHeight,
     "Animation size: " + animationWidth + " × " + animationHeight,
     "Frame source: " + sourceMode,
-    "Grid detector: " + gridDetector,
-    "Frames extracted: " + frameCount,
+    "Frames extracted: " + frameCount + "/" + expectedFrameCount,
   ];
 
   if (alignmentInfo) {

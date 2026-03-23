@@ -17,7 +17,7 @@
             Build an animated GIF from a photo of a frame-sheet.
           </p>
           <p id="appLedeSecondary" class="lede">
-            v.1.0 • Golan Levin, 3/2026 • <a href="https://github.com/golanlevin/plottimation">Docs</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ">Demo Video</a>
+            v.1.01 • Golan Levin, 2026 • <a href="https://github.com/golanlevin/plottimation">Docs</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ">Demo Video</a>
           </p>
         </div>
 
@@ -40,11 +40,11 @@
           <div class="field-grid">
             <label>
               <span>Frame Columns</span>
-              <input id="frameCols" type="number" min="1" step="1" value="5" />
+              <input id="frameCols" type="number" min="1" max="20" step="1" value="5" />
             </label>
             <label>
               <span>Frame Rows</span>
-              <input id="frameRows" type="number" min="1" step="1" value="4" />
+              <input id="frameRows" type="number" min="1" max="20" step="1" value="4" />
             </label>
           </div>
           <label class="stack-label">
@@ -113,6 +113,10 @@
             <input id="useCrossAlignment" type="checkbox" checked />
             <span>Use cross-based subpixel alignment</span>
           </label>
+          <label class="toggle">
+            <input id="detectCrossesWithConvolution" type="checkbox" />
+            <span>Detect crosses with convolution</span>
+          </label>
         </details>
 
         <details class="control-group collapsible">
@@ -137,6 +141,14 @@
               <span>Color Temperature <output id="temperatureValue">+0</output></span>
               <input id="temperature" type="range" min="-100" max="100" step="1" value="0" />
             </label>
+            <label>
+              <span>Unsharp Mask Amount <output id="unsharpAmountValue">0.0</output></span>
+              <input id="unsharpAmount" type="range" min="0" max="500" step="1" value="0" />
+            </label>
+            <label>
+              <span>Unsharp Mask Radius <output id="unsharpRadiusValue">1.0</output></span>
+              <input id="unsharpRadius" type="range" min="0.1" max="100" step="0.1" value="1.0" />
+            </label>
           </div>
           <label class="toggle">
             <input id="invert" type="checkbox" />
@@ -153,7 +165,7 @@
 
         <details class="control-group collapsible">
           <summary id="cropOutputSummary">
-            <span>Crop Output</span>
+            <span>Crop &amp; Geometry</span>
             <button id="resetTrimButton" class="summary-button" type="button">Reset</button>
           </summary>
           <div class="field-grid">
@@ -174,6 +186,21 @@
               <input id="cropBottom" type="number" min="0" step="1" value="0" />
             </label>
           </div>
+          <div class="stack-label crop-aspect-readout">
+            <span>Aspect Ratio <output id="cropAspectRatioValue">--</output></span>
+          </div>
+          <label class="toggle">
+            <input id="flipHorizontal" type="checkbox" />
+            <span>Flip Horizontal</span>
+          </label>
+          <label class="toggle">
+            <input id="flipVertical" type="checkbox" />
+            <span>Flip Vertical</span>
+          </label>
+          <label class="toggle">
+            <input id="rotate90Cw" type="checkbox" />
+            <span>Rotate 90° CW</span>
+          </label>
         </details>
 
         <details class="control-group collapsible">
@@ -184,6 +211,10 @@
               <input id="fps" type="number" min="1" max="60" step="1" value="20" />
             </label>
           </div>
+          <label class="toggle">
+            <input id="reverseOrder" type="checkbox" />
+            <span>Reverse Order</span>
+          </label>
           <div class="slider-stack">
             <label>
               <span>Output Scale <output id="outputScaleValue">1.00 (--×--)</output></span>
@@ -213,7 +244,10 @@
 
         <section class="control-group status-group">
           <div class="section-head">
-            <h2 id="statusHeading">Status</h2>
+            <div class="status-headline">
+              <h2 id="statusHeading">Status</h2>
+              <span id="statusBusy" class="status-busy" hidden aria-hidden="true"></span>
+            </div>
             <button id="tooltipToggleButton" class="summary-button" type="button">Enable Tooltips</button>
           </div>
           <pre id="statusText">Waiting for OpenCV…</pre>
@@ -223,7 +257,10 @@
       <main class="workspace">
         <section class="viewer-card">
           <header>
-            <h2 id="rawPhotoHeading">Raw Photo <span id="rawPhotoName" class="header-note"></span></h2>
+            <div class="status-headline">
+              <h2 id="rawPhotoHeading">Raw Photo <span id="rawPhotoName" class="header-note"></span></h2>
+              <span id="rawBusy" class="status-busy" hidden aria-hidden="true"></span>
+            </div>
           </header>
           <div class="viewer-stage">
             <canvas id="rawCanvas"></canvas>
@@ -249,7 +286,10 @@
         <section class="viewer-card">
           <header>
             <h2 id="animationPreviewHeading">Animation Preview</h2>
-            <button id="exportButton" class="header-button" type="button" disabled>Export GIF</button>
+            <div class="header-actions">
+              <button id="previewPlayPauseButton" class="header-button icon-button" type="button" aria-label="Pause animation">⏸</button>
+              <button id="exportButton" class="header-button" type="button" disabled>Export GIF</button>
+            </div>
           </header>
           <div class="output-preview">
             <canvas id="gifPreviewCanvas"></canvas>

@@ -29,6 +29,7 @@ const TOOLTIP_TEXT = {
   "#boundarySensitivity": "The threshold used to find the frame-grid.",
   "#boundaryPersistence": "How many consecutive pixels must stay above the threshold before the frame-grid boundary is accepted.",
   "#crossRoiScale": "Sets the size of the square search regions used to localize each registration cross.",
+  "#detectCrossesWithConvolution": "Use the cross-kernel convolution inside each ROI instead of the default profile-based localizer.",
   "#useCrossAlignment": "Use detected crosses to refine frame extraction beyond a nominal equal-spaced grid.",
   "#appearanceSummary": "Adjusts the look of the extracted animation frames.",
   "#resetAppearanceButton": "Restores all appearance controls to their default values.",
@@ -36,20 +37,26 @@ const TOOLTIP_TEXT = {
   "#contrast": "Applies a midpoint-preserving contrast curve to OKLab lightness.",
   "#vibrance": "Boosts or reduces muted colors more than already-saturated colors.",
   "#temperature": "Shifts the image white balance cooler or warmer using chromatic adaptation after the OKLab adjustments.",
+  "#unsharpRadius": "Sets the blur radius used by the unsharp mask sharpening stage.",
+  "#unsharpAmount": "Controls how strongly the blurred image is subtracted to sharpen edges.",
   "#invert": "Inverts the animation frames like a photographic negative.",
   "#gifResampling": "Selects the interpolation method used when extracting and unwarping frames.",
-  "#cropOutputSummary": "Crops pixels away from the extracted animation frames.",
+  "#cropOutputSummary": "Crops the extracted animation frames and applies simple post-crop geometry transforms.",
   "#resetTrimButton": "Restores all crop values to zero.",
   "#cropLeft": "Crops pixels from the left side of the animation (before optional output scaling).",
   "#cropRight": "Crops pixels from the right side of the animation (before optional output scaling).",
   "#cropTop": "Crops pixels from the top of the animation (before optional output scaling).",
   "#cropBottom": "Crops pixels from the bottom of the animation (before optional output scaling).",
+  "#flipHorizontal": "Flip the post-cropped animation frames left-to-right.",
+  "#flipVertical": "Flip the post-cropped animation frames top-to-bottom.",
+  "#rotate90Cw": "Rotate the post-cropped animation frames 90 degrees clockwise.",
   "#gifExportSummary": "Controls that affect preview playback and the exported GIF file.",
   "#fps": "Playback speed of the preview animation and exported GIF in frames per second.",
   "#outputScale": "Scales the final animation for preview and export (post-cropping).",
   "#gifQuality": "GIF encoder quality setting. Lower numbers are slower but higher quality.",
   "#gifDither": "Selects the dithering method used during GIF color quantization.",
   "#gifGlobalPalette": "Use one shared palette for all GIF frames, instead of per-frame palettes.",
+  "#reverseOrder": "Reverse the playback and export order of the animation frames.",
   "#statusHeading": "Processing and diagnostic status for the current image and settings.",
   "#tooltipToggleButton": "Turn tooltips on or off throughout the interface.",
   "#statusText": "Current pipeline status and other diagnostic information.",
@@ -60,6 +67,7 @@ const TOOLTIP_TEXT = {
   "#crossRegionsHeading": "Diagnostic tiles showing the regions used to localize each registration cross.",
   "#crossRoiGrid": "Per-cross diagnostic regions used to inspect registration mark detection.",
   "#animationPreviewHeading": "Live animation preview using the current settings.",
+  "#previewPlayPauseButton": "Pause or resume the live animation preview.",
   "#exportButton": "Render and download the animated GIF using the current settings.",
   "#gifPreviewCanvas": "This is a live animation preview. Click 'Export GIF' to generate the GIF.",
   "#gifImage": "Most recently exported GIF preview image.",
@@ -90,12 +98,78 @@ function updateExportButtonLabel(progressPercent = null) {
 }
 
 /**
+ * Keep the preview playback button synchronized with the current play/pause state.
+ *
+ * @returns {void}
+ */
+function updatePreviewPlayPauseButton() {
+  const paused = !!state.preview.paused;
+  dom.previewPlayPauseButton.textContent = paused ? "\u23f5" : "\u23f8";
+  dom.previewPlayPauseButton.setAttribute("aria-label", paused ? "Play animation" : "Pause animation");
+}
+
+/**
+ * Clear all derived preview surfaces so a newly loaded source image never shows stale results.
+ *
+ * @returns {void}
+ */
+function clearDerivedPreviews() {
+  state.preview.rectifiedCanvas = null;
+  state.geometry.baseRectifiedCanvas = null;
+  state.geometry.baseRectifiedPageCanvas = null;
+  state.geometry.pagePreviewGridQuad = null;
+  state.geometry.alignmentInfo = null;
+  state.geometry.frameCount = 0;
+  state.frames.base = [];
+  state.frames.adjustedCache.clear();
+  state.preview.frameIndex = 0;
+  state.preview.showRectifiedDiagnostic = false;
+
+  const rectifiedCtx = dom.rectifiedCanvas.getContext("2d");
+  resizeCanvasToBox(dom.rectifiedCanvas);
+  rectifiedCtx.clearRect(0, 0, dom.rectifiedCanvas.width, dom.rectifiedCanvas.height);
+  dom.rectifiedCanvas.parentElement?.classList.add("is-empty");
+
+  const previewCtx = dom.gifPreviewCanvas.getContext("2d");
+  resizeCanvasToBox(dom.gifPreviewCanvas);
+  previewCtx.clearRect(0, 0, dom.gifPreviewCanvas.width, dom.gifPreviewCanvas.height);
+  dom.gifPreviewCanvas.parentElement?.classList.add("is-empty");
+
+  dom.crossRoiGrid.innerHTML = "";
+  dom.crossRoiGrid.classList.add("is-empty");
+  dom.exportButton.disabled = true;
+  updateAnimationPreviewHeading();
+  updateExportButtonLabel();
+}
+
+/**
+ * Clear every preview panel back to its striped empty state while a new source image is loading.
+ *
+ * This prevents stale raw/rectified/animation content from lingering between source-image loads.
+ *
+ * @returns {void}
+ */
+function clearAllPreviews() {
+  state.source.rawPageContour = null;
+  state.preview.paused = false;
+  updatePreviewPlayPauseButton();
+
+  const rawCtx = dom.rawCanvas.getContext("2d");
+  resizeCanvasToBox(dom.rawCanvas);
+  rawCtx.clearRect(0, 0, dom.rawCanvas.width, dom.rawCanvas.height);
+  dom.rawCanvas.parentElement?.classList.add("is-empty");
+
+  clearDerivedPreviews();
+}
+
+/**
  * Bootstrap the application once the module is loaded.
  *
  * @returns {void}
  */
 function init() {
   attachUi();
+  initAccordionPanels();
   initializeTooltips();
   syncPaperPresetUi();
   dom.gifPreviewCanvas.title = TOOLTIP_TEXT["#gifPreviewCanvas"] || "";
@@ -104,6 +178,7 @@ function init() {
   dom.gifImage.removeAttribute("src");
   updateAnimationPreviewHeading();
   updateExportButtonLabel();
+  updatePreviewPlayPauseButton();
 
   if (typeof cv !== "undefined" && cv.onRuntimeInitialized) {
     cv.onRuntimeInitialized = onOpenCvReady;
@@ -116,6 +191,64 @@ function init() {
   updateSliderReadouts();
   attachResizeHandler();
   startGifPreviewLoop();
+}
+
+/**
+ * Toggle the small status-spinner so long-running image operations provide immediate feedback.
+ *
+ * @param {boolean} busy
+ * @returns {void}
+ */
+function setBusyState(busy) {
+  state.runtime.busy = !!busy;
+  dom.statusBusy.hidden = !busy;
+  dom.rawBusy.hidden = !busy;
+}
+
+/**
+ * Yield long enough for the browser to paint any newly drawn preview canvases.
+ *
+ * This is used after loading a new source image so the Raw Photo preview appears
+ * before the heavier OpenCV pipeline starts running.
+ *
+ * @returns {Promise<void>}
+ */
+async function waitForNextPaint() {
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+/**
+ * Make the sidebar's collapsible control groups behave like an accordion.
+ *
+ * Opening one collapsible panel closes the others, while non-collapsible sections
+ * like Photo and Status remain unaffected.
+ *
+ * @returns {void}
+ */
+function initAccordionPanels() {
+  const panels = [...document.querySelectorAll(".control-panel details.collapsible")];
+  panels.forEach((panel) => {
+    panel.addEventListener("toggle", () => {
+      if (!panel.open) return;
+      panels.forEach((other) => {
+        if (other !== panel) other.open = false;
+      });
+    });
+  });
+}
+
+/**
+ * Close all collapsible sidebar panels.
+ *
+ * This is used when loading a new image so the user returns to the compact default layout.
+ *
+ * @returns {void}
+ */
+function collapseAllPanels() {
+  const panels = document.querySelectorAll(".control-panel details.collapsible");
+  panels.forEach((panel) => {
+    panel.open = false;
+  });
 }
 
 /**
@@ -164,6 +297,12 @@ function attachUi() {
   dom.tooltipToggleButton.addEventListener("click", () => {
     setTooltipsEnabled(!state.runtime.tooltipsEnabled);
   });
+  dom.previewPlayPauseButton.addEventListener("click", () => {
+    state.preview.paused = !state.preview.paused;
+    state.preview.lastTime = performance.now();
+    updatePreviewPlayPauseButton();
+    drawCurrentGifPreview();
+  });
 
   dom.paperPreset.addEventListener("input", () => {
     syncPaperPresetUi();
@@ -175,7 +314,15 @@ function attachUi() {
     scheduleProcess();
   });
 
-  const appearanceInputs = [dom.brightness, dom.contrast, dom.vibrance, dom.temperature, dom.invert];
+  const appearanceInputs = [
+    dom.brightness,
+    dom.contrast,
+    dom.vibrance,
+    dom.temperature,
+    dom.unsharpRadius,
+    dom.unsharpAmount,
+    dom.invert
+  ];
   appearanceInputs.forEach((input) => {
     input.addEventListener("input", () => {
       revokeGifUrl();
@@ -203,6 +350,7 @@ function attachUi() {
     dom.boundarySensitivity,
     dom.boundaryPersistence,
     dom.crossRoiScale,
+    dom.detectCrossesWithConvolution,
     dom.useCrossAlignment,
   ];
   geometryInputs.forEach((input) => {
@@ -224,10 +372,14 @@ function attachUi() {
     dom.cropRight,
     dom.cropTop,
     dom.cropBottom,
+    dom.flipHorizontal,
+    dom.flipVertical,
+    dom.rotate90Cw,
     dom.fps,
     dom.gifQuality,
     dom.gifDither,
-    dom.gifGlobalPalette
+    dom.gifGlobalPalette,
+    dom.reverseOrder
   ];
   lazyFrameInputs.forEach((input) => {
     input.addEventListener("input", () => {
@@ -239,7 +391,10 @@ function attachUi() {
         (input === dom.cropLeft) ||
         (input === dom.cropRight) ||
         (input === dom.cropTop) ||
-        (input === dom.cropBottom)
+        (input === dom.cropBottom) ||
+        (input === dom.flipHorizontal) ||
+        (input === dom.flipVertical) ||
+        (input === dom.rotate90Cw)
       ) invalidateFrameCaches();
       drawCurrentGifPreview();
     });
@@ -251,7 +406,10 @@ function attachUi() {
         (input === dom.cropLeft) ||
         (input === dom.cropRight) ||
         (input === dom.cropTop) ||
-        (input === dom.cropBottom)
+        (input === dom.cropBottom) ||
+        (input === dom.flipHorizontal) ||
+        (input === dom.flipVertical) ||
+        (input === dom.rotate90Cw)
       ) invalidateFrameCaches();
       drawCurrentGifPreview();
     });
@@ -409,6 +567,8 @@ function resetAppearanceControls() {
   dom.contrast.value = "0";
   dom.vibrance.value = "0";
   dom.temperature.value = "0";
+  dom.unsharpRadius.value = "1.0";
+  dom.unsharpAmount.value = "0";
   dom.invert.checked = false;
   dom.gifResampling.value = "linear";
   revokeGifUrl();
@@ -429,7 +589,10 @@ function resetTrimControls() {
     (Number(dom.cropLeft.value) || 0) === 0 &&
     (Number(dom.cropRight.value) || 0) === 0 &&
     (Number(dom.cropTop.value) || 0) === 0 &&
-    (Number(dom.cropBottom.value) || 0) === 0;
+    (Number(dom.cropBottom.value) || 0) === 0 &&
+    !dom.flipHorizontal.checked &&
+    !dom.flipVertical.checked &&
+    !dom.rotate90Cw.checked;
   if (alreadyReset) {
     return;
   }
@@ -437,10 +600,60 @@ function resetTrimControls() {
   dom.cropRight.value = "0";
   dom.cropTop.value = "0";
   dom.cropBottom.value = "0";
+  dom.flipHorizontal.checked = false;
+  dom.flipVertical.checked = false;
+  dom.rotate90Cw.checked = false;
   revokeGifUrl();
   updateSliderReadouts();
   invalidateFrameCaches();
   drawCurrentGifPreview();
+}
+
+/**
+ * Restore every non-Layout control to its default value.
+ *
+ * Layout settings are intentionally preserved across image loads, while detection,
+ * appearance, crop/geometry, and GIF export controls all return to their startup defaults.
+ *
+ * @returns {void}
+ */
+function resetNonLayoutControls() {
+  dom.thresholdMethod.value = "offset-peak";
+  dom.thresholdOffset.value = "-20";
+  dom.paperMargin.value = "80";
+  dom.boundarySensitivity.value = "8.0";
+  dom.boundaryPersistence.value = "7";
+  dom.crossRoiScale.value = "52";
+  dom.useCrossAlignment.checked = true;
+  dom.detectCrossesWithConvolution.checked = false;
+
+  dom.brightness.value = "0";
+  dom.contrast.value = "0";
+  dom.vibrance.value = "0";
+  dom.temperature.value = "0";
+  dom.unsharpAmount.value = "0";
+  dom.unsharpRadius.value = "1.0";
+  dom.invert.checked = false;
+  dom.gifResampling.value = "linear";
+
+  dom.cropLeft.value = "0";
+  dom.cropRight.value = "0";
+  dom.cropTop.value = "0";
+  dom.cropBottom.value = "0";
+  dom.flipHorizontal.checked = false;
+  dom.flipVertical.checked = false;
+  dom.rotate90Cw.checked = false;
+
+  dom.fps.value = "20";
+  dom.reverseOrder.checked = false;
+  dom.outputScale.value = "1.00";
+  dom.gifQuality.value = "10";
+  dom.gifDither.value = "FloydSteinberg-serpentine";
+  dom.gifGlobalPalette.checked = false;
+
+  state.preview.paused = false;
+  updatePreviewPlayPauseButton();
+  updateSliderReadouts();
 }
 
 /**
@@ -544,6 +757,13 @@ async function handleFile(file) {
  * @returns {Promise<void>}
  */
 async function loadImageSource(src, filename = "", onComplete = null) {
+  setBusyState(true);
+  setStatus("Loading image…");
+  collapseAllPanels();
+  resetNonLayoutControls();
+  revokeGifUrl();
+  dom.rawPhotoName.textContent = filename ? `(${filename})` : "";
+  clearAllPreviews();
   const image = new Image();
   image.onload = async () => {
     try {
@@ -551,24 +771,21 @@ async function loadImageSource(src, filename = "", onComplete = null) {
       state.source.image = image;
       state.source.filename = filename || "";
       state.source.rawPageContour = null;
-      state.geometry.baseRectifiedCanvas = null;
-      state.geometry.baseRectifiedPageCanvas = null;
-      state.geometry.pagePreviewGridQuad = null;
-      state.preview.showRectifiedDiagnostic = false;
-      state.geometry.alignmentInfo = null;
-      state.geometry.frameCount = 0;
-      invalidateFrameCaches();
-      invalidateAppearanceCache();
-      dom.rawPhotoName.textContent = filename ? `(${filename})` : "";
       drawImageToCanvas(image, state.source.canvas);
       renderRawPreview();
-      revokeGifUrl();
+      invalidateAppearanceCache();
+      setStatus("Image loaded.\nAnalyzing page…");
+      await waitForNextPaint();
       await processCurrentImage();
     } finally {
+      if (!state.processing.active && !state.processing.pending) {
+        setBusyState(false);
+      }
       onComplete?.();
     }
   };
   image.onerror = () => {
+    setBusyState(false);
     onComplete?.();
     setStatus("Failed to load the selected image.");
   };
@@ -606,11 +823,13 @@ function scheduleProcess() {
  *   boundaryPersistencePx:number,
  *   crossRoiScalePct:number,
  *   crossRoiScale:number,
+ *   detectCrossesWithConvolution:boolean,
  *   useCrossAlignment:boolean,
  *   crop:{left:number,right:number,top:number,bottom:number},
- *   filters:{brightness:number,contrast:number,vibrance:number,temperature:number,invert:boolean},
+ *   postCropGeometry:{flipHorizontal:boolean,flipVertical:boolean,rotate90Cw:boolean},
+ *   filters:{brightness:number,contrast:number,vibrance:number,temperature:number,unsharpRadius:number,unsharpAmount:number,invert:boolean},
  *   fps:number,
- *   exportOptions:{quality:number,dither:string|false,resampling:string,globalPalette:boolean,outputScale:number}
+ *   exportOptions:{quality:number,dither:string|false,resampling:string,globalPalette:boolean,outputScale:number,reverseOrder:boolean}
  * }}
  */
 function readConfig() {
@@ -623,8 +842,8 @@ function readConfig() {
     paperPreset,
     paperWidthIn: Math.max(1, paperWidth),
     paperHeightIn: Math.max(1, paperHeight),
-    frameCols: Math.max(1, Math.round(Number(dom.frameCols.value) || 5)),
-    frameRows: Math.max(1, Math.round(Number(dom.frameRows.value) || 4)),
+    frameCols: Math.max(1, Math.min(20, Math.round(Number(dom.frameCols.value) || 5))),
+    frameRows: Math.max(1, Math.min(20, Math.round(Number(dom.frameRows.value) || 4))),
     thresholdMethod: dom.thresholdMethod.value || "offset-peak",
     thresholdOffset: Math.max(-128, Math.min(128, Math.round(Number(dom.thresholdOffset.value) || -20))),
     paperMarginPx: Math.max(0, Math.min(150, Math.round(Number(dom.paperMargin.value) || 80))),
@@ -632,6 +851,7 @@ function readConfig() {
     boundaryPersistencePx: Math.max(1, Math.min(15, Math.round(Number(dom.boundaryPersistence.value) || 7))),
     crossRoiScalePct: Math.max(18, Math.min(110, Number(dom.crossRoiScale.value) || 52)),
     crossRoiScale: Math.max(0.18, Math.min(1.1, (Number(dom.crossRoiScale.value) || 52) / 100)),
+    detectCrossesWithConvolution: dom.detectCrossesWithConvolution.checked,
     useCrossAlignment: dom.useCrossAlignment.checked,
     useRectifiedAsSource: false,
     crop: {
@@ -640,11 +860,18 @@ function readConfig() {
       top: Math.max(0, Math.round(Number(dom.cropTop.value) || 0)),
       bottom: Math.max(0, Math.round(Number(dom.cropBottom.value) || 0)),
     },
+    postCropGeometry: {
+      flipHorizontal: dom.flipHorizontal.checked,
+      flipVertical: dom.flipVertical.checked,
+      rotate90Cw: dom.rotate90Cw.checked,
+    },
     filters: {
       brightness: Number(dom.brightness.value) || 0,
       contrast: Number(dom.contrast.value) || 0,
       vibrance: Number(dom.vibrance.value) || 0,
       temperature: Number(dom.temperature.value) || 0,
+      unsharpRadius: Math.max(0.1, Math.min(100, Number(dom.unsharpRadius.value) || 1.0)),
+      unsharpAmount: Math.max(0, Math.min(500, Number(dom.unsharpAmount.value) || 0)),
       invert: dom.invert.checked,
     },
     fps: Math.max(1, Math.min(60, Math.round(Number(dom.fps.value) || 20))),
@@ -654,6 +881,7 @@ function readConfig() {
       dither: (dom.gifDither.value && dom.gifDither.value !== "off") ? dom.gifDither.value : false,
       resampling: dom.gifResampling.value || "linear",
       globalPalette: dom.gifGlobalPalette.checked,
+      reverseOrder: dom.reverseOrder.checked,
     },
   };
 }
@@ -686,6 +914,8 @@ function updateSliderReadouts() {
   dom.contrastValue.textContent = formatSignedValue(dom.contrast.value);
   dom.vibranceValue.textContent = formatSignedValue(dom.vibrance.value);
   dom.temperatureValue.textContent = formatSignedValue(dom.temperature.value);
+  dom.unsharpRadiusValue.textContent = (Math.max(0.1, Math.min(100, Number(dom.unsharpRadius.value) || 1.0))).toFixed(1);
+  dom.unsharpAmountValue.textContent = (Math.max(0, Math.min(500, Number(dom.unsharpAmount.value) || 0))).toFixed(1);
   dom.thresholdOffsetValue.textContent = formatSignedValue(dom.thresholdOffset.value);
   dom.paperMarginValue.textContent = `${Math.max(0, Math.min(150, Number(dom.paperMargin.value) || 80))} px`;
   dom.boundarySensitivityValue.textContent = `${Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || 8)).toFixed(1)}`;
@@ -694,6 +924,7 @@ function updateSliderReadouts() {
   const scaledSize = getScaledOutputFrameSize(outputScale);
   dom.outputScaleValue.textContent = `${outputScale.toFixed(2)} (${scaledSize.width}\u00d7${scaledSize.height})`;
   dom.gifQualityValue.textContent = String(Math.max(1, Math.min(20, Number(dom.gifQuality.value) || 10)));
+  dom.cropAspectRatioValue.textContent = getCurrentCropAspectRatioText();
   if (!state.geometry.alignmentInfo) {
     dom.crossRoiScaleValue.textContent = "-- px";
     return;
@@ -730,6 +961,7 @@ function formatSignedValue(value) {
  */
 async function processCurrentImage(requestId = state.processing.requestId) {
   if (!state.runtime.cvReady) {
+    setBusyState(false);
     setStatus("OpenCV is still loading.");
     return;
   }
@@ -740,6 +972,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
   }
 
   state.processing.active = true;
+  setBusyState(true);
   dom.exportButton.disabled = true;
 
   try {
@@ -787,6 +1020,8 @@ async function processCurrentImage(requestId = state.processing.requestId) {
       state.processing.timer = window.setTimeout(() => {
         void processCurrentImage(state.processing.requestId);
       }, 0);
+    } else {
+      setBusyState(false);
     }
   }
 }
@@ -812,6 +1047,7 @@ function throwIfProcessAborted(requestId) {
  * @returns {void}
  */
 function renderRectifiedPreview(rectifiedCanvas) {
+  dom.rectifiedCanvas.parentElement?.classList.remove("is-empty");
   const diagnosticSource = state.geometry.baseRectifiedPageCanvas || rectifiedCanvas;
   const displayCanvas = state.preview.showRectifiedDiagnostic
     ? getRectifiedConvolutionCanvas(diagnosticSource)
@@ -929,7 +1165,8 @@ function getBaseFrameCanvas(index) {
       config.crop,
       getCvInterpolationFlag(config.exportOptions.resampling)
     );
-    const scaledFrame = scaleOutputCanvas(frame, config.exportOptions.outputScale, config.exportOptions.resampling);
+    const transformedFrame = transformOutputCanvas(frame, config.postCropGeometry);
+    const scaledFrame = scaleOutputCanvas(transformedFrame, config.exportOptions.outputScale, config.exportOptions.resampling);
     state.frames.base[index] = scaledFrame;
     return scaledFrame;
   } finally {
@@ -951,10 +1188,33 @@ function getScaledOutputFrameSize(outputScale) {
   const cellHeight = alignmentInfo.gridBounds.height / alignmentInfo.rows;
   const croppedWidth = Math.max(1, Math.round(cellWidth - config.crop.left - config.crop.right));
   const croppedHeight = Math.max(1, Math.round(cellHeight - config.crop.top - config.crop.bottom));
+  const geometryWidth = config.postCropGeometry.rotate90Cw ? croppedHeight : croppedWidth;
+  const geometryHeight = config.postCropGeometry.rotate90Cw ? croppedWidth : croppedHeight;
   return {
-    width: Math.max(1, Math.round(croppedWidth * outputScale)),
-    height: Math.max(1, Math.round(croppedHeight * outputScale)),
+    width: Math.max(1, Math.round(geometryWidth * outputScale)),
+    height: Math.max(1, Math.round(geometryHeight * outputScale)),
   };
+}
+
+/**
+ * Format the current post-crop aspect ratio as a fixed-precision readout.
+ *
+ * @returns {string}
+ */
+function getCurrentCropAspectRatioText() {
+  const alignmentInfo = state.geometry.alignmentInfo;
+  if (!alignmentInfo) return "--";
+  const config = readConfig();
+  const cellWidth = alignmentInfo.gridBounds.width / alignmentInfo.cols;
+  const cellHeight = alignmentInfo.gridBounds.height / alignmentInfo.rows;
+  let croppedWidth = Math.max(1, cellWidth - config.crop.left - config.crop.right);
+  let croppedHeight = Math.max(1, cellHeight - config.crop.top - config.crop.bottom);
+  if (config.postCropGeometry.rotate90Cw) {
+    [croppedWidth, croppedHeight] = [croppedHeight, croppedWidth];
+  }
+  const widthPx = Math.max(1, Math.round(croppedWidth));
+  const heightPx = Math.max(1, Math.round(croppedHeight));
+  return `${(croppedWidth / croppedHeight).toFixed(3)} (${widthPx}\u00d7${heightPx})`;
 }
 
 /**
@@ -978,6 +1238,78 @@ function scaleOutputCanvas(sourceCanvas, outputScale, resampling) {
   ctx.imageSmoothingQuality = (resampling === "linear") ? "medium" : "high";
   ctx.drawImage(sourceCanvas, 0, 0, scaled.width, scaled.height);
   return scaled;
+}
+
+/**
+ * Map the running preview frame index to the actual source-frame index, optionally reversed.
+ *
+ * @param {number} previewIndex
+ * @returns {number}
+ */
+function getOrderedFrameIndex(previewIndex) {
+  const frameCount = state.geometry.frameCount;
+  if (frameCount <= 0) return 0;
+  const clamped = ((previewIndex % frameCount) + frameCount) % frameCount;
+  return readConfig().exportOptions.reverseOrder
+    ? (frameCount - 1 - clamped)
+    : clamped;
+}
+
+/**
+ * Apply the post-crop flip/rotation options to one extracted frame.
+ *
+ * @param {HTMLCanvasElement} sourceCanvas
+ * @param {{flipHorizontal:boolean, flipVertical:boolean, rotate90Cw:boolean}} geometry
+ * @returns {HTMLCanvasElement}
+ */
+function transformOutputCanvas(sourceCanvas, geometry) {
+  if (!sourceCanvas) return sourceCanvas;
+  const flipHorizontal = !!geometry?.flipHorizontal;
+  const flipVertical = !!geometry?.flipVertical;
+  const rotate90Cw = !!geometry?.rotate90Cw;
+  if (!flipHorizontal && !flipVertical && !rotate90Cw) return sourceCanvas;
+
+  let current = sourceCanvas;
+  if (flipHorizontal) current = flipCanvas(current, true, false);
+  if (flipVertical) current = flipCanvas(current, false, true);
+  if (rotate90Cw) current = rotateCanvas90Cw(current);
+  return current;
+}
+
+/**
+ * Flip a canvas horizontally and/or vertically.
+ *
+ * @param {HTMLCanvasElement} sourceCanvas
+ * @param {boolean} flipHorizontal
+ * @param {boolean} flipVertical
+ * @returns {HTMLCanvasElement}
+ */
+function flipCanvas(sourceCanvas, flipHorizontal, flipVertical) {
+  const flipped = document.createElement("canvas");
+  flipped.width = sourceCanvas.width;
+  flipped.height = sourceCanvas.height;
+  const ctx = flipped.getContext("2d");
+  ctx.translate(flipHorizontal ? flipped.width : 0, flipVertical ? flipped.height : 0);
+  ctx.scale(flipHorizontal ? -1 : 1, flipVertical ? -1 : 1);
+  ctx.drawImage(sourceCanvas, 0, 0);
+  return flipped;
+}
+
+/**
+ * Rotate a canvas 90 degrees clockwise.
+ *
+ * @param {HTMLCanvasElement} sourceCanvas
+ * @returns {HTMLCanvasElement}
+ */
+function rotateCanvas90Cw(sourceCanvas) {
+  const rotated = document.createElement("canvas");
+  rotated.width = sourceCanvas.height;
+  rotated.height = sourceCanvas.width;
+  const ctx = rotated.getContext("2d");
+  ctx.translate(rotated.width, 0);
+  ctx.rotate(Math.PI * 0.5);
+  ctx.drawImage(sourceCanvas, 0, 0);
+  return rotated;
 }
 
 /**
@@ -1005,6 +1337,7 @@ function getAdjustedFrameCanvas(index) {
  */
 function renderRawPreview() {
   renderCanvasFit(state.source.canvas, dom.rawCanvas);
+  dom.rawCanvas.parentElement?.classList.remove("is-empty");
   if (!state.source.rawPageContour || state.source.rawPageContour.length !== 4) return;
   const targetCanvas = dom.rawCanvas;
   const sourceCanvas = state.source.canvas;
@@ -1040,9 +1373,11 @@ function renderCrossRoiGrid(alignmentInfo) {
   const grid = dom.crossRoiGrid;
   grid.innerHTML = "";
   if (!alignmentInfo || !alignmentInfo.crossRoiTiles || alignmentInfo.crossRoiTiles.length === 0) {
+    grid.classList.add("is-empty");
     grid.textContent = "";
     return;
   }
+  grid.classList.remove("is-empty");
   grid.style.gridTemplateColumns = `repeat(${alignmentInfo.cols + 1}, max-content)`;
   for (let row = 0; row <= alignmentInfo.rows; row++) {
     for (let col = 0; col <= alignmentInfo.cols; col++) {
@@ -1062,7 +1397,8 @@ function renderCrossRoiGrid(alignmentInfo) {
           const colContrast = Number.isFinite(tile.colContrast) ? tile.colContrast.toFixed(2) : "--";
           const rowContrast = Number.isFinite(tile.rowContrast) ? tile.rowContrast.toFixed(2) : "--";
           const darkFrac = Number.isFinite(tile.darkFrac) ? tile.darkFrac.toFixed(4) : "--";
-          tile.canvas.title = `(${col}, ${row}) ${tile.accepted ? "accepted" : "rejected"} | col ${colContrast} | row ${rowContrast} | ink ${darkFrac}`;
+          const convStrength = Number.isFinite(tile.convolutionStrength) ? ` | conv ${tile.convolutionStrength.toFixed(4)}` : "";
+          tile.canvas.title = `(${col}, ${row}) ${tile.accepted ? "accepted" : "rejected"} | col ${colContrast} | row ${rowContrast} | ink ${darkFrac}${convStrength}`;
         }
         grid.appendChild(tile.canvas);
       } else {
@@ -1081,7 +1417,7 @@ function renderCrossRoiGrid(alignmentInfo) {
  */
 function startGifPreviewLoop() {
   const loop = (time) => {
-    if (state.geometry.frameCount > 0) {
+    if (state.geometry.frameCount > 0 && !state.preview.paused) {
       const fps = readConfig().fps;
       const frameDelay = 1000 / fps;
       if ((time - state.preview.lastTime) >= frameDelay) {
@@ -1104,18 +1440,21 @@ function drawCurrentGifPreview() {
   if (state.export.url) {
     // After export, this panel becomes a GIF viewer until some setting invalidates that GIF.
     dom.gifPreviewCanvas.hidden = true;
+    dom.gifPreviewCanvas.parentElement?.classList.remove("is-empty");
     updateAnimationPreviewHeading();
     return;
   }
   dom.gifPreviewCanvas.hidden = false;
   updateAnimationPreviewHeading();
-  const frame = getAdjustedFrameCanvas(state.preview.frameIndex);
+  const frame = getAdjustedFrameCanvas(getOrderedFrameIndex(state.preview.frameIndex));
   if (!frame) {
     const ctx = dom.gifPreviewCanvas.getContext("2d");
     resizeCanvasToBox(dom.gifPreviewCanvas);
     ctx.clearRect(0, 0, dom.gifPreviewCanvas.width, dom.gifPreviewCanvas.height);
+    dom.gifPreviewCanvas.parentElement?.classList.add("is-empty");
     return;
   }
+  dom.gifPreviewCanvas.parentElement?.classList.remove("is-empty");
   renderCanvasFit(frame, dom.gifPreviewCanvas);
 }
 
@@ -1142,7 +1481,7 @@ async function exportGif() {
   setStatus("Encoding GIF…");
 
   const config = readConfig();
-  const firstFrame = getAdjustedFrameCanvas(0);
+  const firstFrame = getAdjustedFrameCanvas(getOrderedFrameIndex(0));
   if (!firstFrame) {
     dom.exportButton.disabled = false;
     updateExportButtonLabel();
@@ -1163,7 +1502,7 @@ async function exportGif() {
   const delay = Math.max(1, Math.round(1000 / config.fps));
   for (let i = 0; i < state.geometry.frameCount; i++) {
     // Preview stays lazy, but export must realize the full adjusted frame set.
-    gif.addFrame(getAdjustedFrameCanvas(i), { copy: true, delay });
+    gif.addFrame(getAdjustedFrameCanvas(getOrderedFrameIndex(i)), { copy: true, delay });
   }
 
   gif.on("finished", (blob) => {
@@ -1174,6 +1513,7 @@ async function exportGif() {
     dom.gifPreviewCanvas.hidden = true;
     dom.gifImage.classList.remove("hidden");
     dom.gifImage.hidden = false;
+    dom.gifPreviewCanvas.parentElement?.classList.remove("is-empty");
     updateAnimationPreviewHeading();
     downloadBlobWithFilename(blob, state.export.filename);
     dom.exportButton.disabled = false;
@@ -1203,6 +1543,7 @@ function revokeGifUrl() {
   dom.gifImage.classList.add("hidden");
   dom.gifImage.hidden = true;
   dom.gifImage.removeAttribute("src");
+  dom.gifPreviewCanvas.parentElement?.classList.add("is-empty");
   updateAnimationPreviewHeading();
 }
 

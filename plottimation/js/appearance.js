@@ -1,11 +1,16 @@
 /**
  * Report whether any appearance controls require a non-identity color pass.
  *
- * @param {{brightness:number, contrast:number, vibrance:number, temperature:number, invert:boolean}} filters
+ * @param {{brightness:number, contrast:number, vibrance:number, temperature:number, unsharpRadius:number, unsharpAmount:number, invert:boolean}} filters
  * @returns {boolean}
  */
 export function hasAppearanceAdjustments(filters) {
-  return filters.brightness !== 0 || filters.contrast !== 0 || filters.vibrance !== 0 || filters.temperature !== 0 || filters.invert;
+  return filters.brightness !== 0 ||
+    filters.contrast !== 0 ||
+    filters.vibrance !== 0 ||
+    filters.temperature !== 0 ||
+    filters.unsharpAmount !== 0 ||
+    filters.invert;
 }
 
 /**
@@ -14,7 +19,7 @@ export function hasAppearanceAdjustments(filters) {
  *
  * @param {HTMLCanvasElement} sourceCanvas
  * @param {HTMLCanvasElement} targetCanvas
- * @param {{brightness:number, contrast:number, vibrance:number, temperature:number, invert:boolean}} filters
+ * @param {{brightness:number, contrast:number, vibrance:number, temperature:number, unsharpRadius:number, unsharpAmount:number, invert:boolean}} filters
  * @returns {void}
  */
 export function applyVisualAdjustments(sourceCanvas, targetCanvas, filters) {
@@ -57,7 +62,7 @@ function mapTemperatureSliderToMiredShift(temperatureValue) {
  * and optional RGB inversion.
  *
  * @param {HTMLCanvasElement} canvas
- * @param {{brightness:number, contrast:number, vibrance:number, temperature:number, invert:boolean}} filters
+ * @param {{brightness:number, contrast:number, vibrance:number, temperature:number, unsharpRadius:number, unsharpAmount:number, invert:boolean}} filters
  * @returns {void}
  */
 function applyOklabAppearanceAdjustments(canvas, filters) {
@@ -91,21 +96,84 @@ function applyOklabAppearanceAdjustments(canvas, filters) {
       ? adaptSrgbTemperature(adjusted[0], adjusted[1], adjusted[2], adaptation)
       : adjusted;
 
-    let r = Math.round(adapted[0] * 255);
-    let g = Math.round(adapted[1] * 255);
-    let b = Math.round(adapted[2] * 255);
-    if (filters.invert) {
-      r = 255 - r;
-      g = 255 - g;
-      b = 255 - b;
-    }
-
-    data[i] = r;
-    data[i + 1] = g;
-    data[i + 2] = b;
+    data[i] = Math.round(adapted[0] * 255);
+    data[i + 1] = Math.round(adapted[1] * 255);
+    data[i + 2] = Math.round(adapted[2] * 255);
   }
 
   ctx.putImageData(imageData, 0, 0);
+
+  if (filters.unsharpAmount > 0) {
+    applyUnsharpMask(canvas, filters.unsharpRadius, filters.unsharpAmount);
+  }
+
+  if (filters.invert) {
+    applyInvert(canvas);
+  }
+}
+
+/**
+ * Apply an RGB unsharp-mask pass using a blurred copy of the current canvas contents.
+ *
+ * @param {HTMLCanvasElement} canvas
+ * @param {number} radiusPx
+ * @param {number} amountPercent
+ * @returns {void}
+ */
+function applyUnsharpMask(canvas, radiusPx, amountPercent) {
+  const width = canvas.width;
+  const height = canvas.height;
+  if (width === 0 || height === 0) return;
+
+  const sourceCtx = canvas.getContext("2d");
+  const sourceImage = sourceCtx.getImageData(0, 0, width, height);
+  const sourceData = sourceImage.data;
+
+  const blurCanvas = document.createElement("canvas");
+  blurCanvas.width = width;
+  blurCanvas.height = height;
+  const blurCtx = blurCanvas.getContext("2d");
+  blurCtx.filter = `blur(${Math.max(0.1, radiusPx)}px)`;
+  blurCtx.drawImage(canvas, 0, 0);
+  blurCtx.filter = "none";
+  const blurData = blurCtx.getImageData(0, 0, width, height).data;
+
+  const amount = Math.max(0, amountPercent) / 100;
+  for (let i = 0; i < sourceData.length; i += 4) {
+    sourceData[i] = clampByte(sourceData[i] + amount * (sourceData[i] - blurData[i]));
+    sourceData[i + 1] = clampByte(sourceData[i + 1] + amount * (sourceData[i + 1] - blurData[i + 1]));
+    sourceData[i + 2] = clampByte(sourceData[i + 2] + amount * (sourceData[i + 2] - blurData[i + 2]));
+  }
+
+  sourceCtx.putImageData(sourceImage, 0, 0);
+}
+
+/**
+ * Invert the current canvas contents in-place.
+ *
+ * @param {HTMLCanvasElement} canvas
+ * @returns {void}
+ */
+function applyInvert(canvas) {
+  const ctx = canvas.getContext("2d");
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 255 - data[i];
+    data[i + 1] = 255 - data[i + 1];
+    data[i + 2] = 255 - data[i + 2];
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+/**
+ * Clamp a channel value into the 8-bit byte range.
+ *
+ * @param {number} value
+ * @returns {number}
+ */
+function clampByte(value) {
+  return Math.max(0, Math.min(255, Math.round(value)));
 }
 
 /**

@@ -110,6 +110,21 @@ select {
   gap: 10px;
 }
 
+.status-headline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-busy {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(74, 77, 85, 0.2);
+  border-top-color: rgba(74, 77, 85, 0.9);
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
 .control-group h2,
 .viewer-card h2,
 .collapsible summary {
@@ -200,6 +215,11 @@ select {
   margin-bottom: -2px;
 }
 
+.crop-aspect-readout > span {
+  display: inline-block;
+  padding-bottom: 8px;
+}
+
 output {
   margin-left: 8px;
   font: 0.8rem/1 var(--mono);
@@ -238,6 +258,12 @@ input[type="range"] {
   transform: translateY(-1px);
   border-color: var(--accent);
   background: rgba(74, 77, 85, 0.12);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 #fileInput {
@@ -354,6 +380,18 @@ button:hover:not(:disabled),
   margin-bottom: 14px;
 }
 
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-button {
+  min-width: 28px;
+  padding: 0 8px;
+  line-height: 1;
+}
+
 .viewer-card canvas,
 .viewer-card img {
   display: block;
@@ -388,6 +426,19 @@ body.has-loaded-image .viewer-stage,
 body.has-loaded-image .output-preview {
   background-color: #f3f4f6;
   background-image: none;
+}
+
+body.has-loaded-image .viewer-stage.is-empty,
+body.has-loaded-image .output-preview.is-empty,
+body.has-loaded-image .cross-roi-grid.is-empty {
+  background-color: #edf0f3;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(120, 126, 136, 0.045) 0,
+    rgba(120, 126, 136, 0.045) 8px,
+    rgba(237, 240, 243, 0) 8px,
+    rgba(237, 240, 243, 0) 18px
+  );
 }
 
 .viewer-stage > canvas,
@@ -427,6 +478,7 @@ body.has-loaded-image .output-preview {
   gap: 6px;
   min-height: 0;
   overflow: auto;
+  background-color: #f3f4f6;
 }
 
 .cross-roi-empty {
