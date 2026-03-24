@@ -4,513 +4,434 @@
 
 `plottimation_webtool/` is a browser-based desktop tool for building an animated GIF from a photo or scan of a plotted frame-sheet.
 
-Intended user workflow:
+Typical flow:
 
-1. Load a photographed or scanned frame-sheet.
-2. Detect the paper boundary in the raw image.
+1. Load a photo/scan.
+2. Detect the paper quad in the raw image.
 3. Rectify the page.
 4. Detect the frame-grid region inside the page.
-5. Detect and optionally refine the `+` registration crosses.
-6. Extract each frame.
-7. Preview the animation live in the browser.
-8. Export an animated GIF.
+5. Detect/refine the `+` crosses.
+6. Extract the frames.
+7. Preview the animation live.
+8. Export the GIF.
 
-This tool is the current browser successor to the older `plottimation_GIF_generator/` prototype.
+The current preferred sheet format is all-cross:
 
-## Current registration-mark assumption
+- complete `(cols + 1) x (rows + 1)` lattice of small dark `+` crosses
+- outer frame-grid corners are also `+` crosses
+- no special corner circles in the active path
 
-The current preferred format is all-cross:
-
-- the frame-sheet contains a full `(cols + 1) x (rows + 1)` lattice of small dark `+` crosses
-- the four outer corners of the frame grid are also `+` crosses
-- there are no special corner circles in the current preferred path
-- regions outside the frame grid are expected to be mostly blank paper
-
-Legacy circle-based code still exists in `js/pipeline.js` with `_old` helper names, but it is not the active detector path.
+Legacy circle-based code still exists in `js/pipeline.js` as `_old` helpers, but is not the active detector.
 
 ## Important directories
 
 - `plottimation_webtool/`
-  Current web app.
+  Current app.
 - `plottimation_GIF_generator/`
-  Older proof-of-concept.
+  Older prototype.
 - `grid-animation-svg-generator/`
-  Generates plotted frame-sheet artwork.
+  Generates frame-sheet artwork.
 
-Useful demo/debug assets in `plottimation_webtool/demo/`:
+Useful assets in `plottimation_webtool/demo/`:
 
 - `mySrcImage.jpg`
-  Main demo image in the current all-cross format.
+- `test_2_5x4.jpg`
 - `convolved-rectified-sheet.png`
-  Reference image for the page-level cross-kernel convolution view.
 - `left-sweep.tsv`
-  Historic debug profile data from coarse boundary detection work.
 - `profile.png`
-  ImageJ chart of the left-edge profile.
 - `debug.png`
-  Diagnostic screenshot of the rectified page plus overlays.
 
-## File layout
+## Current JS module layout
 
-- `index.html`
-  App markup and DOM IDs.
-- `style.css`
-  Layout, typography, empty-state stripes, button animations, etc.
 - `js/app.js`
-  Main controller. UI wiring, config reading, cache invalidation, preview rendering, load/export flow, tooltip system.
+  Main orchestrator. Still central, but slimmer than before.
+  Owns:
+  - high-level app startup
+  - shared callbacks/glue between modules
+  - config reading
+  - status text updates
+  - reset logic
+  - rectified preview rendering
+  - raw preview rendering
+  - cross-region grid rendering
+  - GIF export flow
+  - frame extraction / appearance-cache glue
+
 - `js/dom-state.js`
-  DOM references and grouped shared state.
+  DOM lookups and grouped shared state.
+
+- `js/settings-defaults.js`
+  Central source of truth for non-Layout defaults.
+  Includes helpers:
+  - `applyAppearanceDefaults(...)`
+  - `applyCropGeometryDefaults(...)`
+  - `applyNonLayoutDefaults(...)`
+
+- `js/preview-controller.js`
+  Animation-preview-specific behavior:
+  - preview heading sync
+  - preview play/pause button sync
+  - ordered frame count/index mapping
+  - RAF preview loop
+  - drawing current preview frame
+  - rerendering previews after resize/display-only changes
+
+- `js/load-controller.js`
+  Image-load flow:
+  - busy spinner state
+  - object-URL ownership for raw source
+  - file ingestion
+  - source image loading
+  - yield-a-paint before heavy processing
+
+- `js/drag-assets.js`
+  Desktop drag/download behavior:
+  - raw-photo drag asset hookup
+  - rectified-sheet drag blob caching
+  - exported GIF drag hookup
+  - live-preview drag cue / export-button “ring” animation
+  - rectified filename helper
+
+- `js/ui-controls.js`
+  DOM event wiring and tooltip plumbing:
+  - `attachUi(...)`
+  - tooltip registration
+  - tooltip enable/disable
+  - reset-button wiring
+
 - `js/appearance.js`
-  Appearance processing.
+  Appearance pipeline.
+
 - `js/canvas-view.js`
   Canvas sizing/drawing helpers.
+
 - `js/pipeline.js`
-  Vision pipeline and frame extraction.
+  CV pipeline and frame extraction.
+
 - `js/gif.js`
-  Main-thread GIF API.
+  Main-thread GIF encoder API.
+
 - `js/gif.worker.js`
-  Worker encoder. Contains a local fix for the serpentine-dithering left-edge bug.
+  Worker encoder with a local patch for the serpentine-dithering left-edge bug.
+
 - `js/opencv.js`
-  Local OpenCV.js runtime.
+  Local OpenCV runtime.
 
-## Architecture summary
+## Shared state shape
 
-The app is modularized, but still fairly stateful.
-
-### `js/dom-state.js`
-
-Shared state is grouped by concern:
+In `js/dom-state.js`:
 
 - `runtime`
-  OpenCV ready flag, tooltips enabled, busy flag.
+  - `cvReady`
+  - `tooltipsEnabled`
+  - `busy`
+
 - `source`
-  Original image, filename, raw source canvas, detected raw page contour.
+  - `image`
+  - `filename`
+  - `mimeType`
+  - `dragUrl`
+  - `ownedObjectUrl`
+  - `canvas`
+  - `rawPageContour`
+
 - `geometry`
-  Alignment data, rectified canvases, preview grid quad, frame count.
+  - `alignmentInfo`
+  - `baseRectifiedCanvas`
+  - `baseRectifiedPageCanvas`
+  - `pagePreviewGridQuad`
+  - `frameCount`
+
 - `frames`
-  Lazy base-frame cache and adjusted-frame cache.
+  - `base`
+  - `adjustedCache`
+
 - `preview`
-  Rectified diagnostic canvas, current frame index, animation timing, resize timers, paused state, etc.
+  - `adjustedRectifiedCanvas`
+  - `rectifiedDiagnosticCanvas`
+  - `rectifiedCanvas`
+  - `rectifiedDragUrl`
+  - `rectifiedDragBuildId`
+  - `showRectifiedDiagnostic`
+  - `frameIndex`
+  - `lastTime`
+  - `paused`
+  - `loopHandle`
+  - `resizeTimer`
+  - `exportButtonRingTimer`
+  - `appearancePreviewRaf`
+  - `appearancePreviewNeedsRectified`
+
 - `processing`
-  Request IDs, debounce timer, active/pending flags.
+  - `timer`
+  - `active`
+  - `requestId`
+  - `pending`
+
 - `export`
-  Exported GIF blob URL and filename.
+  - `filename`
+  - `url`
 
-### `js/app.js`
+## Active CV pipeline
 
-Owns:
+Implemented in `js/pipeline.js`.
 
-- event listeners
-- default/reset behavior
-- reading config from DOM
-- busy/loading UI
-- preview rendering
-- lazy frame extraction/appearance caching
-- exported GIF lifecycle
-- tooltips
-- accordion behavior
-
-### `js/pipeline.js`
-
-Owns:
-
-- paper detection
-- page rectification
-- active cross-only coarse frame-grid detection
-- cross localization and acceptance logic
-- alignment bounds refinement from corner crosses
-- frame extraction
-
-### `js/appearance.js`
-
-Owns:
-
-- Brightness in OKLab
-- Contrast in OKLab
-- Vibrance in OKLab
-- Color Temperature via Bradford chromatic adaptation
-- Unsharp Mask
-- Invert
-
-## High-level runtime pipeline
-
-## 1. Image loading
-
-User can:
-
-- drag/drop a file
-- choose a file
-- click `Load Demo`
-
-Current load behavior in `js/app.js`:
-
-- all collapsible subpanels are closed
-- all non-Layout settings are reset to defaults
-- all preview panels are cleared to striped empty states
-- the incoming filename is shown immediately in `Raw Photo`
-- busy spinners appear in `Status` and `Raw Photo`
-- status shows `Loading image…`
-- after the image element loads, the raw image is drawn immediately
-- then the app yields one browser paint before running the heavier pipeline
-
-This was added to avoid the previous “the app appears hung for several seconds” UX.
-
-## 2. Paper detection
-
-Implemented in `runPipeline(...)` in `js/pipeline.js`.
+### 1. Paper detection
 
 Steps:
 
-1. Convert raw image to grayscale.
-2. Estimate threshold using:
+1. raw image -> grayscale
+2. threshold using:
    - `Offset Peak`, or
    - `Otsu`
-3. Apply threshold to segment bright paper from darker surroundings.
-4. Find the largest external contour.
-5. Approximate to 4 corners.
-6. Order corners.
+3. segment bright paper
+4. largest external contour
+5. approximate to 4 corners
+6. order corners
 
-The ordered page quad is drawn over `Raw Photo` in semi-transparent lime.
+The page quad is shown over `Raw Photo` in semi-transparent lime.
 
-If later stages fail, partial debug results can still propagate back:
+### 2. Page warps
 
-- raw page contour
-- page-warp preview
-
-so failure does not imply paper detection failed.
-
-## 3. Page warps
-
-Two page warps are still used:
+Two page warps still exist:
 
 - `Detection warp`
   fixed at `paperWidth * 100` by `paperHeight * 100`
 - `Extraction warp`
-  estimated from raw page-quad area to preserve more source detail
+  estimated from raw page-quad area
 
-The status panel reports both sizes.
+Status reports both.
 
-## 4. Coarse frame-grid detection (active path)
+### 3. Coarse frame-grid detection
 
-Current active detector is cross-only.
+Active detector is cross-only.
 
 Current algorithm:
 
-1. Start with the rectified full page.
-2. Convert to grayscale.
-3. Inset by `Search Inset Margin`.
-4. Convolve with the custom 25x25 unnormalized `crossKernel`.
-5. Clamp convolution response to `[0, 255]` after zeroing negatives.
-6. Build 1D average profiles over columns and rows.
-7. From left/right/top/bottom, find the first sustained run above:
+1. start with rectified full page
+2. grayscale
+3. inset by `Search Inset Margin`
+4. convolve with unnormalized 25x25 `crossKernel`
+5. clamp response to `[0,255]` after zeroing negatives
+6. build 1D average row/column profiles
+7. from each side, find first sustained run above:
    - `Boundary Threshold`
    - for `Boundary Persistence` pixels
-8. Use those threshold-crossing positions directly.
+8. use those threshold-crossing positions directly
 
 Important:
 
-- there is no peak-refinement step anymore
-- there is no extra outward padding step anymore
-- earlier experiments with grid-size auto-detection were removed
-- no `Detected grid: ...` line is reported anymore
-- no grid-dimension sweep console logging remains
+- no peak refinement anymore
+- no extra outward padding anymore
+- old experimental grid-size auto-detection code was removed
+- no `Detected grid: ...` line remains
 
-## 5. Rectified page preview
+### 4. Rectified Sheet panel
 
-The `Rectified Sheet` panel shows the full rectified page, not the final cropped frame-grid image.
+Shows the full rectified page, not the final cropped grid image.
 
-Clicking the panel toggles between:
+Clicking it toggles:
 
-- normal rectified-page preview
+- normal rectified-page view
 - page-level cross-kernel convolution diagnostic view
 
-Overlays on `Rectified Sheet`:
+Overlays:
 
 - blue rectangle:
   `Search Inset Margin`
 - red quadrilateral:
-  detected coarse frame-grid bounds
+  coarse frame-grid bounds
 
-## 6. Cross localization
+### 5. Cross localization
 
-After coarse grid rectification, the app samples square cross ROIs at expected lattice locations.
+After coarse rectification, the app samples square ROIs at expected lattice positions.
 
-Important modes:
+Modes:
 
 - `Use cross-based subpixel alignment` checked:
-  refine cross centers and use them for frame extraction
+  refine cross positions and use them
 - unchecked:
-  do not refine; show ROIs centered on the nominal lattice locations actually used
+  do not refine; still show ROIs centered on the nominal positions actually used
 
 Alternate localizer:
 
-- `Detect crosses with convolution` checkbox
+- `Detect crosses with convolution`
 
-When unchecked:
+Unchecked:
 
 - thresholded ROI
-- row/column profiles through the ROI
+- row/column profiles
 - weighted peak localization
 
-When checked:
+Checked:
 
 - grayscale ROI
 - convolve ROI with same 25x25 `crossKernel`
-- use `cv.BORDER_CONSTANT` so outside-ROI pixels are zero, not replicated
-- clamp convolution response to `[0,255]`
-- build row/column profiles from that positive response
-- weighted peak localization on those profiles
+- `cv.BORDER_CONSTANT` so outside-ROI pixels are zero
+- clamp response to `[0,255]`
+- row/column profiles from positive response
+- weighted peak localization
 
-Acceptance logic is still separate from localization.
-
-Current acceptance metrics include:
-
-- displacement from expected center
-- `colContrast`
-- `rowContrast`
-- `darkFrac`
+Acceptance logic is separate from localization.
 
 Current max `darkFrac`:
 
 - normal mode: `0.30`
 - convolution mode: `0.50`
 
-This was loosened because thicker/darker crosses were being correctly localized but rejected for containing “too much dark ink”.
+### 6. Cross Regions panel
 
-## 7. Cross Regions panel
+Shows `(cols + 1) x (rows + 1)` ROI tiles.
 
-`Cross Regions` shows `(cols + 1) x (rows + 1)` ROI tiles.
+Behavior:
 
-Current behavior:
-
-- all-cross mode includes corner tiles too
+- corner tiles included in all-cross mode
 - when alignment is disabled, tiles remain visible but hover text is suppressed
-- tiles are displayed raw, without decorative rounded frames
+- tiles render raw, no decorative rounded frame
 
-Current tile tooltip content when alignment is enabled:
+Tooltip metrics when alignment is enabled:
 
 - accepted/rejected
 - `col`
 - `row`
 - `ink`
-- and, in convolution mode, `conv`
+- in convolution mode also `conv`
 
 Current `conv` tooltip metric:
 
-For a given ROI:
-
 1. grayscale ROI
-2. 25x25 zero-padded convolution
+2. zero-padded 25x25 convolution
 3. clamp each convolved pixel to `[0,255]`
-4. divide each by `255`
-5. average over the ROI area
+4. divide by `255`
+5. average over ROI area
 
-So `conv` is now a normalized `0..1` score and is shown with 4 decimal places.
+So `conv` is normalized to `0..1`.
 
-## 8. Alignment bounds refinement
+### 7. Frame extraction
 
-In all-cross mode, after cross detection:
+Quad-based and subpixel-aware.
 
-- `refineAlignmentBoundsFromCornerCrosses(...)`
+Each frame uses four lattice points:
 
-shrinks/tightens the working bounds from the detected corner crosses.
+- refined cross if available
+- nominal fallback if not
 
-This affects frame extraction geometry.
+Extraction uses OpenCV perspective warp.
 
-## 9. Frame extraction
+## Appearance pipeline
 
-Frame extraction is quad-based.
+Implemented in `js/appearance.js`.
 
-Each frame uses four lattice markers:
-
-- refined detected cross if available
-- fallback nominal grid point if not
-
-Extraction uses full perspective warp in OpenCV.
-
-## 10. Appearance pipeline
-
-Current order in `js/appearance.js`:
+Order:
 
 1. Brightness on OKLab `L`
 2. Contrast S-curve on OKLab `L`
 3. Vibrance on OKLab chroma
-4. Color Temperature via Bradford chromatic adaptation after returning from OKLab
+4. Color Temperature via Bradford chromatic adaptation after leaving OKLab
 5. Unsharp Mask
 6. Invert
 
-Important:
+Current UI controls:
 
-- appearance changes are lazy
-- they do not rerun geometry/CV
-- they only invalidate appearance caches
+- Brightness
+- Contrast
+- Vibrance
+- Color Temperature
+- Unsharp Mask Amount
+- Unsharp Mask Radius
+- Invert
+- Resampling
 
-### Unsharp Mask
+Defaults are centralized in `js/settings-defaults.js`.
 
-Current UI:
+## Lazy preview / export architecture
 
-- `Unsharp Mask Amount`
-- `Unsharp Mask Radius`
+### Geometry-affecting changes
 
-Defaults:
+Rerun the full pipeline:
 
-- Amount `0.0`
-- Radius `1.0`
+- layout values
+- thresholding and coarse detector controls
+- alignment toggles and ROI sizing
 
-Range:
+### Frame-lazy changes
 
-- Amount `0..500`
-- Radius `0.1..100`
+Do not rerun CV:
 
-Implemented as a post-color-adjustment RGB unsharp mask using a blurred copy of the image.
-
-## 11. Lazy preview architecture
-
-Preview is intentionally lazy.
-
-### Geometry-affecting controls
-
-These rerun the full pipeline:
-
-- paper detection settings
-- cross alignment settings
-- frame rows/cols
-- paper size
-
-### Frame-lazy controls
-
-These invalidate extracted-frame caches but do not rerun CV:
-
-- resampling
 - crop values
-- post-crop geometry transforms
+- flip/rotate
 - output scale
+- resampling
 - reverse order
+- ping-pong
 
-### Appearance-lazy controls
+### Appearance-lazy changes
 
-These invalidate appearance caches only:
+Do not rerun CV:
 
 - brightness
 - contrast
 - vibrance
-- color temperature
-- unsharp
+- temperature
+- unsharp mask
 - invert
 
-Core lazy functions in `app.js`:
+Core frame helpers live in `app.js`:
 
 - `getBaseFrameCanvas(index)`
 - `getAdjustedFrameCanvas(index)`
 
-Full materialization of all adjusted frames happens only during GIF export.
+Preview is lazy. Full realization mostly happens during GIF export.
 
-## 12. Crop & Geometry
+## GIF export
 
-The old `Crop Output` panel is now `Crop & Geometry`.
+Still orchestrated in `app.js`.
 
-Controls:
-
-- Crop Left / Right / Top / Bottom
-- Aspect Ratio readout
-- Flip Horizontal
-- Flip Vertical
-- Rotate 90° CW
-
-The `Aspect Ratio` readout:
-
-- appears below crop fields
-- shows 3 decimal places
-- includes dimensions in parentheses
-- reflects rotation when `Rotate 90° CW` is checked
-
-Example:
-
-- `Aspect Ratio: 1.214 (489×403)`
-
-Transforms are applied after cropping and before output scaling.
-
-## 13. GIF export and preview
-
-Export uses `gif.js` + `gif.worker.js`.
-
-Current export options:
+Export options:
 
 - Frame Rate
 - Reverse Order
+- Ping-Pong (doubles file size)
 - Output Scale
-- Encoding Quality (lower is better)
+- Encoding Quality
 - Dithering
 - Use Global Palette
 
-### Reverse Order
+`Ping-Pong` sequence is:
 
-- affects both live preview and exported GIF
+- `1, 2, 3, 4, 5, 4, 3, 2`
 
-### Output Scale
+Endpoints are intentionally not duplicated.
 
-- applied after crop + post-crop geometry
-- affects preview and export
-- preview panel size stays visually the same; the content is just scaled
+Preview and export both use the same ordered-frame logic from `js/preview-controller.js`.
 
-### Dithering options
+Export button:
 
-Current UI labels:
+- shows progress like `Export GIF ...50%`
 
-- `Off`
-- `Standard (Floyd-Steinberg)`
-- `Smooth (Floyd-Steinberg Serpentine)` default
-- `Retro (Atkinson)`
+After export:
 
-### GIF worker patch
+- panel title becomes `GIF Output`
+- actual GIF is shown
 
-`js/gif.worker.js` contains a local fix for a bug in serpentine dithering where the reverse-row loop skipped `x = 0`, producing alternating black pixels in the leftmost column.
+After any relevant setting change:
 
-### Export button behavior
+- exported GIF is revoked
+- live preview returns
+- panel title becomes `Animation Preview`
 
-- button shows progress while encoding:
-  `Export GIF ...50%`
-- after export finishes:
-  - actual GIF is shown in preview panel
-  - panel title changes to `GIF Output`
-- when any output-affecting setting changes:
-  - exported GIF is revoked and hidden
-  - live preview returns
-  - panel title changes back to `Animation Preview`
+## Current UI structure
 
-### Animation Preview panel
+### Non-collapsible sections
 
-Current header controls:
+- Photo
+- Status
 
-- play/pause button
-- `Export GIF`
-
-Play/pause button:
-
-- uses Unicode:
-  - pause `⏸` while playing
-  - play `⏵` while paused
-- only affects live preview playback
-
-Live preview drag behavior:
-
-- not downloadable
-- drag attempt is cancelled
-- `Export GIF` button performs a brief “ring” animation to direct the user
-
-Exported GIF image:
-
-- draggable
-- uses friendly filename like `mySrcImage_anim_20260315_012237_q10.gif`
-
-## 14. UI structure and defaults
-
-### Subpanels
-
-Collapsible panels:
+### Collapsible sections
 
 - Layout
-- Detection & Alignment
+- Page & Grid Detection
+- Frame Alignment
 - Appearance
 - Crop & Geometry
 - GIF Export Options
@@ -519,227 +440,261 @@ Accordion behavior:
 
 - opening one closes the others
 
-New image load behavior:
+Loading a new image:
 
-- all collapsible panels are closed
+- closes all collapsible panels
+- resets all non-Layout controls to defaults
+- preserves Layout values
 
-### Non-Layout controls reset on new image load
+### Photo section
 
-Loading a new image now resets all non-Layout controls to startup defaults.
+Buttons:
 
-Layout is preserved:
+- `Load Demo 1` -> `demo/mySrcImage.jpg`
+- `Load Demo 2` -> `demo/test_2_5x4.jpg`
 
-- Frame Columns
-- Frame Rows
-- Paper Size / Custom dimensions
+Drop-zone text:
 
-Everything else resets.
+- `Drop a photo or scan here,`
+- `or click to choose a file.`
+- `Separate frames with small crosses.`
+- `Page should be in landscape orientation.`
 
-### Current important defaults
+### Page & Grid Detection
 
-Detection & Alignment:
+- Thresholding Method
+- Thresholding Offset
+- Search Inset Margin
+- Boundary Threshold
+- Boundary Persistence
 
-- Thresholding Method: `Offset Peak`
-- Thresholding Offset: `-20`
-- Search Inset Margin: `80`
-- Boundary Threshold: `8.0`
-- Boundary Persistence: `7`
-- Cross Region Size slider: `52`
-- Use cross-based subpixel alignment: `true`
-- Detect crosses with convolution: `false`
+### Frame Alignment
 
-Appearance:
+- Cross Region Size
+- Use cross-based subpixel alignment
+- Detect crosses with convolution
 
-- Brightness: `0`
-- Contrast: `0`
-- Vibrance: `0`
-- Color Temperature: `0`
-- Unsharp Mask Amount: `0`
-- Unsharp Mask Radius: `1.0`
-- Invert: `false`
-- Resampling: `linear`
+### Crop & Geometry
 
-Crop & Geometry:
+- crop left/right/top/bottom
+- Aspect Ratio readout
+- Flip Horizontal
+- Flip Vertical
+- Rotate 90° CW
 
-- all crop values `0`
-- all geometry toggles `false`
+Aspect ratio readout:
 
-GIF Export Options:
+- below crop fields
+- 3 decimals
+- includes dimensions
+- respects rotation
 
-- Frame Rate: `20`
-- Reverse Order: `false`
-- Output Scale: `1.00`
-- Encoding Quality: `10`
-- Dithering: `FloydSteinberg-serpentine`
-- Use Global Palette: `false`
+### Animation Preview header
 
-## 15. Tooltips
+- play/pause button
+- Export GIF button
 
-Tooltips are centralized in `TOOLTIP_TEXT` in `js/app.js`.
+Play/pause button uses:
 
-Notes:
+- pause `⏸` while playing
+- play `⏵` while paused
 
-- most controls, headings, buttons, and preview surfaces have entries
-- if a tooltip string is empty, no tooltip is shown
-- tooltips can be globally enabled/disabled with the Status button
+## Load behavior
+
+Now largely owned by `js/load-controller.js`.
+
+When loading a new image:
+
+- busy spinners appear in `Status` and `Raw Photo`
+- Status shows `Loading image…`
+- raw header filename updates immediately
+- all preview panels clear to striped empty states
+- image is drawn to `Raw Photo` as soon as it loads
+- then the app yields one paint before starting heavy processing
+
+This was done to avoid the old “the app seems frozen” UX.
+
+## Drag / download behavior
+
+Now largely owned by `js/drag-assets.js`.
+
+### Raw Photo
+
+- draggable
+- prefers original source URL/file when available
+- therefore drag is fast and filename is the original one
+
+### Rectified Sheet
+
+- draggable
+- has no original source file, so a cached PNG blob URL is built in advance
+- dragging uses the cached blob instead of synchronous canvas encoding
+- exported filename is source filename with `-rectified` inserted before extension
+
+### Animation Preview live canvas
+
+- not downloadable
+- drag is cancelled
+- Export GIF button performs a “ring” animation cue
+
+### Exported GIF image
+
+- draggable
+- uses friendly sanitized GIF filename
+
+## Tooltips
+
+Tooltip strings still live in `TOOLTIP_TEXT` in `js/app.js`.
+
+Registration and enable/disable plumbing now live in `js/ui-controls.js`.
+
+Behavior:
+
+- most controls/headings/buttons/panels have entries
+- empty string means no tooltip
+- global tooltips can be toggled
 - exception:
-  `gifPreviewCanvas` always keeps its tooltip, even if tooltips are globally disabled
+  live preview canvas always keeps its tooltip
 
-## 16. Status panel
+## Status panel
 
-Status is built in `js/pipeline.js`.
+Status text is still composed in `js/pipeline.js` and written by `app.js`.
 
-Current status text may include:
+May include:
 
 - raw photo size
 - paper threshold
 - largest contour area
-- detection warp size
-- extraction warp size
+- detection warp
+- extraction warp
 - rectified sheet size
 - animation size
 - frame source
 - frames extracted `actual/expected`
 - cross alignment summary
 
-Notable changes:
+Notable current behavior:
 
-- sizes use `×`, not `x`
-- `Grid detector: cross-only` was removed
-- old generic error text was replaced with:
+- uses `×`, not `x`
+- no `Grid detector: cross-only` line anymore
+- page-detection failure wording is:
   `Unable to find page boundary. Try adjusting the Thresholding Offset and/or the Thresholding Method.`
-- low-level error detail is appended in parentheses
+- low-level detail is appended in parentheses
 
-## 17. Preview empty states
+## Empty states
 
-Preview panels use subtle diagonal stripes for empty states.
-
-Panels affected:
+Striped empty states exist for:
 
 - Raw Photo
 - Rectified Sheet
 - Cross Regions
 - Animation Preview
 
-Current behavior:
+On new image load:
 
-- before content is ready, show stripes
-- when a new image begins loading, all panels are cleared back to stripes
-- if a newly loaded image fails later in the pipeline, stale content is not left on screen
+- all four panels reset immediately to stripes
 
-## 18. Raw Photo panel details
+## Current defaults source
 
-- filename appears in header immediately when load starts
-- busy spinner appears in header while loading/processing
-- drag-downloading of Raw Photo is enabled
+Defaults are now centralized in `js/settings-defaults.js`.
 
-## 19. Rectified Sheet details
+This is the first step toward making mobile-specific defaults or modes easier later.
 
-- drag-downloading is disabled
-- click toggles page/convolution view
+Important defaults:
 
-## 20. Known preserved-but-not-primary code paths
+- Frame Columns: `5`
+- Frame Rows: `4`
+- Paper preset: `letter`
 
-Still in code, but not user-facing:
+Detection:
 
-- old circle-based grid detector
-- `useRectifiedAsSource` support in pipeline/config, hardwired to `false` in UI config
+- Threshold method: `offset-peak`
+- Threshold offset: `-20`
+- Search Inset Margin: `80`
+- Boundary Threshold: `8.0`
+- Boundary Persistence: `7`
+- Cross ROI slider: `52`
+- cross alignment: `true`
+- convolution localization: `false`
 
-## 21. Recent UX improvements
+Appearance:
 
-Already implemented:
+- brightness/contrast/vibrance/temperature: `0`
+- unsharp amount: `0`
+- unsharp radius: `1.0`
+- invert: `false`
+- resampling: `linear`
 
-- busy spinner in `Status`
-- busy spinner in `Raw Photo`
-- raw image paints before heavy processing starts
-- new-image load closes subpanels
-- new-image load resets non-Layout settings
-- new-image load clears stale previews immediately
-- play/pause button in animation preview
+Crop & Geometry:
 
-## 22. Mobile-friendly roadmap
+- all crop values `0`
+- all geometry toggles `false`
 
-This app is still desktop-first. A future mobile adaptation should probably proceed in phases.
+GIF export:
 
-### Phase 1: Responsive layout
+- fps: `20`
+- reverse order: `false`
+- ping-pong: `false`
+- output scale: `1.00`
+- quality: `10`
+- dithering: `FloydSteinberg-serpentine`
+- global palette: `false`
 
-Goals:
+## Mobile-friendly roadmap
 
-- single-column layout on narrow screens
-- stacked preview cards
-- controls remain readable and tappable
+Still relevant.
 
-Likely work:
+Best next phases:
 
-- add breakpoints to `style.css`
-- collapse `workspace` from 2x2 grid into 1-column stack on phones
-- make sidebar become a top section instead of a left rail
+1. Responsive layout
+   - collapse 2x2 workspace into 1-column on narrow screens
+   - sidebar becomes top section
 
-### Phase 2: Touch-first UX
+2. Touch-first UX
+   - reduce hover dependence
+   - larger touch targets
+   - possibly hide diagnostics like Cross Regions by default
 
-Goals:
+3. Performance guardrails
+   - large-image warnings / optional downscaling
+   - more explicit long-operation feedback
+   - mobile-friendly export limits
 
-- remove reliance on hover for essential understanding
-- make upload the primary action
-- avoid drag-based assumptions
+4. Simplified control model
+   - `Basic` vs `Advanced`
+   - keep only essential controls visible by default on phones
 
-Likely work:
+The recent refactors were done specifically to support this direction:
 
-- move critical guidance into inline text, not only tooltips
-- make all buttons/sliders/toggles larger
-- consider hiding advanced diagnostics like `Cross Regions` behind a toggle on small screens
+- `settings-defaults.js`
+- `preview-controller.js`
+- `load-controller.js`
+- `drag-assets.js`
+- `ui-controls.js`
 
-### Phase 3: Performance guardrails
+## Good next files to edit
 
-Mobile risk is mostly memory and CPU.
-
-Likely work:
-
-- warn on very large input images
-- optionally auto-downscale preview/processing resolution on mobile
-- reduce worker count or export defaults for mobile
-- make long operations more explicit with visible progress UI
-
-### Phase 4: Simplified control model
-
-The desktop UI has many advanced controls.
-
-Likely work:
-
-- create `Basic` vs `Advanced` sections
-- keep only essential controls visible by default on mobile:
-  - upload
-  - frame rows/cols
-  - paper size
-  - a few detection controls
-  - export
-
-### Desktop improvements that also help mobile
-
-Already discussed as worthwhile:
-
-- stronger inline guidance instead of hover-only guidance
-- clearer processing/export states
-- better large-image guardrails
-- more disciplined grouping of advanced controls
-
-## 23. Good next places to modify code
-
-- new UI behavior:
-  `js/app.js`
-- new DOM/control:
-  `index.html`, `js/dom-state.js`, `js/app.js`
-- CV / page or cross detector:
+- new CV behavior:
   `js/pipeline.js`
-- appearance processing:
+- appearance math:
   `js/appearance.js`
-- preview layout / styling:
-  `style.css`
+- preview behavior:
+  `js/preview-controller.js`
+- load behavior:
+  `js/load-controller.js`
+- drag/download behavior:
+  `js/drag-assets.js`
+- control wiring/tooltips:
+  `js/ui-controls.js`
+- defaults:
+  `js/settings-defaults.js`
+- remaining app orchestration:
+  `js/app.js`
 
-## 24. Important caution areas
+## Main caution areas
 
-- `js/app.js` still owns many responsibilities, even after modularization
-- cache invalidation bugs are easy to introduce
-- `gif.worker.js` contains a local bugfix; do not replace casually
-- page-level cross-kernel convolution and ROI-level convolution are separate concerns
-- some older experimental code was intentionally removed; do not reintroduce row/column auto-detection without a deliberate decision
+- `app.js` is smaller than before, but still central
+- cache invalidation bugs remain easy to introduce
+- `gif.worker.js` contains a local bugfix; do not casually replace it
+- page-level cross-kernel convolution and ROI-level convolution are separate concepts
+- old grid-size auto-detection experiments were intentionally removed

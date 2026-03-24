@@ -24,6 +24,7 @@ export const dom = {
   loadDemoButton: document.querySelector("#loadDemoButton"),
   loadDemoButton2: document.querySelector("#loadDemoButton2"),
   previewPlayPauseButton: document.querySelector("#previewPlayPauseButton"),
+  exportZipButton: document.querySelector("#exportZipButton"),
   exportButton: document.querySelector("#exportButton"),
   paperPreset: document.querySelector("#paperPreset"),
   customPaperFields: document.querySelector("#customPaperFields"),

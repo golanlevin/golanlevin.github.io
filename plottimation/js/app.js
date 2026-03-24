@@ -1,6 +1,36 @@
 import { PAPER_PRESETS, dom, state } from "./dom-state.js";
+import { SETTINGS_DEFAULTS, applyAppearanceDefaults, applyCropGeometryDefaults, applyNonLayoutDefaults } from "./settings-defaults.js";
 import { applyVisualAdjustments, hasAppearanceAdjustments } from "./appearance.js";
 import { drawImageToCanvas, renderCanvasFit, resizeCanvasToBox } from "./canvas-view.js";
+import {
+  setBusyState as syncBusyState,
+  releaseOwnedSourceUrl as releaseSourceUrl,
+  handleFile as loadFileSource,
+  loadImageSource as loadImageSourceViaController,
+} from "./load-controller.js";
+import {
+  releaseRectifiedDragUrl as releaseRectifiedDragAsset,
+  primeRectifiedDragAsset as buildRectifiedDragAsset,
+  makeCanvasDraggable as attachCanvasDragAsset,
+  makeGifImageDraggable as attachGifImageDragAsset,
+  makeLivePreviewDragCue as attachLivePreviewDragCue,
+  makeRectifiedFilename,
+} from "./drag-assets.js";
+import {
+  attachUi as wireUiControls,
+  initializeTooltips as registerTooltips,
+  setTooltipsEnabled as applyTooltipState,
+} from "./ui-controls.js";
+import {
+  updateAnimationPreviewHeading as syncAnimationPreviewHeading,
+  updatePreviewPlayPauseButton as syncPreviewPlayPauseButton,
+  getOrderedFrameCount as getPreviewOrderedFrameCount,
+  getOrderedFrameIndex as getPreviewOrderedFrameIndex,
+  startGifPreviewLoop as startPreviewLoop,
+  drawCurrentGifPreview as drawPreviewFrame,
+  rerenderPreviews as rerenderPreviewSurfaces,
+} from "./preview-controller.js";
+import { createStoredZip } from "./zip-builder.js";
 import {
   runPipeline,
   estimateCrossRoiSidePx,
@@ -70,22 +100,13 @@ const TOOLTIP_TEXT = {
   "#crossRoiGrid": "Per-cross diagnostic regions used to inspect registration mark detection.",
   "#animationPreviewHeading": "Live animation preview using the current settings.",
   "#previewPlayPauseButton": "Pause or resume the live animation preview.",
+  "#exportZipButton": "Download a ZIP archive containing the current animation frames as PNG files.",
   "#exportButton": "Render and download the animated GIF using the current settings.",
   "#gifPreviewCanvas": "This is a live animation preview. Click 'Export GIF' to generate the GIF.",
   "#gifImage": "Most recently exported GIF preview image.",
 };
 
 init();
-
-/**
- * Keep the Animation Preview panel title in sync with whether it is showing the live canvas
- * or a completed exported GIF.
- *
- * @returns {void}
- */
-function updateAnimationPreviewHeading() {
-  dom.animationPreviewHeading.textContent = state.export.url ? "GIF Output" : "Animation Preview";
-}
 
 /**
  * Set the Export GIF button label, optionally with an in-progress percentage suffix.
@@ -100,14 +121,140 @@ function updateExportButtonLabel(progressPercent = null) {
 }
 
 /**
- * Keep the preview playback button synchronized with the current play/pause state.
+ * Small local wrapper around the preview module's heading sync.
+ *
+ * @returns {void}
+ */
+function updateAnimationPreviewHeading() {
+  syncAnimationPreviewHeading(dom, state);
+}
+
+/**
+ * Small local wrapper around the preview module's play/pause-button sync.
  *
  * @returns {void}
  */
 function updatePreviewPlayPauseButton() {
-  const paused = !!state.preview.paused;
-  dom.previewPlayPauseButton.textContent = paused ? "\u23f5" : "\u23f8";
-  dom.previewPlayPauseButton.setAttribute("aria-label", paused ? "Play animation" : "Pause animation");
+  syncPreviewPlayPauseButton(dom, state);
+}
+
+/**
+ * Small local wrapper around the preview module's sequence-length logic.
+ *
+ * @returns {number}
+ */
+function getOrderedFrameCount() {
+  return getPreviewOrderedFrameCount(state, readConfig);
+}
+
+/**
+ * Small local wrapper around the preview module's frame-order mapping.
+ *
+ * @param {number} previewIndex
+ * @returns {number}
+ */
+function getOrderedFrameIndex(previewIndex) {
+  return getPreviewOrderedFrameIndex(previewIndex, state, readConfig);
+}
+
+/**
+ * Draw the current preview frame via the dedicated preview controller.
+ *
+ * @returns {void}
+ */
+function drawCurrentGifPreview() {
+  drawPreviewFrame({ dom, state, getAdjustedFrameCanvas, readConfig });
+}
+
+/**
+ * Start the preview loop via the dedicated preview controller.
+ *
+ * @returns {void}
+ */
+function startAnimationPreviewLoop() {
+  startPreviewLoop({ state, readConfig, drawCurrentGifPreview });
+}
+
+/**
+ * Rerender visible previews after display-only changes such as resize.
+ *
+ * @returns {void}
+ */
+function rerenderPreviews() {
+  rerenderPreviewSurfaces({ state, renderRawPreview, renderRectifiedPreview, drawCurrentGifPreview });
+}
+
+/**
+ * Small local wrapper around the ui-controls module's tooltip state toggler.
+ *
+ * @param {boolean} enabled
+ * @returns {void}
+ */
+function setTooltipsEnabled(enabled) {
+  applyTooltipState({
+    dom,
+    state,
+    enabled,
+    previewTooltipText: TOOLTIP_TEXT["#gifPreviewCanvas"] || "",
+  });
+}
+
+/**
+ * Small local wrapper around the load controller's busy-state sync.
+ *
+ * @param {boolean} busy
+ * @returns {void}
+ */
+function setBusyState(busy) {
+  syncBusyState(dom, state, busy);
+}
+
+/**
+ * Small local wrapper around the drag-assets module's rectified drag-URL cleanup.
+ *
+ * @returns {void}
+ */
+function releaseRectifiedDragUrl() {
+  releaseRectifiedDragAsset(state);
+}
+
+/**
+ * Small local wrapper around the drag-assets module's rectified drag-asset builder.
+ *
+ * @param {HTMLCanvasElement | null} rectifiedCanvas
+ * @returns {void}
+ */
+function primeRectifiedDragAsset(rectifiedCanvas) {
+  buildRectifiedDragAsset(state, rectifiedCanvas);
+}
+
+/**
+ * Small local wrapper around the drag-assets module's generic canvas drag hookup.
+ *
+ * @param {HTMLCanvasElement} canvas
+ * @param {() => {url?:string, filename:string, mimeType:string, canvas?:HTMLCanvasElement | null} | null} getDragAsset
+ * @returns {void}
+ */
+function makeCanvasDraggable(canvas, getDragAsset) {
+  attachCanvasDragAsset(canvas, getDragAsset);
+}
+
+/**
+ * Small local wrapper around the drag-assets module's exported-GIF drag hookup.
+ *
+ * @returns {void}
+ */
+function makeGifImageDraggable() {
+  attachGifImageDragAsset(dom, state);
+}
+
+/**
+ * Small local wrapper around the drag-assets module's live-preview drag cue hookup.
+ *
+ * @returns {void}
+ */
+function makeLivePreviewDragCue() {
+  attachLivePreviewDragCue(dom, state);
 }
 
 /**
@@ -142,6 +289,7 @@ function clearDerivedPreviews() {
   dom.crossRoiGrid.innerHTML = "";
   dom.crossRoiGrid.classList.add("is-empty");
   dom.exportButton.disabled = true;
+  dom.exportZipButton.disabled = true;
   updateAnimationPreviewHeading();
   updateExportButtonLabel();
 }
@@ -164,49 +312,6 @@ function clearAllPreviews() {
   dom.rawCanvas.parentElement?.classList.add("is-empty");
 
   clearDerivedPreviews();
-}
-
-/**
- * Release any blob URL that the app currently owns for raw-photo drag/download behavior.
- *
- * @returns {void}
- */
-function releaseOwnedSourceUrl() {
-  if (!state.source.ownedObjectUrl) return;
-  URL.revokeObjectURL(state.source.ownedObjectUrl);
-  state.source.ownedObjectUrl = "";
-}
-
-/**
- * Revoke the cached blob URL used for fast rectified-sheet drag/download.
- *
- * @returns {void}
- */
-function releaseRectifiedDragUrl() {
-  if (!state.preview.rectifiedDragUrl) return;
-  URL.revokeObjectURL(state.preview.rectifiedDragUrl);
-  state.preview.rectifiedDragUrl = "";
-}
-
-/**
- * Build a cached PNG blob URL for the current rectified-sheet canvas.
- *
- * This lets drag/download use a prebuilt object URL instead of blocking on synchronous
- * canvas encoding during `dragstart`.
- *
- * @param {HTMLCanvasElement | null} rectifiedCanvas
- * @returns {void}
- */
-function primeRectifiedDragAsset(rectifiedCanvas) {
-  state.preview.rectifiedDragBuildId += 1;
-  const buildId = state.preview.rectifiedDragBuildId;
-  releaseRectifiedDragUrl();
-  if (!rectifiedCanvas || !rectifiedCanvas.width || !rectifiedCanvas.height) return;
-  rectifiedCanvas.toBlob((blob) => {
-    if (buildId !== state.preview.rectifiedDragBuildId) return;
-    if (!blob) return;
-    state.preview.rectifiedDragUrl = URL.createObjectURL(blob);
-  }, "image/png");
 }
 
 /**
@@ -237,31 +342,61 @@ function init() {
 
   updateSliderReadouts();
   attachResizeHandler();
-  startGifPreviewLoop();
+  startAnimationPreviewLoop();
 }
 
 /**
- * Toggle the small status-spinner so long-running image operations provide immediate feedback.
+ * Small local wrapper around the ui-controls module's event wiring.
  *
- * @param {boolean} busy
  * @returns {void}
  */
-function setBusyState(busy) {
-  state.runtime.busy = !!busy;
-  dom.statusBusy.hidden = !busy;
-  dom.rawBusy.hidden = !busy;
+function attachUi() {
+  wireUiControls({
+    dom,
+    state,
+    makeCanvasDraggable,
+    makeRectifiedFilename,
+    makeLivePreviewDragCue,
+    makeGifImageDraggable,
+    handleFile,
+    loadDemo1: () => { void loadImageSource("demo/mySrcImage.jpg", "mySrcImage.jpg"); },
+    loadDemo2: () => { void loadImageSource("demo/test_2_5x4.jpg", "test_2_5x4.jpg"); },
+    renderRectifiedPreview,
+    resetAppearanceControls,
+    resetTrimControls,
+    toggleTooltips: () => setTooltipsEnabled(!state.runtime.tooltipsEnabled),
+    togglePreviewPaused: () => {
+      state.preview.paused = !state.preview.paused;
+      state.preview.lastTime = performance.now();
+      updatePreviewPlayPauseButton();
+      drawCurrentGifPreview();
+    },
+    syncPaperPresetUi,
+    updateSliderReadouts,
+    scheduleProcess,
+    revokeGifUrl,
+    invalidateAppearanceCache,
+    scheduleAppearancePreviewUpdate,
+    cancelInFlightProcessing,
+    invalidateFrameCaches,
+    drawCurrentGifPreview,
+    exportGif,
+    exportZip,
+  });
 }
 
 /**
- * Yield long enough for the browser to paint any newly drawn preview canvases.
+ * Small local wrapper around the ui-controls module's tooltip registration.
  *
- * This is used after loading a new source image so the Raw Photo preview appears
- * before the heavier OpenCV pipeline starts running.
- *
- * @returns {Promise<void>}
+ * @returns {void}
  */
-async function waitForNextPaint() {
-  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+function initializeTooltips() {
+  registerTooltips({
+    tooltipText: TOOLTIP_TEXT,
+    state,
+    dom,
+    applyTooltipState: setTooltipsEnabled,
+  });
 }
 
 /**
@@ -299,364 +434,12 @@ function collapseAllPanels() {
 }
 
 /**
- * Attach all DOM event listeners and classify controls by what they invalidate.
- *
- * @returns {void}
- */
-function attachUi() {
-  // Raw-photo drag-out is enabled for convenient access to the uploaded source image.
-  makeCanvasDraggable(dom.rawCanvas, () => {
-    if (state.source.dragUrl && state.source.filename) {
-      return {
-        url: state.source.dragUrl,
-        filename: state.source.filename,
-        mimeType: state.source.mimeType || "image/jpeg",
-      };
-    }
-    return {
-      canvas: state.source.canvas,
-      filename: state.source.filename || "raw-photo.png",
-      mimeType: "image/png",
-    };
-  });
-  // Rectified-sheet drag-out exports the current rectified backing canvas as a PNG.
-  makeCanvasDraggable(dom.rectifiedCanvas, () => {
-    if (state.preview.rectifiedDragUrl) {
-      return {
-        url: state.preview.rectifiedDragUrl,
-        filename: makeRectifiedFilename(state.source.filename),
-        mimeType: "image/png",
-      };
-    }
-    return {
-      canvas: state.preview.rectifiedCanvas,
-      filename: makeRectifiedFilename(state.source.filename),
-      mimeType: "image/png",
-    };
-  });
-  makeLivePreviewDragCue();
-  makeGifImageDraggable();
-
-  dom.dropZone.addEventListener("dragover", (event) => {
-    event.preventDefault();
-    dom.dropZone.classList.add("dragging");
-  });
-  dom.dropZone.addEventListener("dragleave", () => {
-    dom.dropZone.classList.remove("dragging");
-  });
-  dom.dropZone.addEventListener("drop", (event) => {
-    event.preventDefault();
-    dom.dropZone.classList.remove("dragging");
-    const file = event.dataTransfer?.files?.[0];
-    if (file) handleFile(file);
-  });
-  dom.fileInput.addEventListener("change", (event) => {
-    const file = event.target.files?.[0];
-    if (file) handleFile(file);
-  });
-  dom.loadDemoButton.addEventListener("click", () => {
-    void loadImageSource("demo/mySrcImage.jpg", "mySrcImage.jpg");
-  });
-  dom.loadDemoButton2.addEventListener("click", () => {
-    void loadImageSource("demo/test_2_5x4.jpg", "test_2_5x4.jpg");
-  });
-  dom.rectifiedCanvas.addEventListener("click", () => {
-    state.preview.showRectifiedDiagnostic = !state.preview.showRectifiedDiagnostic;
-    if (state.preview.rectifiedCanvas) {
-      renderRectifiedPreview(state.preview.rectifiedCanvas);
-    }
-  });
-
-  attachResetButton(dom.resetAppearanceButton, resetAppearanceControls);
-  attachResetButton(dom.resetTrimButton, resetTrimControls);
-  dom.tooltipToggleButton.addEventListener("click", () => {
-    setTooltipsEnabled(!state.runtime.tooltipsEnabled);
-  });
-  dom.previewPlayPauseButton.addEventListener("click", () => {
-    state.preview.paused = !state.preview.paused;
-    state.preview.lastTime = performance.now();
-    updatePreviewPlayPauseButton();
-    drawCurrentGifPreview();
-  });
-
-  dom.paperPreset.addEventListener("input", () => {
-    syncPaperPresetUi();
-    updateSliderReadouts();
-    scheduleProcess();
-  });
-  dom.paperPreset.addEventListener("change", () => {
-    syncPaperPresetUi();
-    scheduleProcess();
-  });
-
-  const appearanceInputs = [
-    dom.brightness,
-    dom.contrast,
-    dom.vibrance,
-    dom.temperature,
-    dom.unsharpRadius,
-    dom.unsharpAmount,
-    dom.invert
-  ];
-  appearanceInputs.forEach((input) => {
-    input.addEventListener("input", () => {
-      revokeGifUrl();
-      updateSliderReadouts();
-      invalidateAppearanceCache();
-      scheduleAppearancePreviewUpdate(false);
-      cancelInFlightProcessing();
-    });
-    input.addEventListener("change", () => {
-      revokeGifUrl();
-      updateSliderReadouts();
-      invalidateAppearanceCache();
-      scheduleAppearancePreviewUpdate(false);
-    });
-  });
-
-  const geometryInputs = [
-    dom.paperWidth,
-    dom.paperHeight,
-    dom.frameCols,
-    dom.frameRows,
-    dom.thresholdMethod,
-    dom.thresholdOffset,
-    dom.paperMargin,
-    dom.boundarySensitivity,
-    dom.boundaryPersistence,
-    dom.crossRoiScale,
-    dom.detectCrossesWithConvolution,
-    dom.useCrossAlignment,
-  ];
-  geometryInputs.forEach((input) => {
-    input.addEventListener("input", () => {
-      revokeGifUrl();
-      updateSliderReadouts();
-      scheduleProcess();
-    });
-    input.addEventListener("change", () => {
-      revokeGifUrl();
-      scheduleProcess();
-    });
-  });
-
-  const lazyFrameInputs = [
-    dom.gifResampling,
-    dom.outputScale,
-    dom.cropLeft,
-    dom.cropRight,
-    dom.cropTop,
-    dom.cropBottom,
-    dom.flipHorizontal,
-    dom.flipVertical,
-    dom.rotate90Cw,
-    dom.fps,
-    dom.gifQuality,
-    dom.gifDither,
-    dom.gifGlobalPalette,
-    dom.reverseOrder,
-    dom.pingPong
-  ];
-  lazyFrameInputs.forEach((input) => {
-    input.addEventListener("input", () => {
-      revokeGifUrl();
-      updateSliderReadouts();
-      if (
-        (input === dom.gifResampling) ||
-        (input === dom.outputScale) ||
-        (input === dom.cropLeft) ||
-        (input === dom.cropRight) ||
-        (input === dom.cropTop) ||
-        (input === dom.cropBottom) ||
-        (input === dom.flipHorizontal) ||
-        (input === dom.flipVertical) ||
-        (input === dom.rotate90Cw)
-      ) invalidateFrameCaches();
-      drawCurrentGifPreview();
-    });
-    input.addEventListener("change", () => {
-      revokeGifUrl();
-      if (
-        (input === dom.gifResampling) ||
-        (input === dom.outputScale) ||
-        (input === dom.cropLeft) ||
-        (input === dom.cropRight) ||
-        (input === dom.cropTop) ||
-        (input === dom.cropBottom) ||
-        (input === dom.flipHorizontal) ||
-        (input === dom.flipVertical) ||
-        (input === dom.rotate90Cw)
-      ) invalidateFrameCaches();
-      drawCurrentGifPreview();
-    });
-  });
-
-  dom.exportButton.addEventListener("click", () => {
-    void exportGif();
-  });
-}
-
-/**
- * Register tooltip text for major UI controls and keep them disabled by default.
- *
- * @returns {void}
- */
-function initializeTooltips() {
-  const tooltipMap = new Map();
-  for (const [selector, text] of Object.entries(TOOLTIP_TEXT)) {
-    document.querySelectorAll(selector).forEach((element) => {
-      tooltipMap.set(element, text);
-      const isFormControl = element.matches("input, select, textarea, output");
-      if (isFormControl) {
-        const label = element.closest("label");
-        if (label) tooltipMap.set(label, text);
-      }
-    });
-  }
-  state.runtime.tooltipRegistry = [...tooltipMap.entries()];
-  setTooltipsEnabled(false);
-}
-
-/**
- * Enable or disable native browser tooltips across the registered controls.
- *
- * @param {boolean} enabled
- * @returns {void}
- */
-function setTooltipsEnabled(enabled) {
-  state.runtime.tooltipsEnabled = enabled;
-  for (const [element, text] of state.runtime.tooltipRegistry || []) {
-    if (enabled && String(text || "").trim()) {
-      element.title = text;
-    } else {
-      element.removeAttribute("title");
-    }
-  }
-  dom.gifPreviewCanvas.title = TOOLTIP_TEXT["#gifPreviewCanvas"] || "";
-  dom.tooltipToggleButton.textContent = enabled ? "Disable Tooltips" : "Enable Tooltips";
-}
-
-/**
- * Make a preview canvas draggable.
- *
- * @param {HTMLCanvasElement} canvas
- * @param {() => {url?:string, filename:string, mimeType:string, canvas?:HTMLCanvasElement | null} | null} getDragAsset
- * @returns {void}
- */
-function makeCanvasDraggable(canvas, getDragAsset) {
-  canvas.draggable = true;
-  canvas.addEventListener("dragstart", (event) => {
-    try {
-      const asset = getDragAsset?.();
-      if (!asset) {
-        event.preventDefault();
-        return;
-      }
-      let url = asset.url || "";
-      const mimeType = asset.mimeType || "image/png";
-      const filename = asset.filename || "image.png";
-      if (!url) {
-        const sourceCanvas = asset.canvas || canvas;
-        if (!sourceCanvas || !sourceCanvas.width || !sourceCanvas.height) {
-          event.preventDefault();
-          return;
-        }
-        url = sourceCanvas.toDataURL(mimeType);
-      } else {
-        url = new URL(url, window.location.href).href;
-      }
-      event.dataTransfer.effectAllowed = "copy";
-      event.dataTransfer.setData("text/uri-list", url);
-      event.dataTransfer.setData("DownloadURL", `${mimeType}:${filename}:${url}`);
-    } catch (error) {
-      console.error("Could not start canvas drag:", error);
-    }
-  });
-}
-
-/**
- * Make the exported GIF preview image draggable with a friendly filename.
- *
- * @returns {void}
- */
-function makeGifImageDraggable() {
-  dom.gifImage.draggable = true;
-  dom.gifImage.addEventListener("dragstart", (event) => {
-    if (!state.export.url || !state.export.filename) {
-      event.preventDefault();
-      return;
-    }
-    event.dataTransfer.effectAllowed = "copy";
-    event.dataTransfer.setData("text/uri-list", state.export.url);
-    event.dataTransfer.setData("text/plain", state.export.url);
-    event.dataTransfer.setData("DownloadURL", `image/gif:${state.export.filename}:${state.export.url}`);
-  });
-}
-
-/**
- * Intercept drag attempts on the live preview canvas and point the user toward Export GIF.
- *
- * @returns {void}
- */
-function makeLivePreviewDragCue() {
-  dom.gifPreviewCanvas.draggable = true;
-  dom.gifPreviewCanvas.addEventListener("dragstart", (event) => {
-    // Only an exported GIF is a real downloadable asset. The live canvas is just a viewer.
-    if (state.export.url) {
-      event.preventDefault();
-      return;
-    }
-    event.preventDefault();
-    triggerExportButtonAttention();
-  });
-}
-
-/**
- * Run a brief cartoon-like "ring" animation on the Export GIF button.
- *
- * @returns {void}
- */
-function triggerExportButtonAttention() {
-  const button = dom.exportButton;
-  button.classList.remove("button-ring");
-  void button.offsetWidth;
-  button.classList.add("button-ring");
-  window.clearTimeout(state.preview.exportButtonRingTimer || 0);
-  state.preview.exportButtonRingTimer = window.setTimeout(() => {
-    button.classList.remove("button-ring");
-  }, 900);
-}
-
-/**
- * Wire a small header reset button without toggling the parent details element.
- *
- * @param {HTMLButtonElement | null} button
- * @param {() => void} onReset
- * @returns {void}
- */
-function attachResetButton(button, onReset) {
-  if (!button) return;
-  button.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    onReset();
-  });
-}
-
-/**
  * Restore all appearance controls to their defaults and invalidate derived caches.
  *
  * @returns {void}
  */
 function resetAppearanceControls() {
-  dom.brightness.value = "0";
-  dom.contrast.value = "0";
-  dom.vibrance.value = "0";
-  dom.temperature.value = "0";
-  dom.unsharpRadius.value = "1.0";
-  dom.unsharpAmount.value = "0";
-  dom.invert.checked = false;
-  dom.gifResampling.value = "linear";
+  applyAppearanceDefaults(dom);
   revokeGifUrl();
   updateSliderReadouts();
   invalidateFrameCaches();
@@ -682,13 +465,7 @@ function resetTrimControls() {
   if (alreadyReset) {
     return;
   }
-  dom.cropLeft.value = "0";
-  dom.cropRight.value = "0";
-  dom.cropTop.value = "0";
-  dom.cropBottom.value = "0";
-  dom.flipHorizontal.checked = false;
-  dom.flipVertical.checked = false;
-  dom.rotate90Cw.checked = false;
+  applyCropGeometryDefaults(dom);
   revokeGifUrl();
   updateSliderReadouts();
   invalidateFrameCaches();
@@ -704,39 +481,7 @@ function resetTrimControls() {
  * @returns {void}
  */
 function resetNonLayoutControls() {
-  dom.thresholdMethod.value = "offset-peak";
-  dom.thresholdOffset.value = "-20";
-  dom.paperMargin.value = "80";
-  dom.boundarySensitivity.value = "8.0";
-  dom.boundaryPersistence.value = "7";
-  dom.crossRoiScale.value = "52";
-  dom.useCrossAlignment.checked = true;
-  dom.detectCrossesWithConvolution.checked = false;
-
-  dom.brightness.value = "0";
-  dom.contrast.value = "0";
-  dom.vibrance.value = "0";
-  dom.temperature.value = "0";
-  dom.unsharpAmount.value = "0";
-  dom.unsharpRadius.value = "1.0";
-  dom.invert.checked = false;
-  dom.gifResampling.value = "linear";
-
-  dom.cropLeft.value = "0";
-  dom.cropRight.value = "0";
-  dom.cropTop.value = "0";
-  dom.cropBottom.value = "0";
-  dom.flipHorizontal.checked = false;
-  dom.flipVertical.checked = false;
-  dom.rotate90Cw.checked = false;
-
-  dom.fps.value = "20";
-  dom.reverseOrder.checked = false;
-  dom.pingPong.checked = false;
-  dom.outputScale.value = "1.00";
-  dom.gifQuality.value = "10";
-  dom.gifDither.value = "FloydSteinberg-serpentine";
-  dom.gifGlobalPalette.checked = false;
+  applyNonLayoutDefaults(dom);
 
   state.preview.paused = false;
   updatePreviewPlayPauseButton();
@@ -829,9 +574,7 @@ function attachResizeHandler() {
  * @returns {Promise<void>}
  */
 async function handleFile(file) {
-  releaseOwnedSourceUrl();
-  const url = URL.createObjectURL(file);
-  await loadImageSource(url, file.name || "", file.type || "image/jpeg");
+  await loadFileSource(file, { state, loadImageSource });
 }
 
 /**
@@ -843,49 +586,22 @@ async function handleFile(file) {
  * @returns {Promise<void>}
  */
 async function loadImageSource(src, filename = "", mimeType = "image/jpeg") {
-  releaseOwnedSourceUrl();
-  if (src.startsWith("blob:")) {
-    state.source.ownedObjectUrl = src;
-  }
-  setBusyState(true);
-  setStatus("Loading image…");
-  collapseAllPanels();
-  resetNonLayoutControls();
-  revokeGifUrl();
-  state.source.dragUrl = "";
-  state.source.mimeType = "";
-  dom.rawPhotoName.textContent = filename ? `(${filename})` : "";
-  clearAllPreviews();
-  const image = new Image();
-  image.onload = async () => {
-    try {
-      document.body.classList.add("has-loaded-image");
-      state.source.image = image;
-      state.source.filename = filename || "";
-      state.source.mimeType = mimeType || "image/jpeg";
-      state.source.dragUrl = src;
-      state.source.rawPageContour = null;
-      drawImageToCanvas(image, state.source.canvas);
-      renderRawPreview();
-      invalidateAppearanceCache();
-      setStatus("Image loaded.\nAnalyzing page…");
-      await waitForNextPaint();
-      await processCurrentImage();
-    } finally {
-      if (!state.processing.active && !state.processing.pending) {
-        setBusyState(false);
-      }
-    }
-  };
-  image.onerror = () => {
-    setBusyState(false);
-    state.source.dragUrl = "";
-    state.source.mimeType = "";
-    state.source.filename = "";
-    releaseOwnedSourceUrl();
-    setStatus("Failed to load the selected image.");
-  };
-  image.src = src;
+  await loadImageSourceViaController({
+    src,
+    filename,
+    mimeType,
+    dom,
+    state,
+    setStatus,
+    collapseAllPanels,
+    resetNonLayoutControls,
+    revokeGifUrl,
+    clearAllPreviews,
+    renderRawPreview,
+    invalidateAppearanceCache,
+    processCurrentImage,
+    drawImageToCanvas,
+  });
 }
 
 /**
@@ -929,24 +645,28 @@ function scheduleProcess() {
  * }}
  */
 function readConfig() {
-  const paperPreset = dom.paperPreset.value || "letter";
+  const paperPreset = dom.paperPreset.value || SETTINGS_DEFAULTS.layout.paperPreset;
   const presetSize = PAPER_PRESETS[paperPreset];
   const isCustomPaper = paperPreset === "custom";
-  const paperWidth = isCustomPaper ? (Number(dom.paperWidth.value) || 11) : (presetSize?.width || 11);
-  const paperHeight = isCustomPaper ? (Number(dom.paperHeight.value) || 8.5) : (presetSize?.height || 8.5);
+  const paperWidth = isCustomPaper
+    ? (Number(dom.paperWidth.value) || SETTINGS_DEFAULTS.layout.paperWidth)
+    : (presetSize?.width || SETTINGS_DEFAULTS.layout.paperWidth);
+  const paperHeight = isCustomPaper
+    ? (Number(dom.paperHeight.value) || SETTINGS_DEFAULTS.layout.paperHeight)
+    : (presetSize?.height || SETTINGS_DEFAULTS.layout.paperHeight);
   return {
     paperPreset,
     paperWidthIn: Math.max(1, paperWidth),
     paperHeightIn: Math.max(1, paperHeight),
-    frameCols: Math.max(1, Math.min(20, Math.round(Number(dom.frameCols.value) || 5))),
-    frameRows: Math.max(1, Math.min(20, Math.round(Number(dom.frameRows.value) || 4))),
-    thresholdMethod: dom.thresholdMethod.value || "offset-peak",
-    thresholdOffset: Math.max(-128, Math.min(128, Math.round(Number(dom.thresholdOffset.value) || -20))),
-    paperMarginPx: Math.max(0, Math.min(150, Math.round(Number(dom.paperMargin.value) || 80))),
-    boundarySensitivity: Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || 8)),
-    boundaryPersistencePx: Math.max(1, Math.min(15, Math.round(Number(dom.boundaryPersistence.value) || 7))),
-    crossRoiScalePct: Math.max(18, Math.min(110, Number(dom.crossRoiScale.value) || 52)),
-    crossRoiScale: Math.max(0.18, Math.min(1.1, (Number(dom.crossRoiScale.value) || 52) / 100)),
+    frameCols: Math.max(1, Math.min(20, Math.round(Number(dom.frameCols.value) || SETTINGS_DEFAULTS.layout.frameCols))),
+    frameRows: Math.max(1, Math.min(20, Math.round(Number(dom.frameRows.value) || SETTINGS_DEFAULTS.layout.frameRows))),
+    thresholdMethod: dom.thresholdMethod.value || SETTINGS_DEFAULTS.detection.thresholdMethod,
+    thresholdOffset: Math.max(-128, Math.min(128, Math.round(Number(dom.thresholdOffset.value) || SETTINGS_DEFAULTS.detection.thresholdOffset))),
+    paperMarginPx: Math.max(0, Math.min(150, Math.round(Number(dom.paperMargin.value) || SETTINGS_DEFAULTS.detection.paperMarginPx))),
+    boundarySensitivity: Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)),
+    boundaryPersistencePx: Math.max(1, Math.min(15, Math.round(Number(dom.boundaryPersistence.value) || SETTINGS_DEFAULTS.detection.boundaryPersistencePx))),
+    crossRoiScalePct: Math.max(18, Math.min(110, Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct)),
+    crossRoiScale: Math.max(0.18, Math.min(1.1, (Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct) / 100)),
     detectCrossesWithConvolution: dom.detectCrossesWithConvolution.checked,
     useCrossAlignment: dom.useCrossAlignment.checked,
     useRectifiedAsSource: false,
@@ -962,18 +682,18 @@ function readConfig() {
       rotate90Cw: dom.rotate90Cw.checked,
     },
     filters: {
-      brightness: Number(dom.brightness.value) || 0,
-      contrast: Number(dom.contrast.value) || 0,
-      vibrance: Number(dom.vibrance.value) || 0,
-      temperature: Number(dom.temperature.value) || 0,
-      unsharpRadius: Math.max(0.1, Math.min(100, Number(dom.unsharpRadius.value) || 1.0)),
-      unsharpAmount: Math.max(0, Math.min(500, Number(dom.unsharpAmount.value) || 0)),
+      brightness: Number(dom.brightness.value) || SETTINGS_DEFAULTS.appearance.brightness,
+      contrast: Number(dom.contrast.value) || SETTINGS_DEFAULTS.appearance.contrast,
+      vibrance: Number(dom.vibrance.value) || SETTINGS_DEFAULTS.appearance.vibrance,
+      temperature: Number(dom.temperature.value) || SETTINGS_DEFAULTS.appearance.temperature,
+      unsharpRadius: Math.max(0.1, Math.min(100, Number(dom.unsharpRadius.value) || SETTINGS_DEFAULTS.appearance.unsharpRadius)),
+      unsharpAmount: Math.max(0, Math.min(500, Number(dom.unsharpAmount.value) || SETTINGS_DEFAULTS.appearance.unsharpAmount)),
       invert: dom.invert.checked,
     },
-    fps: Math.max(1, Math.min(60, Math.round(Number(dom.fps.value) || 20))),
+    fps: Math.max(1, Math.min(60, Math.round(Number(dom.fps.value) || SETTINGS_DEFAULTS.gifExport.fps))),
     exportOptions: {
-      outputScale: Math.max(0.25, Math.min(1.0, Number(dom.outputScale.value) || 1)),
-      quality: Math.max(1, Math.min(20, Math.round(Number(dom.gifQuality.value) || 10))),
+      outputScale: Math.max(0.25, Math.min(1.0, Number(dom.outputScale.value) || SETTINGS_DEFAULTS.gifExport.outputScale)),
+      quality: Math.max(1, Math.min(20, Math.round(Number(dom.gifQuality.value) || SETTINGS_DEFAULTS.gifExport.quality))),
       dither: (dom.gifDither.value && dom.gifDither.value !== "off") ? dom.gifDither.value : false,
       resampling: dom.gifResampling.value || "linear",
       globalPalette: dom.gifGlobalPalette.checked,
@@ -1011,16 +731,16 @@ function updateSliderReadouts() {
   dom.contrastValue.textContent = formatSignedValue(dom.contrast.value);
   dom.vibranceValue.textContent = formatSignedValue(dom.vibrance.value);
   dom.temperatureValue.textContent = formatSignedValue(dom.temperature.value);
-  dom.unsharpRadiusValue.textContent = (Math.max(0.1, Math.min(100, Number(dom.unsharpRadius.value) || 1.0))).toFixed(1);
-  dom.unsharpAmountValue.textContent = (Math.max(0, Math.min(500, Number(dom.unsharpAmount.value) || 0))).toFixed(1);
+  dom.unsharpRadiusValue.textContent = (Math.max(0.1, Math.min(100, Number(dom.unsharpRadius.value) || SETTINGS_DEFAULTS.appearance.unsharpRadius))).toFixed(1);
+  dom.unsharpAmountValue.textContent = (Math.max(0, Math.min(500, Number(dom.unsharpAmount.value) || SETTINGS_DEFAULTS.appearance.unsharpAmount))).toFixed(1);
   dom.thresholdOffsetValue.textContent = formatSignedValue(dom.thresholdOffset.value);
-  dom.paperMarginValue.textContent = `${Math.max(0, Math.min(150, Number(dom.paperMargin.value) || 80))} px`;
-  dom.boundarySensitivityValue.textContent = `${Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || 8)).toFixed(1)}`;
-  dom.boundaryPersistenceValue.textContent = String(Math.max(1, Math.min(15, Number(dom.boundaryPersistence.value) || 7)));
-  const outputScale = Math.max(0.25, Math.min(1.0, Number(dom.outputScale.value) || 1));
+  dom.paperMarginValue.textContent = `${Math.max(0, Math.min(150, Number(dom.paperMargin.value) || SETTINGS_DEFAULTS.detection.paperMarginPx))} px`;
+  dom.boundarySensitivityValue.textContent = `${Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)).toFixed(1)}`;
+  dom.boundaryPersistenceValue.textContent = String(Math.max(1, Math.min(15, Number(dom.boundaryPersistence.value) || SETTINGS_DEFAULTS.detection.boundaryPersistencePx)));
+  const outputScale = Math.max(0.25, Math.min(1.0, Number(dom.outputScale.value) || SETTINGS_DEFAULTS.gifExport.outputScale));
   const scaledSize = getScaledOutputFrameSize(outputScale);
   dom.outputScaleValue.textContent = `${outputScale.toFixed(2)} (${scaledSize.width}\u00d7${scaledSize.height})`;
-  dom.gifQualityValue.textContent = String(Math.max(1, Math.min(20, Number(dom.gifQuality.value) || 10)));
+  dom.gifQualityValue.textContent = String(Math.max(1, Math.min(20, Number(dom.gifQuality.value) || SETTINGS_DEFAULTS.gifExport.quality)));
   dom.cropAspectRatioValue.textContent = getCurrentCropAspectRatioText();
   if (!state.geometry.alignmentInfo) {
     dom.crossRoiScaleValue.textContent = "-- px";
@@ -1071,6 +791,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
   state.processing.active = true;
   setBusyState(true);
   dom.exportButton.disabled = true;
+  dom.exportZipButton.disabled = true;
 
   try {
     const config = readConfig();
@@ -1091,6 +812,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     renderCrossRoiGrid(result.alignmentInfo);
     drawCurrentGifPreview();
     dom.exportButton.disabled = state.geometry.frameCount === 0;
+    dom.exportZipButton.disabled = state.geometry.frameCount === 0;
     updateExportButtonLabel();
     setStatus(result.statusText);
   } catch (error) {
@@ -1342,44 +1064,6 @@ function scaleOutputCanvas(sourceCanvas, outputScale, resampling) {
 }
 
 /**
- * Return the length of the logical playback/export sequence after reverse/ping-pong are applied.
- *
- * @returns {number}
- */
-function getOrderedFrameCount() {
-  const frameCount = state.geometry.frameCount;
-  if (frameCount <= 0) return 0;
-  if (readConfig().exportOptions.pingPong) {
-    return (frameCount <= 1) ? frameCount : ((frameCount * 2) - 2);
-  }
-  return frameCount;
-}
-
-/**
- * Map the running preview/export index to the actual source-frame index, optionally reversed
- * and optionally expanded into a ping-pong sequence.
- *
- * @param {number} previewIndex
- * @returns {number}
- */
-function getOrderedFrameIndex(previewIndex) {
-  const frameCount = state.geometry.frameCount;
-  if (frameCount <= 0) return 0;
-  const exportOptions = readConfig().exportOptions;
-  const orderedFrameCount = getOrderedFrameCount();
-  const clamped = ((previewIndex % orderedFrameCount) + orderedFrameCount) % orderedFrameCount;
-  let sourceIndex = clamped;
-  if (exportOptions.pingPong && frameCount > 1) {
-    sourceIndex = (clamped < frameCount)
-      ? clamped
-      : ((frameCount - 2) - (clamped - frameCount));
-  }
-  return exportOptions.reverseOrder
-    ? (frameCount - 1 - sourceIndex)
-    : sourceIndex;
-}
-
-/**
  * Apply the post-crop flip/rotation options to one extracted frame.
  *
  * @param {HTMLCanvasElement} sourceCanvas
@@ -1535,66 +1219,6 @@ function renderCrossRoiGrid(alignmentInfo) {
 }
 
 /**
- * Drive the live animation preview at the configured frame rate.
- *
- * @returns {void}
- */
-function startGifPreviewLoop() {
-  const loop = (time) => {
-    const orderedFrameCount = getOrderedFrameCount();
-    if (orderedFrameCount > 0 && !state.preview.paused) {
-      const fps = readConfig().fps;
-      const frameDelay = 1000 / fps;
-      if ((time - state.preview.lastTime) >= frameDelay) {
-        state.preview.lastTime = time;
-        state.preview.frameIndex = (state.preview.frameIndex + 1) % orderedFrameCount;
-        drawCurrentGifPreview();
-      }
-    }
-    state.preview.loopHandle = requestAnimationFrame(loop);
-  };
-  state.preview.loopHandle = requestAnimationFrame(loop);
-}
-
-/**
- * Draw the current animation frame into the preview panel.
- *
- * @returns {void}
- */
-function drawCurrentGifPreview() {
-  if (state.export.url) {
-    // After export, this panel becomes a GIF viewer until some setting invalidates that GIF.
-    dom.gifPreviewCanvas.hidden = true;
-    dom.gifPreviewCanvas.parentElement?.classList.remove("is-empty");
-    updateAnimationPreviewHeading();
-    return;
-  }
-  dom.gifPreviewCanvas.hidden = false;
-  updateAnimationPreviewHeading();
-  const frame = getAdjustedFrameCanvas(getOrderedFrameIndex(state.preview.frameIndex));
-  if (!frame) {
-    const ctx = dom.gifPreviewCanvas.getContext("2d");
-    resizeCanvasToBox(dom.gifPreviewCanvas);
-    ctx.clearRect(0, 0, dom.gifPreviewCanvas.width, dom.gifPreviewCanvas.height);
-    dom.gifPreviewCanvas.parentElement?.classList.add("is-empty");
-    return;
-  }
-  dom.gifPreviewCanvas.parentElement?.classList.remove("is-empty");
-  renderCanvasFit(frame, dom.gifPreviewCanvas);
-}
-
-/**
- * Rerender all visible previews after a resize or other display-only change.
- *
- * @returns {void}
- */
-function rerenderPreviews() {
-  if (state.source.image) renderRawPreview();
-  if (state.preview.rectifiedCanvas) renderRectifiedPreview(state.preview.rectifiedCanvas);
-  drawCurrentGifPreview();
-}
-
-/**
  * Materialize all adjusted frames and hand them off to gif.js for encoding.
  *
  * @returns {Promise<void>}
@@ -1603,6 +1227,7 @@ async function exportGif() {
   const orderedFrameCount = getOrderedFrameCount();
   if (!orderedFrameCount) return;
   dom.exportButton.disabled = true;
+  dom.exportZipButton.disabled = true;
   updateExportButtonLabel(0);
   setStatus("Encoding GIF…");
 
@@ -1610,6 +1235,7 @@ async function exportGif() {
   const firstFrame = getAdjustedFrameCanvas(getOrderedFrameIndex(0));
   if (!firstFrame) {
     dom.exportButton.disabled = false;
+    dom.exportZipButton.disabled = false;
     updateExportButtonLabel();
     return;
   }
@@ -1643,6 +1269,7 @@ async function exportGif() {
     updateAnimationPreviewHeading();
     downloadBlobWithFilename(blob, state.export.filename);
     dom.exportButton.disabled = false;
+    dom.exportZipButton.disabled = false;
     updateExportButtonLabel();
     setStatus("GIF ready.\nFrame count: " + state.geometry.frameCount);
   });
@@ -1652,6 +1279,157 @@ async function exportGif() {
     setStatus("Encoding GIF…\n" + progressPercent + "%");
   });
   gif.render();
+}
+
+/**
+ * Convert a canvas into a PNG byte array.
+ *
+ * @param {HTMLCanvasElement} canvas
+ * @returns {Promise<Uint8Array>}
+ */
+async function canvasToPngBytes(canvas) {
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) {
+    throw new Error("Could not encode PNG frame.");
+  }
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+/**
+ * Build a timestamped archive stem shared by ZIP exports and their root folder.
+ *
+ * Example:
+ * `mySrcImage_anim_20260324_154546`
+ *
+ * @param {string} sourceFilename
+ * @returns {string}
+ */
+function makeArchiveStem(sourceFilename) {
+  const base = sanitizeFilenameBase(sourceFilename || "frame_sheet");
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mi = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  return `${base}_anim_${yyyy}${mm}${dd}_${hh}${mi}${ss}`;
+}
+
+/**
+ * Build a ZIP filename for frame export.
+ *
+ * @param {string} sourceFilename
+ * @returns {string}
+ */
+function makeZipFilename(sourceFilename) {
+  return `${makeArchiveStem(sourceFilename)}.zip`;
+}
+
+/**
+ * Serialize the current app settings into a simple tab-separated manifest.
+ *
+ * Each line uses:
+ * `setting<TAB>value`
+ *
+ * @param {ReturnType<readConfig>} config
+ * @returns {string}
+ */
+function buildSettingsTsv(config) {
+  const rows = [
+    ["source_filename", state.source.filename || ""],
+    ["paper_preset", config.paperPreset],
+    ["paper_width", String(config.paperWidthIn)],
+    ["paper_height", String(config.paperHeightIn)],
+    ["frame_cols", String(config.frameCols)],
+    ["frame_rows", String(config.frameRows)],
+    ["threshold_method", config.thresholdMethod],
+    ["threshold_offset", String(config.thresholdOffset)],
+    ["search_inset_margin_px", String(config.paperMarginPx)],
+    ["boundary_threshold", String(config.boundarySensitivity)],
+    ["boundary_persistence_px", String(config.boundaryPersistencePx)],
+    ["cross_region_scale_pct", String(config.crossRoiScalePct)],
+    ["detect_crosses_with_convolution", String(config.detectCrossesWithConvolution)],
+    ["use_cross_alignment", String(config.useCrossAlignment)],
+    ["crop_left", String(config.crop.left)],
+    ["crop_right", String(config.crop.right)],
+    ["crop_top", String(config.crop.top)],
+    ["crop_bottom", String(config.crop.bottom)],
+    ["flip_horizontal", String(config.postCropGeometry.flipHorizontal)],
+    ["flip_vertical", String(config.postCropGeometry.flipVertical)],
+    ["rotate_90_cw", String(config.postCropGeometry.rotate90Cw)],
+    ["brightness", String(config.filters.brightness)],
+    ["contrast", String(config.filters.contrast)],
+    ["vibrance", String(config.filters.vibrance)],
+    ["color_temperature", String(config.filters.temperature)],
+    ["unsharp_amount", String(config.filters.unsharpAmount)],
+    ["unsharp_radius", String(config.filters.unsharpRadius)],
+    ["invert", String(config.filters.invert)],
+    ["fps", String(config.fps)],
+    ["reverse_order", String(config.exportOptions.reverseOrder)],
+    ["ping_pong", String(config.exportOptions.pingPong)],
+    ["output_scale", String(config.exportOptions.outputScale)],
+    ["encoding_quality", String(config.exportOptions.quality)],
+    ["dither", String(config.exportOptions.dither || "off")],
+    ["resampling", String(config.exportOptions.resampling)],
+    ["use_global_palette", String(config.exportOptions.globalPalette)],
+  ];
+  return rows.map(([key, value]) => `${key}\t${value}`).join("\n") + "\n";
+}
+
+/**
+ * Export the current ordered animation frames as a ZIP archive of PNG files.
+ *
+ * Archive layout:
+ * - `frames/`
+ * - `frames/<base>_anim_000.png`
+ * - ...
+ *
+ * @returns {Promise<void>}
+ */
+async function exportZip() {
+  const orderedFrameCount = getOrderedFrameCount();
+  if (!orderedFrameCount) return;
+  dom.exportButton.disabled = true;
+  dom.exportZipButton.disabled = true;
+  setStatus("Preparing ZIP…");
+
+  try {
+    const config = readConfig();
+    const base = sanitizeFilenameBase(state.source.filename || "frame_sheet");
+    const archiveStem = makeArchiveStem(state.source.filename);
+    const rootDir = `${archiveStem}/`;
+    const framesDir = `${rootDir}frames/`;
+    const settingsBytes = new TextEncoder().encode(buildSettingsTsv(config));
+    const entries = [
+      { name: rootDir, data: new Uint8Array(0), isDirectory: true },
+      { name: framesDir, data: new Uint8Array(0), isDirectory: true },
+      { name: `${rootDir}settings.txt`, data: settingsBytes },
+    ];
+    for (let i = 0; i < orderedFrameCount; i++) {
+      const frameCanvas = getAdjustedFrameCanvas(getOrderedFrameIndex(i));
+      if (!frameCanvas) {
+        throw new Error("Could not prepare one or more frames for ZIP export.");
+      }
+      const pngBytes = await canvasToPngBytes(frameCanvas);
+      const frameNumber = String(i).padStart(3, "0");
+      entries.push({
+        name: `${framesDir}${base}_anim_${frameNumber}.png`,
+        data: pngBytes,
+      });
+    }
+
+    const zipBlob = createStoredZip(entries);
+    downloadBlobWithFilename(zipBlob, makeZipFilename(state.source.filename));
+    setStatus(`ZIP ready.\nFrame count: ${orderedFrameCount}`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`ZIP export failed.\n(${error?.message || String(error)})`);
+  } finally {
+    dom.exportButton.disabled = state.geometry.frameCount === 0;
+    dom.exportZipButton.disabled = state.geometry.frameCount === 0;
+    updateExportButtonLabel();
+  }
 }
 
 /**
@@ -1702,20 +1480,6 @@ function sanitizeFilenameBase(filename) {
   const withoutExt = filename.replace(/\.[^.]+$/, "");
   const cleaned = withoutExt.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
   return cleaned || "frame_sheet";
-}
-
-/**
- * Insert a `-rectified` suffix before the source-image extension for rectified-sheet export.
- *
- * @param {string} sourceFilename
- * @returns {string}
- */
-function makeRectifiedFilename(sourceFilename) {
-  const trimmed = String(sourceFilename || "").trim();
-  if (!trimmed) return "rectified-sheet.png";
-  const match = trimmed.match(/^(.*?)(\.[^.]+)$/);
-  if (!match) return `${trimmed}-rectified.png`;
-  return `${match[1]}-rectified${match[2]}`;
 }
 
 /**
