@@ -14,17 +14,20 @@
         <div class="panel-head">
           <h1 id="appTitle">Plottimation Tool</h1>
           <p id="appLedePrimary" class="lede">
-            Build an animated GIF from a photo of a frame-sheet.
+            Make an animated GIF from a photo of a frame-sheet.
           </p>
           <p id="appLedeSecondary" class="lede">
-            v.1.01 • Golan Levin, 2026 • <a href="https://github.com/golanlevin/plottimation">Docs</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ">Demo Video</a>
+            v.1.02 • Golan Levin • <a href="https://github.com/golanlevin/plottimation">Documentation</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ">Demo Video</a>
           </p>
         </div>
 
         <section class="control-group">
           <div class="section-head">
             <h2 id="photoHeading">Photo</h2>
-            <button id="loadDemoButton" class="header-button" type="button">Load Demo</button>
+            <div class="header-actions">
+              <button id="loadDemoButton" class="header-button" type="button">Load Demo 1</button>
+              <button id="loadDemoButton2" class="header-button" type="button">Load Demo 2</button>
+            </div>
           </div>
           <label id="dropZone" class="drop-zone" for="fileInput">
             <span class="drop-lead">Drop a photo or scan here,</span>
@@ -77,7 +80,7 @@
         </details>
 
         <details class="control-group collapsible">
-          <summary id="detectionAlignmentSummary">Detection &amp; Alignment</summary>
+          <summary id="pageGridDetectionSummary">Page &amp; Grid Detection</summary>
           <label class="stack-label">
             <span>Thresholding Method</span>
             <select id="thresholdMethod">
@@ -103,6 +106,10 @@
               <input id="boundaryPersistence" type="range" min="1" max="15" step="1" value="7" />
             </label>
           </div>
+        </details>
+
+        <details class="control-group collapsible">
+          <summary id="frameAlignmentSummary">Frame Alignment</summary>
           <div class="slider-stack">
             <label>
               <span>Cross Region Size <output id="crossRoiScaleValue">-- px</output></span>
@@ -214,6 +221,10 @@
           <label class="toggle">
             <input id="reverseOrder" type="checkbox" />
             <span>Reverse Order</span>
+          </label>
+          <label class="toggle">
+            <input id="pingPong" type="checkbox" />
+            <span>Ping-Pong (doubles file size)</span>
           </label>
           <div class="slider-stack">
             <label>

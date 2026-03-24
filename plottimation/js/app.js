@@ -14,7 +14,8 @@ const TOOLTIP_TEXT = {
   "#appLedePrimary": "",
   "#appLedeSecondary": "",
   "#photoHeading": "Loads a source photo or scan for processing. Pages must be in landscape orientation.",
-  "#loadDemoButton": "Loads the bundled demo image without choosing a file.",
+  "#loadDemoButton": "Loads the first bundled demo image without choosing a file.",
+  "#loadDemoButton2": "Loads the second bundled demo image without choosing a file.",
   "#dropZone": "Drop a photo or scan of a plotted frame-sheet here, or click to choose a file. Pages must be in landscape orientation.",
   "#layoutSummary": "Sets the frame-grid dimensions and paper format assumptions.",
   "#frameCols": "Number of animation frame columns in the plotted grid.",
@@ -57,6 +58,7 @@ const TOOLTIP_TEXT = {
   "#gifDither": "Selects the dithering method used during GIF color quantization.",
   "#gifGlobalPalette": "Use one shared palette for all GIF frames, instead of per-frame palettes.",
   "#reverseOrder": "Reverse the playback and export order of the animation frames.",
+  "#pingPong": "Play and export the animation forward and backward without repeating the endpoints.",
   "#statusHeading": "Processing and diagnostic status for the current image and settings.",
   "#tooltipToggleButton": "Turn tooltips on or off throughout the interface.",
   "#statusText": "Current pipeline status and other diagnostic information.",
@@ -115,6 +117,8 @@ function updatePreviewPlayPauseButton() {
  */
 function clearDerivedPreviews() {
   state.preview.rectifiedCanvas = null;
+  releaseRectifiedDragUrl();
+  state.preview.rectifiedDragBuildId += 1;
   state.geometry.baseRectifiedCanvas = null;
   state.geometry.baseRectifiedPageCanvas = null;
   state.geometry.pagePreviewGridQuad = null;
@@ -160,6 +164,49 @@ function clearAllPreviews() {
   dom.rawCanvas.parentElement?.classList.add("is-empty");
 
   clearDerivedPreviews();
+}
+
+/**
+ * Release any blob URL that the app currently owns for raw-photo drag/download behavior.
+ *
+ * @returns {void}
+ */
+function releaseOwnedSourceUrl() {
+  if (!state.source.ownedObjectUrl) return;
+  URL.revokeObjectURL(state.source.ownedObjectUrl);
+  state.source.ownedObjectUrl = "";
+}
+
+/**
+ * Revoke the cached blob URL used for fast rectified-sheet drag/download.
+ *
+ * @returns {void}
+ */
+function releaseRectifiedDragUrl() {
+  if (!state.preview.rectifiedDragUrl) return;
+  URL.revokeObjectURL(state.preview.rectifiedDragUrl);
+  state.preview.rectifiedDragUrl = "";
+}
+
+/**
+ * Build a cached PNG blob URL for the current rectified-sheet canvas.
+ *
+ * This lets drag/download use a prebuilt object URL instead of blocking on synchronous
+ * canvas encoding during `dragstart`.
+ *
+ * @param {HTMLCanvasElement | null} rectifiedCanvas
+ * @returns {void}
+ */
+function primeRectifiedDragAsset(rectifiedCanvas) {
+  state.preview.rectifiedDragBuildId += 1;
+  const buildId = state.preview.rectifiedDragBuildId;
+  releaseRectifiedDragUrl();
+  if (!rectifiedCanvas || !rectifiedCanvas.width || !rectifiedCanvas.height) return;
+  rectifiedCanvas.toBlob((blob) => {
+    if (buildId !== state.preview.rectifiedDragBuildId) return;
+    if (!blob) return;
+    state.preview.rectifiedDragUrl = URL.createObjectURL(blob);
+  }, "image/png");
 }
 
 /**
@@ -258,10 +305,35 @@ function collapseAllPanels() {
  */
 function attachUi() {
   // Raw-photo drag-out is enabled for convenient access to the uploaded source image.
-  makeCanvasDraggable(dom.rawCanvas, "raw-photo.png", () => state.source.canvas);
-  // Disabled for now: dragging this preview out of the browser was useful for debugging,
-  // but it is currently not desired in the UI. The helper is kept in case we restore it later.
-  // makeCanvasDraggable(dom.rectifiedCanvas, "rectified-sheet.png", () => state.preview.rectifiedCanvas);
+  makeCanvasDraggable(dom.rawCanvas, () => {
+    if (state.source.dragUrl && state.source.filename) {
+      return {
+        url: state.source.dragUrl,
+        filename: state.source.filename,
+        mimeType: state.source.mimeType || "image/jpeg",
+      };
+    }
+    return {
+      canvas: state.source.canvas,
+      filename: state.source.filename || "raw-photo.png",
+      mimeType: "image/png",
+    };
+  });
+  // Rectified-sheet drag-out exports the current rectified backing canvas as a PNG.
+  makeCanvasDraggable(dom.rectifiedCanvas, () => {
+    if (state.preview.rectifiedDragUrl) {
+      return {
+        url: state.preview.rectifiedDragUrl,
+        filename: makeRectifiedFilename(state.source.filename),
+        mimeType: "image/png",
+      };
+    }
+    return {
+      canvas: state.preview.rectifiedCanvas,
+      filename: makeRectifiedFilename(state.source.filename),
+      mimeType: "image/png",
+    };
+  });
   makeLivePreviewDragCue();
   makeGifImageDraggable();
 
@@ -284,6 +356,9 @@ function attachUi() {
   });
   dom.loadDemoButton.addEventListener("click", () => {
     void loadImageSource("demo/mySrcImage.jpg", "mySrcImage.jpg");
+  });
+  dom.loadDemoButton2.addEventListener("click", () => {
+    void loadImageSource("demo/test_2_5x4.jpg", "test_2_5x4.jpg");
   });
   dom.rectifiedCanvas.addEventListener("click", () => {
     state.preview.showRectifiedDiagnostic = !state.preview.showRectifiedDiagnostic;
@@ -379,7 +454,8 @@ function attachUi() {
     dom.gifQuality,
     dom.gifDither,
     dom.gifGlobalPalette,
-    dom.reverseOrder
+    dom.reverseOrder,
+    dom.pingPong
   ];
   lazyFrameInputs.forEach((input) => {
     input.addEventListener("input", () => {
@@ -461,27 +537,37 @@ function setTooltipsEnabled(enabled) {
 }
 
 /**
- * Make a preview canvas draggable by exposing its backing canvas as a PNG data URL.
+ * Make a preview canvas draggable.
  *
  * @param {HTMLCanvasElement} canvas
- * @param {string} filename
- * @param {() => HTMLCanvasElement | null} getSourceCanvas
+ * @param {() => {url?:string, filename:string, mimeType:string, canvas?:HTMLCanvasElement | null} | null} getDragAsset
  * @returns {void}
  */
-function makeCanvasDraggable(canvas, filename, getSourceCanvas) {
+function makeCanvasDraggable(canvas, getDragAsset) {
   canvas.draggable = true;
   canvas.addEventListener("dragstart", (event) => {
     try {
-      const sourceCanvas = getSourceCanvas?.() || canvas;
-      if (!sourceCanvas || !sourceCanvas.width || !sourceCanvas.height) {
+      const asset = getDragAsset?.();
+      if (!asset) {
         event.preventDefault();
         return;
       }
-      const dataUrl = sourceCanvas.toDataURL("image/png");
+      let url = asset.url || "";
+      const mimeType = asset.mimeType || "image/png";
+      const filename = asset.filename || "image.png";
+      if (!url) {
+        const sourceCanvas = asset.canvas || canvas;
+        if (!sourceCanvas || !sourceCanvas.width || !sourceCanvas.height) {
+          event.preventDefault();
+          return;
+        }
+        url = sourceCanvas.toDataURL(mimeType);
+      } else {
+        url = new URL(url, window.location.href).href;
+      }
       event.dataTransfer.effectAllowed = "copy";
-      event.dataTransfer.setData("text/uri-list", dataUrl);
-      event.dataTransfer.setData("text/plain", dataUrl);
-      event.dataTransfer.setData("DownloadURL", `image/png:${filename}:${dataUrl}`);
+      event.dataTransfer.setData("text/uri-list", url);
+      event.dataTransfer.setData("DownloadURL", `${mimeType}:${filename}:${url}`);
     } catch (error) {
       console.error("Could not start canvas drag:", error);
     }
@@ -646,6 +732,7 @@ function resetNonLayoutControls() {
 
   dom.fps.value = "20";
   dom.reverseOrder.checked = false;
+  dom.pingPong.checked = false;
   dom.outputScale.value = "1.00";
   dom.gifQuality.value = "10";
   dom.gifDither.value = "FloydSteinberg-serpentine";
@@ -742,10 +829,9 @@ function attachResizeHandler() {
  * @returns {Promise<void>}
  */
 async function handleFile(file) {
+  releaseOwnedSourceUrl();
   const url = URL.createObjectURL(file);
-  await loadImageSource(url, file.name || "", () => {
-    URL.revokeObjectURL(url);
-  });
+  await loadImageSource(url, file.name || "", file.type || "image/jpeg");
 }
 
 /**
@@ -753,15 +839,21 @@ async function handleFile(file) {
  *
  * @param {string} src
  * @param {string} [filename=""]
- * @param {(() => void) | null} [onComplete=null]
+ * @param {string} [mimeType="image/jpeg"]
  * @returns {Promise<void>}
  */
-async function loadImageSource(src, filename = "", onComplete = null) {
+async function loadImageSource(src, filename = "", mimeType = "image/jpeg") {
+  releaseOwnedSourceUrl();
+  if (src.startsWith("blob:")) {
+    state.source.ownedObjectUrl = src;
+  }
   setBusyState(true);
   setStatus("Loading image…");
   collapseAllPanels();
   resetNonLayoutControls();
   revokeGifUrl();
+  state.source.dragUrl = "";
+  state.source.mimeType = "";
   dom.rawPhotoName.textContent = filename ? `(${filename})` : "";
   clearAllPreviews();
   const image = new Image();
@@ -770,6 +862,8 @@ async function loadImageSource(src, filename = "", onComplete = null) {
       document.body.classList.add("has-loaded-image");
       state.source.image = image;
       state.source.filename = filename || "";
+      state.source.mimeType = mimeType || "image/jpeg";
+      state.source.dragUrl = src;
       state.source.rawPageContour = null;
       drawImageToCanvas(image, state.source.canvas);
       renderRawPreview();
@@ -781,12 +875,14 @@ async function loadImageSource(src, filename = "", onComplete = null) {
       if (!state.processing.active && !state.processing.pending) {
         setBusyState(false);
       }
-      onComplete?.();
     }
   };
   image.onerror = () => {
     setBusyState(false);
-    onComplete?.();
+    state.source.dragUrl = "";
+    state.source.mimeType = "";
+    state.source.filename = "";
+    releaseOwnedSourceUrl();
     setStatus("Failed to load the selected image.");
   };
   image.src = src;
@@ -829,7 +925,7 @@ function scheduleProcess() {
  *   postCropGeometry:{flipHorizontal:boolean,flipVertical:boolean,rotate90Cw:boolean},
  *   filters:{brightness:number,contrast:number,vibrance:number,temperature:number,unsharpRadius:number,unsharpAmount:number,invert:boolean},
  *   fps:number,
- *   exportOptions:{quality:number,dither:string|false,resampling:string,globalPalette:boolean,outputScale:number,reverseOrder:boolean}
+ *   exportOptions:{quality:number,dither:string|false,resampling:string,globalPalette:boolean,outputScale:number,reverseOrder:boolean,pingPong:boolean}
  * }}
  */
 function readConfig() {
@@ -882,6 +978,7 @@ function readConfig() {
       resampling: dom.gifResampling.value || "linear",
       globalPalette: dom.gifGlobalPalette.checked,
       reverseOrder: dom.reverseOrder.checked,
+      pingPong: dom.pingPong.checked,
     },
   };
 }
@@ -1006,6 +1103,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
         state.geometry.baseRectifiedPageCanvas = error.partialResult.rectifiedCanvas;
         state.geometry.pagePreviewGridQuad = null;
         state.preview.rectifiedCanvas = error.partialResult.rectifiedCanvas;
+        primeRectifiedDragAsset(state.preview.rectifiedCanvas);
         renderRectifiedPreview(error.partialResult.rectifiedCanvas);
       }
       console.error(error);
@@ -1110,6 +1208,8 @@ function getRectifiedConvolutionCanvas(sourceCanvas) {
 function invalidateAppearanceCache() {
   state.frames.adjustedCache.clear();
   state.preview.rectifiedCanvas = null;
+  releaseRectifiedDragUrl();
+  state.preview.rectifiedDragBuildId += 1;
 }
 
 /**
@@ -1136,6 +1236,7 @@ function refreshAppearanceOutputs() {
     applyVisualAdjustments(state.geometry.baseRectifiedPageCanvas, state.preview.adjustedRectifiedCanvas, filters);
     state.preview.rectifiedCanvas = state.preview.adjustedRectifiedCanvas;
   }
+  primeRectifiedDragAsset(state.preview.rectifiedCanvas);
   renderRectifiedPreview(state.preview.rectifiedCanvas);
 }
 
@@ -1241,7 +1342,22 @@ function scaleOutputCanvas(sourceCanvas, outputScale, resampling) {
 }
 
 /**
- * Map the running preview frame index to the actual source-frame index, optionally reversed.
+ * Return the length of the logical playback/export sequence after reverse/ping-pong are applied.
+ *
+ * @returns {number}
+ */
+function getOrderedFrameCount() {
+  const frameCount = state.geometry.frameCount;
+  if (frameCount <= 0) return 0;
+  if (readConfig().exportOptions.pingPong) {
+    return (frameCount <= 1) ? frameCount : ((frameCount * 2) - 2);
+  }
+  return frameCount;
+}
+
+/**
+ * Map the running preview/export index to the actual source-frame index, optionally reversed
+ * and optionally expanded into a ping-pong sequence.
  *
  * @param {number} previewIndex
  * @returns {number}
@@ -1249,10 +1365,18 @@ function scaleOutputCanvas(sourceCanvas, outputScale, resampling) {
 function getOrderedFrameIndex(previewIndex) {
   const frameCount = state.geometry.frameCount;
   if (frameCount <= 0) return 0;
-  const clamped = ((previewIndex % frameCount) + frameCount) % frameCount;
-  return readConfig().exportOptions.reverseOrder
-    ? (frameCount - 1 - clamped)
-    : clamped;
+  const exportOptions = readConfig().exportOptions;
+  const orderedFrameCount = getOrderedFrameCount();
+  const clamped = ((previewIndex % orderedFrameCount) + orderedFrameCount) % orderedFrameCount;
+  let sourceIndex = clamped;
+  if (exportOptions.pingPong && frameCount > 1) {
+    sourceIndex = (clamped < frameCount)
+      ? clamped
+      : ((frameCount - 2) - (clamped - frameCount));
+  }
+  return exportOptions.reverseOrder
+    ? (frameCount - 1 - sourceIndex)
+    : sourceIndex;
 }
 
 /**
@@ -1417,12 +1541,13 @@ function renderCrossRoiGrid(alignmentInfo) {
  */
 function startGifPreviewLoop() {
   const loop = (time) => {
-    if (state.geometry.frameCount > 0 && !state.preview.paused) {
+    const orderedFrameCount = getOrderedFrameCount();
+    if (orderedFrameCount > 0 && !state.preview.paused) {
       const fps = readConfig().fps;
       const frameDelay = 1000 / fps;
       if ((time - state.preview.lastTime) >= frameDelay) {
         state.preview.lastTime = time;
-        state.preview.frameIndex = (state.preview.frameIndex + 1) % state.geometry.frameCount;
+        state.preview.frameIndex = (state.preview.frameIndex + 1) % orderedFrameCount;
         drawCurrentGifPreview();
       }
     }
@@ -1475,7 +1600,8 @@ function rerenderPreviews() {
  * @returns {Promise<void>}
  */
 async function exportGif() {
-  if (!state.geometry.frameCount) return;
+  const orderedFrameCount = getOrderedFrameCount();
+  if (!orderedFrameCount) return;
   dom.exportButton.disabled = true;
   updateExportButtonLabel(0);
   setStatus("Encoding GIF…");
@@ -1500,7 +1626,7 @@ async function exportGif() {
   });
 
   const delay = Math.max(1, Math.round(1000 / config.fps));
-  for (let i = 0; i < state.geometry.frameCount; i++) {
+  for (let i = 0; i < orderedFrameCount; i++) {
     // Preview stays lazy, but export must realize the full adjusted frame set.
     gif.addFrame(getAdjustedFrameCanvas(getOrderedFrameIndex(i)), { copy: true, delay });
   }
@@ -1576,6 +1702,20 @@ function sanitizeFilenameBase(filename) {
   const withoutExt = filename.replace(/\.[^.]+$/, "");
   const cleaned = withoutExt.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
   return cleaned || "frame_sheet";
+}
+
+/**
+ * Insert a `-rectified` suffix before the source-image extension for rectified-sheet export.
+ *
+ * @param {string} sourceFilename
+ * @returns {string}
+ */
+function makeRectifiedFilename(sourceFilename) {
+  const trimmed = String(sourceFilename || "").trim();
+  if (!trimmed) return "rectified-sheet.png";
+  const match = trimmed.match(/^(.*?)(\.[^.]+)$/);
+  if (!match) return `${trimmed}-rectified.png`;
+  return `${match[1]}-rectified${match[2]}`;
 }
 
 /**
