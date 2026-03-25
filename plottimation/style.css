@@ -82,6 +82,13 @@ select {
   display: flex;
   align-items: baseline;
   gap: 8px;
+  flex-wrap: nowrap;
+}
+
+#appTitle,
+#appVersion {
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 #appVersion {
