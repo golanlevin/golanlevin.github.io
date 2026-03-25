@@ -152,7 +152,9 @@ export async function loadImageSource({
   revokeGifUrl();
   state.source.dragUrl = "";
   state.source.mimeType = "";
-  dom.rawPhotoName.textContent = filename ? `(${filename})` : "";
+  dom.rawPhotoName.textContent = filename || "";
+  dom.rawPhotoNameWrap.hidden = !filename;
+  dom.rawPhotoName.removeAttribute("href");
   clearAllPreviews();
   // The UI resets to defaults first, then an optional sibling settings file is layered on top.
   const settingsText = await loadCompanionSettingsText(src, filename, settingsFile);
@@ -165,6 +167,8 @@ export async function loadImageSource({
       state.source.filename = filename || "";
       state.source.mimeType = mimeType || "image/jpeg";
       state.source.dragUrl = src;
+      dom.rawPhotoNameWrap.hidden = !state.source.filename;
+      dom.rawPhotoName.href = new URL(src, window.location.href).href;
       state.source.rawPageContour = null;
       drawImageToCanvas(image, state.source.canvas);
       renderRawPreview();
@@ -188,6 +192,9 @@ export async function loadImageSource({
     state.source.dragUrl = "";
     state.source.mimeType = "";
     state.source.filename = "";
+    dom.rawPhotoName.textContent = "";
+    dom.rawPhotoNameWrap.hidden = true;
+    dom.rawPhotoName.removeAttribute("href");
     releaseOwnedSourceUrl(state);
     setStatus("Failed to load the selected image.");
   };

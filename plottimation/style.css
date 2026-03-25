@@ -85,16 +85,9 @@ select {
   flex-wrap: nowrap;
 }
 
-#appTitle,
-#appVersion {
+#appTitle {
   white-space: nowrap;
   flex: 0 0 auto;
-}
-
-#appVersion {
-  top: 0;
-  margin: 0;
-  color: rgba(95, 99, 104, 0.72);
 }
 
 .lede {
@@ -159,6 +152,11 @@ select {
 
 #rawPhotoName {
   font-family: var(--mono);
+}
+
+#rawPhotoName[href] {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .collapsible summary,

@@ -83,6 +83,7 @@ export const dom = {
   statusText: document.querySelector("#statusText"),
   statusBusy: document.querySelector("#statusBusy"),
   rawCanvas: document.querySelector("#rawCanvas"),
+  rawPhotoNameWrap: document.querySelector("#rawPhotoNameWrap"),
   rawPhotoName: document.querySelector("#rawPhotoName"),
   rawBusy: document.querySelector("#rawBusy"),
   rectifiedCanvas: document.querySelector("#rectifiedCanvas"),
