@@ -83,6 +83,9 @@ export function initializeTooltips({ tooltipText, state, dom, applyTooltipState 
  *   resetTrimControls: () => void,
  *   toggleTooltips: () => void,
  *   togglePreviewPaused: () => void,
+ *   stepPausedPreviewFrame: (direction: number) => void,
+ *   toggleMarkerEditing: () => void,
+ *   clearMarkerEdits: () => void,
  *   syncPaperPresetUi: () => void,
  *   syncAlignmentMarkerUi: () => void,
  *   updateSliderReadouts: () => void,
@@ -113,6 +116,9 @@ export function attachUi({
   resetTrimControls,
   toggleTooltips,
   togglePreviewPaused,
+  stepPausedPreviewFrame,
+  toggleMarkerEditing,
+  clearMarkerEdits,
   syncPaperPresetUi,
   syncAlignmentMarkerUi,
   updateSliderReadouts,
@@ -192,8 +198,30 @@ export function attachUi({
 
   attachResetButton(dom.resetAppearanceButton, resetAppearanceControls);
   attachResetButton(dom.resetTrimButton, resetTrimControls);
-  dom.tooltipToggleButton.addEventListener("click", toggleTooltips);
+  dom.tooltipToggleButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleTooltips();
+  });
   dom.previewPlayPauseButton.addEventListener("click", togglePreviewPaused);
+  dom.toggleMarkerEditingButton.addEventListener("click", toggleMarkerEditing);
+  dom.clearMarkerEditsButton.addEventListener("click", clearMarkerEdits);
+
+  window.addEventListener("keydown", (event) => {
+    const target = event.target;
+    // Arrow-key scrubbing should not interfere with typing or with native select navigation,
+    // but it should still work if a button currently holds focus.
+    if (target instanceof HTMLElement && target.closest("input, textarea, select")) {
+      return;
+    }
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      stepPausedPreviewFrame(-1);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      stepPausedPreviewFrame(1);
+    }
+  });
 
   dom.paperPreset.addEventListener("input", () => {
     syncPaperPresetUi();

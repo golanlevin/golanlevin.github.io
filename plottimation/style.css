@@ -78,6 +78,18 @@ select {
   line-height: 1;
 }
 
+.title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+#appVersion {
+  top: 0;
+  margin: 0;
+  color: rgba(95, 99, 104, 0.72);
+}
+
 .lede {
   position: relative;
   top: 4px;
@@ -138,7 +150,12 @@ select {
   color: var(--muted);
 }
 
-.collapsible summary {
+#rawPhotoName {
+  font-family: var(--mono);
+}
+
+.collapsible summary,
+.independent-collapsible summary {
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -149,11 +166,13 @@ select {
   list-style: none;
 }
 
-.collapsible summary::-webkit-details-marker {
+.collapsible summary::-webkit-details-marker,
+.independent-collapsible summary::-webkit-details-marker {
   display: none;
 }
 
-.collapsible summary::before {
+.collapsible summary::before,
+.independent-collapsible summary::before {
   content: "▶";
   position: absolute;
   left: 0;
@@ -166,7 +185,8 @@ select {
   color: var(--muted);
 }
 
-.collapsible[open] summary::before {
+.collapsible[open] summary::before,
+.independent-collapsible[open] summary::before {
   content: "▼";
 }
 
@@ -521,6 +541,33 @@ body.has-loaded-image .cross-roi-grid.is-empty {
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+.cross-roi-tile-wrap {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  align-self: start;
+  justify-self: start;
+  border: 1px solid transparent;
+}
+
+.cross-roi-tile-wrap.manual-override {
+  border-color: rgba(0, 128, 0, 0.85);
+}
+
+.cross-roi-tile-wrap.editing-enabled {
+  cursor: default;
+}
+
+.cross-roi-tile-wrap .cross-roi-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background: transparent;
+  border-radius: 0;
 }
 
 .hidden {

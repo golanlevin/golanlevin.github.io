@@ -12,12 +12,15 @@
     <div class="app-shell">
       <aside class="control-panel">
         <div class="panel-head">
-          <h1 id="appTitle">Plottimation Tool</h1>
+          <div class="title-row">
+            <h1 id="appTitle">Plottimation Tool</h1>
+            <span id="appVersion" class="lede">v.1.03</span>
+          </div>
           <p id="appLedePrimary" class="lede">
             Make an animated GIF from a photo of a frame-sheet.
           </p>
           <p id="appLedeSecondary" class="lede">
-            v.1.02 • Golan Levin • <a href="https://github.com/golanlevin/plottimation" target="_blank" rel="noopener noreferrer">Documentation</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer">Demo Video</a>
+            By @golanlevin • <a href="https://github.com/golanlevin/plottimation" target="_blank" rel="noopener noreferrer">Documentation</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer">Demo Video</a>
           </p>
           <p id="appLedeTertiary" class="lede"><em>Note: not yet mobile-friendly</em></p>
         </div>
@@ -111,7 +114,7 @@
         </details>
 
         <details class="control-group collapsible">
-          <summary id="frameAlignmentSummary">Frame Alignment</summary>
+          <summary id="frameAlignmentSummary">Automatic Frame Alignment</summary>
           <fieldset id="alignmentMarkerTypeField" class="radio-group">
             <legend>Alignment Marker Type:</legend>
             <label class="toggle">
@@ -119,8 +122,8 @@
               <span>Crosses</span>
             </label>
             <label class="toggle">
-              <input id="alignmentMarkerTypeCircles" name="alignmentMarkerType" type="radio" value="circles" />
-              <span>Dots</span>
+              <input id="alignmentMarkerTypeCircles" name="alignmentMarkerType" type="radio" value="circles" disabled />
+              <span>Dots (not yet supported)</span>
             </label>
           </fieldset>
           <div class="slider-stack">
@@ -269,16 +272,16 @@
           </div>
         </details>
 
-        <section class="control-group status-group">
-          <div class="section-head">
+        <details class="control-group status-group independent-collapsible" open>
+          <summary id="statusSummary">
             <div class="status-headline">
               <h2 id="statusHeading">Status</h2>
               <span id="statusBusy" class="status-busy" hidden aria-hidden="true"></span>
             </div>
             <button id="tooltipToggleButton" class="summary-button" type="button">Enable Tooltips</button>
-          </div>
+          </summary>
           <pre id="statusText">Waiting for OpenCV…</pre>
-        </section>
+        </details>
       </aside>
 
       <main class="workspace">
@@ -306,6 +309,10 @@
         <section class="viewer-card">
           <header>
             <h2 id="crossRegionsHeading">Frame Alignment Markers</h2>
+            <div class="header-actions">
+              <button id="toggleMarkerEditingButton" class="header-button" type="button" disabled>Enable Overrides</button>
+              <button id="clearMarkerEditsButton" class="header-button" type="button" hidden>Clear Edits</button>
+            </div>
           </header>
           <div id="crossRoiGrid" class="cross-roi-grid"></div>
         </section>

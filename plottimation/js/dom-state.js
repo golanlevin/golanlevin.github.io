@@ -90,6 +90,8 @@ export const dom = {
   gifPreviewCanvas: document.querySelector("#gifPreviewCanvas"),
   gifImage: document.querySelector("#gifImage"),
   crossRoiGrid: document.querySelector("#crossRoiGrid"),
+  toggleMarkerEditingButton: document.querySelector("#toggleMarkerEditingButton"),
+  clearMarkerEditsButton: document.querySelector("#clearMarkerEditsButton"),
   tooltipToggleButton: document.querySelector("#tooltipToggleButton"),
   resetAppearanceButton: document.querySelector("#resetAppearanceButton"),
   resetTrimButton: document.querySelector("#resetTrimButton"),
@@ -103,6 +105,9 @@ export const state = {
     cvReady: false,
     tooltipsEnabled: false,
     busy: false,
+    markerEditingEnabled: false,
+    lastMarkerClickKey: "",
+    lastMarkerClickTime: 0,
   },
   source: {
     image: null,
@@ -119,6 +124,7 @@ export const state = {
     baseRectifiedPageCanvas: null,
     pagePreviewGridQuad: null,
     frameCount: 0,
+    manualMarkerOverrides: new Map(),
   },
   frames: {
     base: [],

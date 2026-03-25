@@ -80,6 +80,8 @@ function getExpectedSettingsFilename(filename) {
  */
 export async function handleFile(file, files = null, { state, loadImageSource, applySettingsFile }) {
   const allFiles = [...(files || [file])].filter(Boolean);
+  // A drag payload may contain an image plus its sibling settings file, or just a settings file.
+  // Prefer the image when present; otherwise treat a lone settings file as an override request.
   const imageFile = allFiles.find(isImageFile) || (isImageFile(file) ? file : null);
   if (imageFile) {
     releaseOwnedSourceUrl(state);
@@ -152,6 +154,7 @@ export async function loadImageSource({
   state.source.mimeType = "";
   dom.rawPhotoName.textContent = filename ? `(${filename})` : "";
   clearAllPreviews();
+  // The UI resets to defaults first, then an optional sibling settings file is layered on top.
   const settingsText = await loadCompanionSettingsText(src, filename, settingsFile);
 
   const image = new Image();
@@ -167,6 +170,7 @@ export async function loadImageSource({
       renderRawPreview();
       const loadedWhat = settingsText ? "Loaded image and settings." : "Loaded image.";
       if (settingsText) {
+        // Apply the saved settings before CV runs so detection/extraction starts from the restored state.
         applyLoadedSettingsText(settingsText);
       }
       invalidateAppearanceCache();

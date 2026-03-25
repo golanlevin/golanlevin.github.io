@@ -101,6 +101,8 @@ const TOOLTIP_TEXT = {
   "#rectifiedCanvas": "Preview of the rectified page; click to toggle the convolution diagnostic view.",
   "#crossRegionsHeading": "Diagnostic tiles showing the regions used to localize each frame-alignment marker.",
   "#crossRoiGrid": "Per-marker diagnostic regions used to inspect frame-alignment marker detection.",
+  "#toggleMarkerEditingButton": "Enable or disable manual editing of alignment markers in the diagnostic grid.",
+  "#clearMarkerEditsButton": "Remove all saved manual marker overrides for the current image.",
   "#animationPreviewHeading": "Live animation preview using the current settings.",
   "#previewPlayPauseButton": "Pause or resume the live animation preview.",
   "#exportZipButton": "Download a ZIP archive containing the current animation frames as PNG files.",
@@ -125,6 +127,17 @@ function updateExportButtonLabel(progressPercent = null) {
 }
 
 /**
+ * Build the stable string key used for marker override storage.
+ *
+ * @param {number} col
+ * @param {number} row
+ * @returns {string}
+ */
+function getMarkerKey(col, row) {
+  return `${col},${row}`;
+}
+
+/**
  * Populate the Load Demo pulldown from a small manifest in `demo/index.json`.
  *
  * Browsers do not reliably expose directory listings to client-side code, so this manifest keeps
@@ -138,8 +151,8 @@ async function populateDemoSelect() {
   try {
     const response = await fetch("demo/index.json", { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const filenames = await response.json();
-    if (!Array.isArray(filenames)) throw new Error("Demo manifest is not an array.");
+    const manifestText = await response.text();
+    const filenames = parseDemoManifest(manifestText);
     for (const filename of filenames) {
       if (typeof filename !== "string") continue;
       const option = document.createElement("option");
@@ -152,6 +165,34 @@ async function populateDemoSelect() {
     console.warn("Could not populate demo list.", error);
     select.disabled = true;
   }
+}
+
+/**
+ * Parse the demo manifest text into an array of filenames.
+ *
+ * This accepts strict JSON, JSON with trailing commas, or a simple newline list.
+ *
+ * @param {string} manifestText
+ * @returns {string[]}
+ */
+function parseDemoManifest(manifestText) {
+  const trimmed = String(manifestText || "").trim();
+  if (!trimmed) return [];
+  try {
+    // Accept slightly sloppy JSON manifests too, since these files are hand-edited and small.
+    const parsed = JSON.parse(trimmed.replace(/,\s*([\]}])/g, "$1"));
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item) => typeof item === "string");
+    }
+  } catch {
+    // Fall through to the simple line-based parser below.
+  }
+  return trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^["']|["'],?$/g, "").replace(/,$/, ""))
+    .filter(Boolean);
 }
 
 /**
@@ -170,6 +211,20 @@ function updateAnimationPreviewHeading() {
  */
 function updatePreviewPlayPauseButton() {
   syncPreviewPlayPauseButton(dom, state);
+}
+
+/**
+ * Keep the marker-editing header controls synchronized with current state.
+ *
+ * @returns {void}
+ */
+function syncMarkerEditingUi() {
+  const hasAlignmentInfo = !!state.geometry.alignmentInfo;
+  const hasEdits = state.geometry.manualMarkerOverrides.size > 0;
+  dom.toggleMarkerEditingButton.disabled = !hasAlignmentInfo;
+  dom.toggleMarkerEditingButton.textContent = state.runtime.markerEditingEnabled ? "Disable Overrides" : "Enable Overrides";
+  dom.clearMarkerEditsButton.hidden = !hasEdits;
+  dom.clearMarkerEditsButton.disabled = !hasEdits;
 }
 
 /**
@@ -314,6 +369,8 @@ function clearDerivedPreviews() {
   state.geometry.pagePreviewGridQuad = null;
   state.geometry.alignmentInfo = null;
   state.geometry.frameCount = 0;
+  state.geometry.manualMarkerOverrides.clear();
+  state.runtime.markerEditingEnabled = false;
   state.frames.base = [];
   state.frames.adjustedCache.clear();
   state.preview.frameIndex = 0;
@@ -334,6 +391,7 @@ function clearDerivedPreviews() {
   dom.exportButton.disabled = true;
   dom.exportZipButton.disabled = true;
   dom.saveSettingsButton.disabled = true;
+  syncMarkerEditingUi();
   updatePreviewPlayPauseButton();
   updateAnimationPreviewHeading();
   updateExportButtonLabel();
@@ -371,6 +429,7 @@ function init() {
   void populateDemoSelect();
   syncPaperPresetUi();
   syncAlignmentMarkerUi();
+  syncMarkerEditingUi();
   dom.gifPreviewCanvas.title = TOOLTIP_TEXT["#gifPreviewCanvas"] || "";
   dom.gifImage.classList.add("hidden");
   dom.gifImage.hidden = true;
@@ -418,6 +477,14 @@ function attachUi() {
       updatePreviewPlayPauseButton();
       drawCurrentGifPreview();
     },
+    stepPausedPreviewFrame: (direction) => {
+      const orderedFrameCount = getOrderedFrameCount();
+      if (!state.preview.paused || orderedFrameCount <= 0) return;
+      state.preview.frameIndex = (state.preview.frameIndex + direction + orderedFrameCount) % orderedFrameCount;
+      drawCurrentGifPreview();
+    },
+    toggleMarkerEditing,
+    clearMarkerEdits,
     syncPaperPresetUi,
     syncAlignmentMarkerUi,
     updateSliderReadouts,
@@ -446,6 +513,57 @@ function initializeTooltips() {
     dom,
     applyTooltipState: setTooltipsEnabled,
   });
+}
+
+/**
+ * Apply persisted manual marker overrides to the freshly detected alignment result.
+ *
+ * Overrides are stored in rectified-sheet coordinates and replace the marker center used by
+ * extraction, while the original auto-detection remains available in the tile metadata.
+ *
+ * @param {object | null} alignmentInfo
+ * @returns {void}
+ */
+function applyManualMarkerOverrides(alignmentInfo) {
+  if (!alignmentInfo) return;
+  for (const [key, override] of state.geometry.manualMarkerOverrides.entries()) {
+    const marker = alignmentInfo.markerLookup.get(key);
+    const tile = alignmentInfo.crossRoiTileMap?.get(key);
+    if (marker) {
+      marker.detectedX = override.x;
+      marker.detectedY = override.y;
+      marker.accepted = true;
+      marker.manualOverride = true;
+    }
+    if (tile) {
+      tile.detectedX = override.x;
+      tile.detectedY = override.y;
+      tile.accepted = true;
+      tile.manualOverride = true;
+    }
+  }
+}
+
+/**
+ * Preserve the original auto-detected marker positions so manual edits can be reverted cleanly.
+ *
+ * @param {object | null} alignmentInfo
+ * @returns {void}
+ */
+function stashOriginalMarkerDetections(alignmentInfo) {
+  if (!alignmentInfo) return;
+  for (const marker of alignmentInfo.markerLookup.values()) {
+    if (!Number.isFinite(marker.autoDetectedX)) {
+      marker.autoDetectedX = marker.detectedX;
+      marker.autoDetectedY = marker.detectedY;
+    }
+  }
+  for (const tile of alignmentInfo.crossRoiTiles || []) {
+    if (!Number.isFinite(tile.autoDetectedX)) {
+      tile.autoDetectedX = tile.detectedX;
+      tile.autoDetectedY = tile.detectedY;
+    }
+  }
 }
 
 /**
@@ -531,10 +649,13 @@ function resetTrimControls() {
  */
 function resetNonLayoutControls() {
   applyNonLayoutDefaults(dom);
+  state.geometry.manualMarkerOverrides.clear();
+  state.runtime.markerEditingEnabled = false;
 
   state.preview.paused = false;
   updatePreviewPlayPauseButton();
   syncAlignmentMarkerUi();
+  syncMarkerEditingUi();
   updateSliderReadouts();
 }
 
@@ -791,6 +912,51 @@ function syncAlignmentMarkerUi() {
 }
 
 /**
+ * Toggle manual marker-editing mode on or off.
+ *
+ * @returns {void}
+ */
+function toggleMarkerEditing() {
+  if (!state.geometry.alignmentInfo) return;
+  state.runtime.markerEditingEnabled = !state.runtime.markerEditingEnabled;
+  syncMarkerEditingUi();
+  renderCrossRoiGrid(state.geometry.alignmentInfo);
+}
+
+/**
+ * Remove all saved manual marker overrides and re-render from the current auto-detected markers.
+ *
+ * @returns {void}
+ */
+function clearMarkerEdits() {
+  if (!state.geometry.manualMarkerOverrides.size) return;
+  state.geometry.manualMarkerOverrides.clear();
+  state.runtime.markerEditingEnabled = false;
+  if (state.geometry.alignmentInfo) {
+    // Original auto-detected positions are cached on the live alignment objects so edits can revert instantly
+    // without rerunning the whole detector.
+    for (const [key, marker] of state.geometry.alignmentInfo.markerLookup.entries()) {
+      if (Number.isFinite(marker.autoDetectedX)) {
+        marker.detectedX = marker.autoDetectedX;
+        marker.detectedY = marker.autoDetectedY;
+        marker.manualOverride = false;
+      }
+      const tile = state.geometry.alignmentInfo.crossRoiTileMap?.get(key);
+      if (tile && Number.isFinite(tile.autoDetectedX)) {
+        tile.detectedX = tile.autoDetectedX;
+        tile.detectedY = tile.autoDetectedY;
+        tile.manualOverride = false;
+      }
+    }
+  }
+  revokeGifUrl();
+  invalidateFrameCaches();
+  syncMarkerEditingUi();
+  renderCrossRoiGrid(state.geometry.alignmentInfo);
+  drawCurrentGifPreview();
+}
+
+/**
  * Best-effort loader for a sibling settings file that matches the selected image.
  *
  * For URL-based demo/server images, this fetches `<imagename>_settings.txt` from the same directory.
@@ -865,6 +1031,7 @@ async function applySettingsFile(file) {
  */
 function applyLoadedSettingsText(settingsText) {
   if (!settingsText.trim()) return;
+  state.geometry.manualMarkerOverrides.clear();
   const entries = new Map(
     settingsText
       .split(/\r?\n/)
@@ -927,8 +1094,19 @@ function applyLoadedSettingsText(settingsText) {
   setIfPresent("resampling", dom.gifResampling);
   setCheckedIfPresent("use_global_palette", dom.gifGlobalPalette);
 
+  for (const [key, value] of entries.entries()) {
+    const match = /^marker_override_(\d+)_(\d+)$/.exec(key);
+    if (!match) continue;
+    const [xText, yText] = String(value || "").split(",");
+    const x = Number(xText);
+    const y = Number(yText);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    state.geometry.manualMarkerOverrides.set(getMarkerKey(Number(match[1]), Number(match[2])), { x, y });
+  }
+
   syncPaperPresetUi();
   syncAlignmentMarkerUi();
+  syncMarkerEditingUi();
   updateSliderReadouts();
 }
 
@@ -1016,6 +1194,11 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     state.geometry.baseRectifiedPageCanvas = result.pagePreviewCanvas;
     state.geometry.pagePreviewGridQuad = result.pagePreviewGridQuad;
     state.source.rawPageContour = result.pageQuadPoints;
+    stashOriginalMarkerDetections(state.geometry.alignmentInfo);
+    applyManualMarkerOverrides(state.geometry.alignmentInfo);
+    if (state.geometry.manualMarkerOverrides.size > 0) {
+      state.frames.base = new Array(result.frames.length);
+    }
     invalidateAppearanceCache();
     updateSliderReadouts();
     renderRawPreview();
@@ -1025,6 +1208,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     dom.exportButton.disabled = state.geometry.frameCount === 0;
     dom.exportZipButton.disabled = state.geometry.frameCount === 0;
     dom.saveSettingsButton.disabled = state.geometry.frameCount === 0;
+    syncMarkerEditingUi();
     updatePreviewPlayPauseButton();
     updateExportButtonLabel();
     setStatus(result.statusText);
@@ -1393,6 +1577,7 @@ function renderCrossRoiGrid(alignmentInfo) {
   if (!alignmentInfo || !alignmentInfo.crossRoiTiles || alignmentInfo.crossRoiTiles.length === 0) {
     grid.classList.add("is-empty");
     grid.textContent = "";
+    syncMarkerEditingUi();
     return;
   }
   grid.classList.remove("is-empty");
@@ -1408,17 +1593,7 @@ function renderCrossRoiGrid(alignmentInfo) {
       }
       const tile = alignmentInfo.crossRoiTileMap.get(`${col},${row}`);
       if (tile) {
-        tile.canvas.classList.add("cross-roi-tile");
-        if (tile.kind === "unrefined") {
-          tile.canvas.title = "";
-        } else {
-          const colContrast = Number.isFinite(tile.colContrast) ? tile.colContrast.toFixed(2) : "--";
-          const rowContrast = Number.isFinite(tile.rowContrast) ? tile.rowContrast.toFixed(2) : "--";
-          const darkFrac = Number.isFinite(tile.darkFrac) ? tile.darkFrac.toFixed(4) : "--";
-          const convStrength = Number.isFinite(tile.convolutionStrength) ? ` | conv ${tile.convolutionStrength.toFixed(4)}` : "";
-          tile.canvas.title = `(${col}, ${row}) ${tile.accepted ? "accepted" : "rejected"} | col ${colContrast} | row ${rowContrast} | ink ${darkFrac}${convStrength}`;
-        }
-        grid.appendChild(tile.canvas);
+        grid.appendChild(buildMarkerTileElement(tile, alignmentInfo));
       } else {
         const spacer = document.createElement("div");
         spacer.className = "cross-roi-empty";
@@ -1426,6 +1601,202 @@ function renderCrossRoiGrid(alignmentInfo) {
       }
     }
   }
+  syncMarkerEditingUi();
+}
+
+/**
+ * Build one interactive marker tile wrapper with an overlay reticle.
+ *
+ * @param {object} tile
+ * @param {object} alignmentInfo
+ * @returns {HTMLDivElement}
+ */
+function buildMarkerTileElement(tile, alignmentInfo) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "cross-roi-tile-wrap";
+  if (state.runtime.markerEditingEnabled) wrapper.classList.add("editing-enabled");
+  if (state.geometry.manualMarkerOverrides.has(getMarkerKey(tile.col, tile.row))) {
+    wrapper.classList.add("manual-override");
+  }
+
+  tile.canvas.classList.add("cross-roi-tile");
+  const overlay = document.createElement("canvas");
+  overlay.className = "cross-roi-overlay";
+  overlay.width = tile.canvas.width;
+  overlay.height = tile.canvas.height;
+  overlay.style.width = `${tile.canvas.width}px`;
+  overlay.style.height = `${tile.canvas.height}px`;
+  drawMarkerTileOverlay(overlay, tile);
+  wrapper.appendChild(tile.canvas);
+  wrapper.appendChild(overlay);
+
+  if (tile.kind === "unrefined") {
+    wrapper.title = "";
+  } else {
+    const colContrast = Number.isFinite(tile.colContrast) ? tile.colContrast.toFixed(2) : "--";
+    const rowContrast = Number.isFinite(tile.rowContrast) ? tile.rowContrast.toFixed(2) : "--";
+    const darkFrac = Number.isFinite(tile.darkFrac) ? tile.darkFrac.toFixed(4) : "--";
+    const convStrength = Number.isFinite(tile.convolutionStrength) ? ` | conv ${tile.convolutionStrength.toFixed(4)}` : "";
+    const manualTag = state.geometry.manualMarkerOverrides.has(getMarkerKey(tile.col, tile.row)) ? " | manual override" : "";
+    wrapper.title = `(${tile.col}, ${tile.row}) ${tile.accepted ? "accepted" : "rejected"} | col ${colContrast} | row ${rowContrast} | ink ${darkFrac}${convStrength}${manualTag}`;
+  }
+
+  if (state.runtime.markerEditingEnabled) {
+    wrapper.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      const markerKey = getMarkerKey(tile.col, tile.row);
+      const now = performance.now();
+      const isDoubleClick =
+        state.geometry.manualMarkerOverrides.has(markerKey) &&
+        state.runtime.lastMarkerClickKey === markerKey &&
+        (now - state.runtime.lastMarkerClickTime) <= 320;
+      state.runtime.lastMarkerClickKey = markerKey;
+      state.runtime.lastMarkerClickTime = now;
+      if (isDoubleClick) {
+        restoreMarkerOverride(tile);
+        return;
+      }
+      const updateOverlayFromEvent = (pointerEvent) => {
+        const local = getMarkerTileLocalPoint(pointerEvent, wrapper, tile.canvas.width, tile.canvas.height);
+        drawMarkerTileOverlay(overlay, tile, local);
+        return local;
+      };
+      let local = updateOverlayFromEvent(event);
+      // Apply immediately so the live preview follows the drag instead of waiting for mouse-up.
+      applyMarkerOverride(tile, local, false);
+      const handleMove = (moveEvent) => {
+        local = updateOverlayFromEvent(moveEvent);
+        applyMarkerOverride(tile, local, false);
+      };
+      const handleUp = () => {
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", handleUp);
+        window.removeEventListener("pointercancel", handleUp);
+        applyMarkerOverride(tile, local, true);
+      };
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", handleUp);
+      window.addEventListener("pointercancel", handleUp);
+    });
+  }
+
+  return wrapper;
+}
+
+/**
+ * Draw the marker reticle overlay for one ROI tile.
+ *
+ * @param {HTMLCanvasElement} overlay
+ * @param {object} tile
+ * @param {{x:number, y:number} | null} [localOverride=null]
+ * @returns {void}
+ */
+function drawMarkerTileOverlay(overlay, tile, localOverride = null) {
+  const ctx = overlay.getContext("2d");
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  const current = localOverride || getMarkerTileCurrentLocalPoint(tile);
+  const isManual = !!localOverride || state.geometry.manualMarkerOverrides.has(getMarkerKey(tile.col, tile.row));
+  ctx.save();
+  ctx.strokeStyle = isManual ? "rgba(0, 128, 0, 0.95)" : (tile.accepted ? "rgba(255, 0, 0, 0.55)" : "rgba(255, 0, 0, 0.3)");
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(current.x + 0.5, 0);
+  ctx.lineTo(current.x + 0.5, overlay.height);
+  ctx.moveTo(0, current.y + 0.5);
+  ctx.lineTo(overlay.width, current.y + 0.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Convert a tile's current detected or manually overridden marker position into tile-local pixels.
+ *
+ * @param {object} tile
+ * @returns {{x:number, y:number}}
+ */
+function getMarkerTileCurrentLocalPoint(tile) {
+  const center = (tile.canvas.width - 1) * 0.5;
+  return {
+    x: center + (tile.detectedX - tile.x),
+    y: center + (tile.detectedY - tile.y),
+  };
+}
+
+/**
+ * Convert a pointer event over a marker tile into a clamped local tile coordinate.
+ *
+ * @param {PointerEvent} event
+ * @param {HTMLElement} element
+ * @param {number} width
+ * @param {number} height
+ * @returns {{x:number, y:number}}
+ */
+function getMarkerTileLocalPoint(event, element, width, height) {
+  const rect = element.getBoundingClientRect();
+  const x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * width;
+  const y = ((event.clientY - rect.top) / Math.max(1, rect.height)) * height;
+  return {
+    x: Math.max(0, Math.min(width - 1, x)),
+    y: Math.max(0, Math.min(height - 1, y)),
+  };
+}
+
+/**
+ * Save or update one manual marker override in rectified-sheet coordinates and refresh dependent previews.
+ *
+ * @param {object} tile
+ * @param {{x:number, y:number}} local
+ * @param {boolean} finalize
+ * @returns {void}
+ */
+function applyMarkerOverride(tile, local, finalize) {
+  const center = (tile.canvas.width - 1) * 0.5;
+  const detectedX = tile.x + (local.x - center);
+  const detectedY = tile.y + (local.y - center);
+  const key = getMarkerKey(tile.col, tile.row);
+  state.geometry.manualMarkerOverrides.set(key, { x: detectedX, y: detectedY });
+  if (state.geometry.alignmentInfo) {
+    // Manual overrides patch the already-detected alignment object in place, which lets preview/extraction
+    // update lazily from the edited marker positions without another CV pass.
+    applyManualMarkerOverrides(state.geometry.alignmentInfo);
+  }
+  revokeGifUrl();
+  invalidateFrameCaches();
+  syncMarkerEditingUi();
+  if (finalize) {
+    renderCrossRoiGrid(state.geometry.alignmentInfo);
+  }
+  drawCurrentGifPreview();
+}
+
+/**
+ * Remove one saved marker override and restore the original auto-detected position.
+ *
+ * @param {object} tile
+ * @returns {void}
+ */
+function restoreMarkerOverride(tile) {
+  const key = getMarkerKey(tile.col, tile.row);
+  state.geometry.manualMarkerOverrides.delete(key);
+  if (state.geometry.alignmentInfo) {
+    const marker = state.geometry.alignmentInfo.markerLookup.get(key);
+    const liveTile = state.geometry.alignmentInfo.crossRoiTileMap?.get(key);
+    if (marker && Number.isFinite(marker.autoDetectedX)) {
+      marker.detectedX = marker.autoDetectedX;
+      marker.detectedY = marker.autoDetectedY;
+      marker.manualOverride = false;
+    }
+    if (liveTile && Number.isFinite(liveTile.autoDetectedX)) {
+      liveTile.detectedX = liveTile.autoDetectedX;
+      liveTile.detectedY = liveTile.autoDetectedY;
+      liveTile.manualOverride = false;
+    }
+  }
+  revokeGifUrl();
+  invalidateFrameCaches();
+  syncMarkerEditingUi();
+  renderCrossRoiGrid(state.geometry.alignmentInfo);
+  drawCurrentGifPreview();
 }
 
 /**
@@ -1598,7 +1969,13 @@ function buildSettingsTsv(config) {
     ["resampling", String(config.exportOptions.resampling)],
     ["use_global_palette", String(config.exportOptions.globalPalette)],
   ];
-  return rows.map(([key, value]) => `${key}\t${value}`).join("\n") + "\n";
+  const overrideRows = [...state.geometry.manualMarkerOverrides.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, point]) => {
+      const [col, row] = key.split(",");
+      return [`marker_override_${col}_${row}`, `${point.x},${point.y}`];
+    });
+  return [...rows, ...overrideRows].map(([key, value]) => `${key}\t${value}`).join("\n") + "\n";
 }
 
 /**

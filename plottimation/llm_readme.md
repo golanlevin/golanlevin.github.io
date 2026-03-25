@@ -2,26 +2,19 @@
 
 ## Purpose
 
-`plottimation_webtool/` is a browser-based desktop tool for building an animated GIF from a photo or scan of a plotted frame-sheet.
+`plottimation_webtool/` is a browser-based desktop tool for turning a photo or scan of a plotted frame-sheet into:
 
-Typical flow:
+- a live animation preview
+- an exported animated GIF
+- a ZIP archive of PNG frames plus settings
 
-1. Load a photo/scan.
-2. Detect the paper quad in the raw image.
-3. Rectify the page.
-4. Detect the frame-grid region inside the page.
-5. Detect/refine the `+` crosses.
-6. Extract the frames.
-7. Preview the animation live.
-8. Export the GIF.
+The current active workflow assumes an all-cross sheet format:
 
-The current preferred sheet format is all-cross:
+- the frame grid is delineated by a complete `(cols + 1) x (rows + 1)` lattice of small dark `+` markers
+- the outer frame-grid corners are also `+` markers
+- no special corner circles are used in the active path
 
-- complete `(cols + 1) x (rows + 1)` lattice of small dark `+` crosses
-- outer frame-grid corners are also `+` crosses
-- no special corner circles in the active path
-
-Legacy circle-based code still exists in `js/pipeline.js` as `_old` helpers, but is not the active detector.
+There is now UI groundwork for an alternate filled-dot marker mode, but the active CV path is still cross-based. Legacy circle-based code also still exists in `js/pipeline.js` as `_old` helpers, but it is not the active detector.
 
 ## Important directories
 
@@ -34,35 +27,39 @@ Legacy circle-based code still exists in `js/pipeline.js` as `_old` helpers, but
 
 Useful assets in `plottimation_webtool/demo/`:
 
-- `mySrcImage.jpg`
-- `test_2_5x4.jpg`
-- `convolved-rectified-sheet.png`
-- `left-sweep.tsv`
-- `profile.png`
-- `debug.png`
+- demo images are now listed through `demo/index.json`
+- example current names include:
+  - `1_dmawer.jpg`
+  - `2_concentric.jpg`
+  - `3_spinnyrect.jpg`
+  - `grid_with_circles.jpg`
+- some demo images have sibling settings files like:
+  - `<imagename>_settings.txt`
 
 ## Current JS module layout
 
 - `js/app.js`
-  Main orchestrator. Still central, but slimmer than before.
+  Main orchestrator and glue.
   Owns:
-  - high-level app startup
-  - shared callbacks/glue between modules
+  - startup
   - config reading
-  - status text updates
-  - reset logic
+  - current status text updates
   - rectified preview rendering
   - raw preview rendering
-  - cross-region grid rendering
+  - frame-alignment marker grid rendering
+  - marker manual-override logic
+  - settings import/export serialization
   - GIF export flow
-  - frame extraction / appearance-cache glue
+  - ZIP export flow
+  - lazy frame extraction / appearance-cache glue
 
 - `js/dom-state.js`
-  DOM lookups and grouped shared state.
+  DOM lookups plus shared grouped state.
 
 - `js/settings-defaults.js`
-  Central source of truth for non-Layout defaults.
-  Includes helpers:
+  Canonical defaults for all non-Layout settings.
+  Includes:
+  - `SETTINGS_DEFAULTS`
   - `applyAppearanceDefaults(...)`
   - `applyCropGeometryDefaults(...)`
   - `applyNonLayoutDefaults(...)`
@@ -72,24 +69,25 @@ Useful assets in `plottimation_webtool/demo/`:
   - preview heading sync
   - preview play/pause button sync
   - ordered frame count/index mapping
-  - RAF preview loop
-  - drawing current preview frame
-  - rerendering previews after resize/display-only changes
+  - RAF animation loop
+  - current preview frame draw
+  - rerendering visible previews after resize
 
 - `js/load-controller.js`
   Image-load flow:
   - busy spinner state
   - object-URL ownership for raw source
   - file ingestion
-  - source image loading
+  - image load/reset flow
   - yield-a-paint before heavy processing
+  - best-effort sibling settings file support
 
 - `js/drag-assets.js`
   Desktop drag/download behavior:
   - raw-photo drag asset hookup
   - rectified-sheet drag blob caching
   - exported GIF drag hookup
-  - live-preview drag cue / export-button “ring” animation
+  - live-preview drag cue / export-button ring animation
   - rectified filename helper
 
 - `js/ui-controls.js`
@@ -98,6 +96,7 @@ Useful assets in `plottimation_webtool/demo/`:
   - tooltip registration
   - tooltip enable/disable
   - reset-button wiring
+  - keyboard arrow stepping while preview is paused
 
 - `js/appearance.js`
   Appearance pipeline.
@@ -107,6 +106,9 @@ Useful assets in `plottimation_webtool/demo/`:
 
 - `js/pipeline.js`
   CV pipeline and frame extraction.
+
+- `js/zip-builder.js`
+  Local store-only ZIP writer used for frame export.
 
 - `js/gif.js`
   Main-thread GIF encoder API.
@@ -119,12 +121,15 @@ Useful assets in `plottimation_webtool/demo/`:
 
 ## Shared state shape
 
-In `js/dom-state.js`:
+Defined in `js/dom-state.js`.
 
 - `runtime`
   - `cvReady`
   - `tooltipsEnabled`
   - `busy`
+  - `markerEditingEnabled`
+  - `lastMarkerClickKey`
+  - `lastMarkerClickTime`
 
 - `source`
   - `image`
@@ -141,6 +146,9 @@ In `js/dom-state.js`:
   - `baseRectifiedPageCanvas`
   - `pagePreviewGridQuad`
   - `frameCount`
+  - `manualMarkerOverrides`
+    - `Map<string, {x:number, y:number}>`
+    - key format is `"col,row"`
 
 - `frames`
   - `base`
@@ -189,7 +197,7 @@ Steps:
 5. approximate to 4 corners
 6. order corners
 
-The page quad is shown over `Raw Photo` in semi-transparent lime.
+The detected page quad is shown over `Raw Photo` in semi-transparent lime.
 
 ### 2. Page warps
 
@@ -223,7 +231,7 @@ Important:
 
 - no peak refinement anymore
 - no extra outward padding anymore
-- old experimental grid-size auto-detection code was removed
+- old experimental grid-size auto-detection code was intentionally removed
 - no `Detected grid: ...` line remains
 
 ### 4. Rectified Sheet panel
@@ -242,16 +250,23 @@ Overlays:
 - red quadrilateral:
   coarse frame-grid bounds
 
-### 5. Cross localization
+Important current behavior:
+
+- `Rectified Sheet` is always shown from the unadjusted base rectified page
+- Appearance controls do **not** recolor it
+
+### 5. Marker localization
+
+The current actual detector still localizes crosses.
 
 After coarse rectification, the app samples square ROIs at expected lattice positions.
 
 Modes:
 
-- `Use cross-based subpixel alignment` checked:
-  refine cross positions and use them
+- `Do subpixel alignment using markers` checked:
+  refine marker positions and use them
 - unchecked:
-  do not refine; still show ROIs centered on the nominal positions actually used
+  do not refine; still show ROI tiles centered on the nominal positions actually used
 
 Alternate localizer:
 
@@ -279,7 +294,9 @@ Current max `darkFrac`:
 - normal mode: `0.30`
 - convolution mode: `0.50`
 
-### 6. Cross Regions panel
+### 6. Frame Alignment Markers panel
+
+This used to be called `Cross Regions`.
 
 Shows `(cols + 1) x (rows + 1)` ROI tiles.
 
@@ -287,7 +304,9 @@ Behavior:
 
 - corner tiles included in all-cross mode
 - when alignment is disabled, tiles remain visible but hover text is suppressed
-- tiles render raw, no decorative rounded frame
+- tile image and reticle are now separated:
+  - `pipeline.js` returns the plain ROI image
+  - `app.js` draws the overlay reticle in the UI layer
 
 Tooltip metrics when alignment is enabled:
 
@@ -296,6 +315,8 @@ Tooltip metrics when alignment is enabled:
 - `row`
 - `ink`
 - in convolution mode also `conv`
+- if manually edited:
+  - tooltip appends `manual override`
 
 Current `conv` tooltip metric:
 
@@ -307,14 +328,50 @@ Current `conv` tooltip metric:
 
 So `conv` is normalized to `0..1`.
 
-### 7. Frame extraction
+### 7. Manual marker editing
+
+Implemented in `js/app.js` as a manual-override layer on top of auto-detection.
+
+UI:
+
+- `Enable Editing` / `Disable Editing` button in `Frame Alignment Markers`
+- `Clear Edits` button appears only when saved marker overrides exist
+
+Behavior:
+
+- when editing is enabled, dragging inside a marker tile repositions its reticle
+- marker overrides are stored in rectified-sheet coordinates
+- edits update the live preview during mouse drag, not just on mouse-up
+- edited markers are shown in green
+- edited marker border is green
+- double-clicking an edited marker tile restores it to the original auto-detected position
+- `Clear Edits` restores all original auto-detected positions immediately from cached values
+
+Persistence:
+
+- manual edits are saved into standalone settings export
+- manual edits are saved into ZIP `settings.txt`
+- manual edits are loaded back from settings files
+- edit mode itself is **not** saved
+
+Implementation notes:
+
+- original auto-detected positions are stashed as `autoDetectedX/Y`
+- current overrides live in `state.geometry.manualMarkerOverrides`
+- after a fresh pipeline run, overrides are re-applied to:
+  - `alignmentInfo.markerLookup`
+  - `alignmentInfo.crossRoiTileMap`
+- if overrides are loaded from a settings file, the initial pre-sliced frames are discarded so lazy frame extraction uses the edited marker positions
+
+### 8. Frame extraction
 
 Quad-based and subpixel-aware.
 
 Each frame uses four lattice points:
 
-- refined cross if available
+- refined marker if available
 - nominal fallback if not
+- manual override if present
 
 Extraction uses OpenCV perspective warp.
 
@@ -353,6 +410,7 @@ Rerun the full pipeline:
 - layout values
 - thresholding and coarse detector controls
 - alignment toggles and ROI sizing
+- settings-file-driven changes to those fields
 
 ### Frame-lazy changes
 
@@ -364,6 +422,7 @@ Do not rerun CV:
 - resampling
 - reverse order
 - ping-pong
+- manual marker edits
 
 ### Appearance-lazy changes
 
@@ -381,9 +440,11 @@ Core frame helpers live in `app.js`:
 - `getBaseFrameCanvas(index)`
 - `getAdjustedFrameCanvas(index)`
 
-Preview is lazy. Full realization mostly happens during GIF export.
+Preview is lazy. Full realization mostly happens during GIF export and ZIP export.
 
-## GIF export
+## Export features
+
+### GIF export
 
 Still orchestrated in `app.js`.
 
@@ -420,6 +481,77 @@ After any relevant setting change:
 - live preview returns
 - panel title becomes `Animation Preview`
 
+### ZIP export
+
+Implemented in `app.js` using `js/zip-builder.js`.
+
+Behavior:
+
+- `Export ZIP` button in the preview header
+- zip filename:
+  - `<base>_anim_YYYYMMDD_HHMMSS.zip`
+- root folder inside zip:
+  - same timestamped archive stem
+- contents:
+  - `frames/`
+  - `<base>_settings.txt`
+
+Frame naming:
+
+- `frames/<base>_anim_000.png`
+- `frames/<base>_anim_001.png`
+- etc.
+
+ZIP export obeys:
+
+- reverse order
+- ping-pong
+
+### Standalone settings export
+
+Implemented in `app.js`.
+
+Export Options panel has:
+
+- `Save Settings file`
+
+Filename:
+
+- `<imagename>_settings.txt`
+
+Contents are identical to the settings manifest included in ZIP export.
+
+## Settings file behavior
+
+Settings manifests are tab-separated:
+
+- `setting<TAB>value`
+
+Important behavior:
+
+- loading an image resets non-Layout controls to built-in defaults first
+- if a matching settings file is found, those settings are then applied
+- pressing `Reset` always restores built-in defaults, **not** the loaded settings file values
+
+Autoload behavior:
+
+- URL/demo images:
+  - app attempts to fetch sibling `<imagename>_settings.txt`
+- dropped image plus sibling settings file in same drag payload:
+  - settings file is applied
+- dropped settings file onto already loaded image:
+  - settings are applied and image is re-analyzed
+
+Browser limitation:
+
+- if the user chooses only one local image file from disk, the app cannot inspect the rest of that directory for sibling files unless the browser provides them
+
+Status messages now distinguish:
+
+- `Loaded image.`
+- `Loaded settings file.`
+- `Loaded image and settings.`
+
 ## Current UI structure
 
 ### Non-collapsible sections
@@ -431,10 +563,10 @@ After any relevant setting change:
 
 - Layout
 - Page & Grid Detection
-- Frame Alignment
+- Automatic Frame Alignment
 - Appearance
 - Crop & Geometry
-- GIF Export Options
+- Export Options
 
 Accordion behavior:
 
@@ -448,10 +580,19 @@ Loading a new image:
 
 ### Photo section
 
-Buttons:
+Uses a manifest-driven demo pulldown:
 
-- `Load Demo 1` -> `demo/mySrcImage.jpg`
-- `Load Demo 2` -> `demo/test_2_5x4.jpg`
+- `Load Demo`
+- populated from `demo/index.json`
+
+Important:
+
+- the app no longer hardcodes demo filenames
+- the browser app cannot reliably enumerate a folder directly, so `demo/index.json` is the source of truth for available demos
+- parser is tolerant of:
+  - strict JSON
+  - JSON with trailing commas
+  - newline-list style content
 
 Drop-zone text:
 
@@ -468,11 +609,19 @@ Drop-zone text:
 - Boundary Threshold
 - Boundary Persistence
 
-### Frame Alignment
+### Automatic Frame Alignment
 
-- Cross Region Size
-- Use cross-based subpixel alignment
+- Alignment Marker Type:
+  - Crosses
+  - Dots
+- Alignment Marker Region Size
+- Do subpixel alignment using markers
 - Detect crosses with convolution
+  - shown only when `Crosses` is selected
+
+Important note:
+
+- UI groundwork exists for `Dots`, but actual CV localization/extraction is still cross-based in the active path
 
 ### Crop & Geometry
 
@@ -492,6 +641,7 @@ Aspect ratio readout:
 ### Animation Preview header
 
 - play/pause button
+- Export ZIP button
 - Export GIF button
 
 Play/pause button uses:
@@ -499,30 +649,45 @@ Play/pause button uses:
 - pause `⏸` while playing
 - play `⏵` while paused
 
+It is disabled whenever there are no valid extracted frames.
+
+While paused:
+
+- `Left Arrow` steps to previous frame
+- `Right Arrow` steps to next frame
+- stepping wraps around
+- keyboard shortcuts are ignored while typing in text/select controls
+
 ## Load behavior
 
-Now largely owned by `js/load-controller.js`.
+Largely owned by `js/load-controller.js`.
 
 When loading a new image:
 
 - busy spinners appear in `Status` and `Raw Photo`
-- Status shows `Loading image…`
+- Status shows load-specific messages
 - raw header filename updates immediately
 - all preview panels clear to striped empty states
 - image is drawn to `Raw Photo` as soon as it loads
-- then the app yields one paint before starting heavy processing
+- app yields one paint before starting heavy processing
 
-This was done to avoid the old “the app seems frozen” UX.
+This was done to avoid the old “app seems frozen” UX.
+
+When loading settings onto an existing image:
+
+- status shows `Loaded settings file.` and `Re-analyzing page…`
+- busy spinner stays visible during re-analysis
 
 ## Drag / download behavior
 
-Now largely owned by `js/drag-assets.js`.
+Largely owned by `js/drag-assets.js`.
 
 ### Raw Photo
 
 - draggable
 - prefers original source URL/file when available
-- therefore drag is fast and filename is the original one
+- drag is fast and filename is the original one
+- Raw Photo header filename is shown in monospace
 
 ### Rectified Sheet
 
@@ -535,7 +700,8 @@ Now largely owned by `js/drag-assets.js`.
 
 - not downloadable
 - drag is cancelled
-- Export GIF button performs a “ring” animation cue
+- Export GIF button performs a ring animation cue
+- live preview canvas always has its own tooltip regardless of global tooltip toggle
 
 ### Exported GIF image
 
@@ -546,7 +712,7 @@ Now largely owned by `js/drag-assets.js`.
 
 Tooltip strings still live in `TOOLTIP_TEXT` in `js/app.js`.
 
-Registration and enable/disable plumbing now live in `js/ui-controls.js`.
+Registration and enable/disable plumbing live in `js/ui-controls.js`.
 
 Behavior:
 
@@ -558,7 +724,7 @@ Behavior:
 
 ## Status panel
 
-Status text is still composed in `js/pipeline.js` and written by `app.js`.
+Status text is composed in `js/pipeline.js` and written by `app.js`.
 
 May include:
 
@@ -578,7 +744,7 @@ Notable current behavior:
 - uses `×`, not `x`
 - no `Grid detector: cross-only` line anymore
 - page-detection failure wording is:
-  `Unable to find page boundary. Try adjusting the Thresholding Offset and/or the Thresholding Method.`
+  - `Unable to find page boundary. Try adjusting the Thresholding Offset and/or the Thresholding Method.`
 - low-level detail is appended in parentheses
 
 ## Empty states
@@ -587,7 +753,7 @@ Striped empty states exist for:
 
 - Raw Photo
 - Rectified Sheet
-- Cross Regions
+- Frame Alignment Markers
 - Animation Preview
 
 On new image load:
@@ -596,9 +762,7 @@ On new image load:
 
 ## Current defaults source
 
-Defaults are now centralized in `js/settings-defaults.js`.
-
-This is the first step toward making mobile-specific defaults or modes easier later.
+Defaults are centralized in `js/settings-defaults.js`.
 
 Important defaults:
 
@@ -613,8 +777,9 @@ Detection:
 - Search Inset Margin: `80`
 - Boundary Threshold: `8.0`
 - Boundary Persistence: `7`
-- Cross ROI slider: `52`
-- cross alignment: `true`
+- alignment marker type: `crosses`
+- alignment marker region size slider: `52`
+- marker alignment: `true`
 - convolution localization: `false`
 
 Appearance:
@@ -630,7 +795,7 @@ Crop & Geometry:
 - all crop values `0`
 - all geometry toggles `false`
 
-GIF export:
+Export:
 
 - fps: `20`
 - reverse order: `false`
@@ -647,13 +812,13 @@ Still relevant.
 Best next phases:
 
 1. Responsive layout
-   - collapse 2x2 workspace into 1-column on narrow screens
+   - collapse the multi-panel workspace into a single-column stack on narrow screens
    - sidebar becomes top section
 
 2. Touch-first UX
    - reduce hover dependence
    - larger touch targets
-   - possibly hide diagnostics like Cross Regions by default
+   - possibly hide diagnostics like Frame Alignment Markers by default
 
 3. Performance guardrails
    - large-image warnings / optional downscaling
@@ -664,7 +829,7 @@ Best next phases:
    - `Basic` vs `Advanced`
    - keep only essential controls visible by default on phones
 
-The recent refactors were done specifically to support this direction:
+The recent refactors were specifically done to support this direction:
 
 - `settings-defaults.js`
 - `preview-controller.js`
@@ -684,17 +849,18 @@ The recent refactors were done specifically to support this direction:
   `js/load-controller.js`
 - drag/download behavior:
   `js/drag-assets.js`
-- control wiring/tooltips:
+- control wiring/tooltips/keyboard:
   `js/ui-controls.js`
 - defaults:
   `js/settings-defaults.js`
-- remaining app orchestration:
+- remaining app orchestration and marker editing:
   `js/app.js`
 
 ## Main caution areas
 
-- `app.js` is smaller than before, but still central
-- cache invalidation bugs remain easy to introduce
+- `app.js` is still central and stateful
+- cache invalidation bugs are easy to introduce
 - `gif.worker.js` contains a local bugfix; do not casually replace it
 - page-level cross-kernel convolution and ROI-level convolution are separate concepts
-- old grid-size auto-detection experiments were intentionally removed
+- `Dots` UI exists, but the active automatic detector is still cross-based
+- demo loading now depends on `demo/index.json`; changing demo assets without updating that manifest will confuse the UI

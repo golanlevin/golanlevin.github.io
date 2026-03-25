@@ -1520,6 +1520,8 @@ function detectCrossAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, 
       peakX = getWeightedPeakIndex(smooth1D(colProfile, 5));
       peakY = getWeightedPeakIndex(smooth1D(rowProfile, 5));
     }
+    // Report the center in both sheet coordinates and ROI-local coordinates; the latter is used by the
+    // editable marker UI so it can draw and drag reticles without baking those marks into the ROI image.
     const roiCenterX = (roiW - 1) * 0.5;
     const roiCenterY = (roiH - 1) * 0.5;
     const detectedX = expected.x + (peakX.position - roiCenterX);
@@ -1551,7 +1553,9 @@ function detectCrossAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, 
       convolutionStrength,
       confidence: colContrast * rowContrast,
       accepted,
-      canvas: buildCrossRoiCanvas(roi, peakX.position, peakY.position, accepted),
+      localX: peakX.position,
+      localY: peakY.position,
+      canvas: buildCrossRoiCanvas(roi),
     };
   } finally {
     roi.delete();
@@ -1593,7 +1597,9 @@ function buildUnrefinedCrossRegionTile(grayMat, expected, sheetW, sheetH, cols, 
       darkFrac: 0,
       confidence: 0,
       accepted: false,
-      canvas: buildCrossRoiCanvas(roi, center, center, false),
+      localX: center,
+      localY: center,
+      canvas: buildCrossRoiCanvas(roi),
     };
   } finally {
     roi.delete();
@@ -1624,29 +1630,15 @@ function extractCenteredSquareRoi(grayMat, centerX, centerY, side) {
 }
 
 /**
- * Convert a cross ROI into a debug canvas and overlay the chosen crosshair center.
+ * Convert a cross ROI into a plain debug canvas; crosshair overlays are drawn later by the UI.
  *
  * @param {cv.Mat} roiMat
- * @param {number} localX
- * @param {number} localY
- * @param {boolean} accepted
  * @returns {HTMLCanvasElement}
  */
-function buildCrossRoiCanvas(roiMat, localX, localY, accepted) {
+function buildCrossRoiCanvas(roiMat) {
   const canvas = matToCanvas(roiMat);
   canvas.style.width = `${canvas.width}px`;
   canvas.style.height = `${canvas.height}px`;
-  const ctx = canvas.getContext("2d");
-  ctx.save();
-  ctx.strokeStyle = accepted ? "rgba(255, 0, 0, 0.55)" : "rgba(255, 0, 0, 0.3)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(localX + 0.5, 0);
-  ctx.lineTo(localX + 0.5, canvas.height);
-  ctx.moveTo(0, localY + 0.5);
-  ctx.lineTo(canvas.width, localY + 0.5);
-  ctx.stroke();
-  ctx.restore();
   return canvas;
 }
 
