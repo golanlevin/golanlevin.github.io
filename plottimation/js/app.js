@@ -2124,4 +2124,8 @@ function downloadBlobWithFilename(blob, filename) {
  */
 function setStatus(text) {
   dom.statusText.textContent = text;
+  dom.statusText.classList.toggle(
+    "status-page-boundary-failure",
+    String(text || "").startsWith("Unable to find page boundary.")
+  );
 }

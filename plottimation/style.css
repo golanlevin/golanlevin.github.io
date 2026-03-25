@@ -285,6 +285,39 @@ input[type="range"] {
   background: rgba(74, 77, 85, 0.12);
 }
 
+body:not(.has-loaded-image) .drop-zone {
+  border-color: rgba(156, 118, 24, 0.5);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 247, 204, 0.9) 0%,
+    rgba(250, 241, 188, 0.78) 100%
+  );
+  box-shadow: 0 0 0 1px rgba(156, 118, 24, 0.1), 0 0 18px rgba(224, 196, 96, 0.24);
+  animation: empty-cta-pulse 2.6s ease-in-out infinite;
+}
+
+body:not(.has-loaded-image) #loadDemoSelect {
+  border-color: rgba(156, 118, 24, 0.4);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 249, 220, 0.98) 0%,
+    rgba(248, 240, 196, 0.92) 100%
+  );
+  box-shadow: 0 0 0 1px rgba(156, 118, 24, 0.08), 0 0 10px rgba(224, 196, 96, 0.16);
+}
+
+@keyframes empty-cta-pulse {
+  0% {
+    box-shadow: 0 0 0 1px rgba(156, 118, 24, 0.08), 0 0 10px rgba(224, 196, 96, 0.14);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(156, 118, 24, 0.16), 0 0 22px rgba(224, 196, 96, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 0 1px rgba(156, 118, 24, 0.08), 0 0 10px rgba(224, 196, 96, 0.14);
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -399,6 +432,10 @@ button:hover:not(:disabled),
   color: #eef0f2;
   font: 0.8rem/1.45 var(--mono);
   white-space: pre-wrap;
+}
+
+.status-group pre.status-page-boundary-failure {
+  color: rgb(255, 200, 0);
 }
 
 .workspace {
@@ -522,7 +559,14 @@ body.has-loaded-image .cross-roi-grid.is-empty {
   gap: 6px;
   min-height: 0;
   overflow: auto;
-  background-color: #f3f4f6;
+  background-color: #edf0f3;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(120, 126, 136, 0.045) 0,
+    rgba(120, 126, 136, 0.045) 8px,
+    rgba(237, 240, 243, 0) 8px,
+    rgba(237, 240, 243, 0) 18px
+  );
 }
 
 .cross-roi-empty {
