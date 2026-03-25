@@ -44,8 +44,7 @@ const TOOLTIP_TEXT = {
   "#appLedePrimary": "",
   "#appLedeSecondary": "",
   "#photoHeading": "Loads a source photo or scan for processing. Pages must be in landscape orientation.",
-  "#loadDemoButton": "Loads the first bundled demo image without choosing a file.",
-  "#loadDemoButton2": "Loads the second bundled demo image without choosing a file.",
+  "#loadDemoSelect": "Loads one of the bundled demo images listed in the demo manifest.",
   "#dropZone": "Drop a photo or scan of a plotted frame-sheet here, or click to choose a file. Pages must be in landscape orientation.",
   "#layoutSummary": "Sets the frame-grid dimensions and paper format assumptions.",
   "#frameCols": "Number of animation frame columns in the plotted grid.",
@@ -53,15 +52,19 @@ const TOOLTIP_TEXT = {
   "#paperPreset": "Choose a landscape paper preset, or Custom to enter your own dimensions.",
   "#paperWidth": "Custom paper width (arbitrary units) when Paper Size is set to Custom.",
   "#paperHeight": "Custom paper height (arbitrary units) when Paper Size is set to Custom.",
-  "#detectionAlignmentSummary": "Controls for finding the paper, locating the frame grid, and refining extracted frames using crosses.",
+  "#pageGridDetectionSummary": "Controls for finding the paper and locating the outer frame-grid region on the page.",
+  "#frameAlignmentSummary": "Controls for refining the frame-alignment markers inside the detected grid region.",
   "#thresholdMethod": "Thresholding methods for finding the paper quadrilateral.",
   "#thresholdOffset": "Nudges the paper threshold darker or lighter after thresholding.",
   "#paperMargin": "Insets the coarse boundary search away from the page edge to avoid background bleed and warped borders.",
   "#boundarySensitivity": "The threshold used to find the frame-grid.",
   "#boundaryPersistence": "How many consecutive pixels must stay above the threshold before the frame-grid boundary is accepted.",
-  "#crossRoiScale": "Sets the size of the square search regions used to localize each registration cross.",
+  "#alignmentMarkerTypeField": "Choose whether frame alignment uses cross markers or filled-dot markers.",
+  "#alignmentMarkerTypeCrosses": "Use cross-shaped alignment markers when refining the frame grid.",
+  "#alignmentMarkerTypeCircles": "Use filled-dot alignment markers when refining the frame grid.",
+  "#crossRoiScale": "Sets the size of the square search regions used to localize each alignment marker.",
   "#detectCrossesWithConvolution": "Use the cross-kernel convolution inside each ROI instead of the default profile-based localizer.",
-  "#useCrossAlignment": "Use detected crosses to refine frame extraction beyond a nominal equal-spaced grid.",
+  "#useCrossAlignment": "Use detected alignment markers to refine frame extraction beyond a nominal equal-spaced grid.",
   "#appearanceSummary": "Adjusts the look of the extracted animation frames.",
   "#resetAppearanceButton": "Restores all appearance controls to their default values.",
   "#brightness": "Adjusts perceptual lightness before contrast and vibrance are applied.",
@@ -81,7 +84,7 @@ const TOOLTIP_TEXT = {
   "#flipHorizontal": "Flip the post-cropped animation frames left-to-right.",
   "#flipVertical": "Flip the post-cropped animation frames top-to-bottom.",
   "#rotate90Cw": "Rotate the post-cropped animation frames 90 degrees clockwise.",
-  "#gifExportSummary": "Controls that affect preview playback and the exported GIF file.",
+  "#gifExportSummary": "Controls that affect preview playback and exported output files.",
   "#fps": "Playback speed of the preview animation and exported GIF in frames per second.",
   "#outputScale": "Scales the final animation for preview and export (post-cropping).",
   "#gifQuality": "GIF encoder quality setting. Lower numbers are slower but higher quality.",
@@ -96,12 +99,13 @@ const TOOLTIP_TEXT = {
   "#rawCanvas": "Preview of the source photo. The detected paper contour is outlined in green.",
   "#rectifiedSheetHeading": "Preview of the rectified page used for frame detection and extraction.",
   "#rectifiedCanvas": "Preview of the rectified page; click to toggle the convolution diagnostic view.",
-  "#crossRegionsHeading": "Diagnostic tiles showing the regions used to localize each registration cross.",
-  "#crossRoiGrid": "Per-cross diagnostic regions used to inspect registration mark detection.",
+  "#crossRegionsHeading": "Diagnostic tiles showing the regions used to localize each frame-alignment marker.",
+  "#crossRoiGrid": "Per-marker diagnostic regions used to inspect frame-alignment marker detection.",
   "#animationPreviewHeading": "Live animation preview using the current settings.",
   "#previewPlayPauseButton": "Pause or resume the live animation preview.",
   "#exportZipButton": "Download a ZIP archive containing the current animation frames as PNG files.",
   "#exportButton": "Render and download the animated GIF using the current settings.",
+  "#saveSettingsButton": "Download the current settings as the same tab-separated settings.txt file included in the ZIP export.",
   "#gifPreviewCanvas": "This is a live animation preview. Click 'Export GIF' to generate the GIF.",
   "#gifImage": "Most recently exported GIF preview image.",
 };
@@ -118,6 +122,36 @@ function updateExportButtonLabel(progressPercent = null) {
   dom.exportButton.textContent = (typeof progressPercent === "number")
     ? `Export GIF ...${progressPercent}%`
     : "Export GIF";
+}
+
+/**
+ * Populate the Load Demo pulldown from a small manifest in `demo/index.json`.
+ *
+ * Browsers do not reliably expose directory listings to client-side code, so this manifest keeps
+ * demo filenames out of the app logic while still allowing the UI to reflect the current demo set.
+ *
+ * @returns {Promise<void>}
+ */
+async function populateDemoSelect() {
+  const select = dom.loadDemoSelect;
+  if (!select) return;
+  try {
+    const response = await fetch("demo/index.json", { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const filenames = await response.json();
+    if (!Array.isArray(filenames)) throw new Error("Demo manifest is not an array.");
+    for (const filename of filenames) {
+      if (typeof filename !== "string") continue;
+      const option = document.createElement("option");
+      option.value = filename;
+      option.textContent = filename;
+      select.appendChild(option);
+    }
+    select.disabled = filenames.length === 0;
+  } catch (error) {
+    console.warn("Could not populate demo list.", error);
+    select.disabled = true;
+  }
 }
 
 /**
@@ -210,6 +244,15 @@ function setBusyState(busy) {
 }
 
 /**
+ * Yield one browser paint so UI updates land before kicking off heavier work.
+ *
+ * @returns {Promise<void>}
+ */
+async function waitForNextPaint() {
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+/**
  * Small local wrapper around the drag-assets module's rectified drag-URL cleanup.
  *
  * @returns {void}
@@ -290,6 +333,8 @@ function clearDerivedPreviews() {
   dom.crossRoiGrid.classList.add("is-empty");
   dom.exportButton.disabled = true;
   dom.exportZipButton.disabled = true;
+  dom.saveSettingsButton.disabled = true;
+  updatePreviewPlayPauseButton();
   updateAnimationPreviewHeading();
   updateExportButtonLabel();
 }
@@ -323,7 +368,9 @@ function init() {
   attachUi();
   initAccordionPanels();
   initializeTooltips();
+  void populateDemoSelect();
   syncPaperPresetUi();
+  syncAlignmentMarkerUi();
   dom.gifPreviewCanvas.title = TOOLTIP_TEXT["#gifPreviewCanvas"] || "";
   dom.gifImage.classList.add("hidden");
   dom.gifImage.hidden = true;
@@ -359,19 +406,20 @@ function attachUi() {
     makeLivePreviewDragCue,
     makeGifImageDraggable,
     handleFile,
-    loadDemo1: () => { void loadImageSource("demo/mySrcImage.jpg", "mySrcImage.jpg"); },
-    loadDemo2: () => { void loadImageSource("demo/test_2_5x4.jpg", "test_2_5x4.jpg"); },
+    loadSelectedDemo: (filename) => { void loadImageSource(`demo/${filename}`, filename); },
     renderRectifiedPreview,
     resetAppearanceControls,
     resetTrimControls,
     toggleTooltips: () => setTooltipsEnabled(!state.runtime.tooltipsEnabled),
     togglePreviewPaused: () => {
+      if (dom.previewPlayPauseButton.disabled) return;
       state.preview.paused = !state.preview.paused;
       state.preview.lastTime = performance.now();
       updatePreviewPlayPauseButton();
       drawCurrentGifPreview();
     },
     syncPaperPresetUi,
+    syncAlignmentMarkerUi,
     updateSliderReadouts,
     scheduleProcess,
     revokeGifUrl,
@@ -382,6 +430,7 @@ function attachUi() {
     drawCurrentGifPreview,
     exportGif,
     exportZip,
+    saveSettingsFile,
   });
 }
 
@@ -485,6 +534,7 @@ function resetNonLayoutControls() {
 
   state.preview.paused = false;
   updatePreviewPlayPauseButton();
+  syncAlignmentMarkerUi();
   updateSliderReadouts();
 }
 
@@ -573,8 +623,8 @@ function attachResizeHandler() {
  * @param {File} file
  * @returns {Promise<void>}
  */
-async function handleFile(file) {
-  await loadFileSource(file, { state, loadImageSource });
+async function handleFile(file, files = null) {
+  await loadFileSource(file, files, { state, loadImageSource, applySettingsFile });
 }
 
 /**
@@ -585,11 +635,12 @@ async function handleFile(file) {
  * @param {string} [mimeType="image/jpeg"]
  * @returns {Promise<void>}
  */
-async function loadImageSource(src, filename = "", mimeType = "image/jpeg") {
+async function loadImageSource(src, filename = "", mimeType = "image/jpeg", settingsFile = null) {
   await loadImageSourceViaController({
     src,
     filename,
     mimeType,
+    settingsFile,
     dom,
     state,
     setStatus,
@@ -598,6 +649,8 @@ async function loadImageSource(src, filename = "", mimeType = "image/jpeg") {
     revokeGifUrl,
     clearAllPreviews,
     renderRawPreview,
+    loadCompanionSettingsText,
+    applyLoadedSettingsText,
     invalidateAppearanceCache,
     processCurrentImage,
     drawImageToCanvas,
@@ -633,6 +686,7 @@ function scheduleProcess() {
  *   paperMarginPx:number,
  *   boundarySensitivity:number,
  *   boundaryPersistencePx:number,
+ *   alignmentMarkerType:string,
  *   crossRoiScalePct:number,
  *   crossRoiScale:number,
  *   detectCrossesWithConvolution:boolean,
@@ -665,9 +719,10 @@ function readConfig() {
     paperMarginPx: Math.max(0, Math.min(150, Math.round(Number(dom.paperMargin.value) || SETTINGS_DEFAULTS.detection.paperMarginPx))),
     boundarySensitivity: Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)),
     boundaryPersistencePx: Math.max(1, Math.min(15, Math.round(Number(dom.boundaryPersistence.value) || SETTINGS_DEFAULTS.detection.boundaryPersistencePx))),
+    alignmentMarkerType: dom.alignmentMarkerTypeCircles.checked ? "circles" : "crosses",
     crossRoiScalePct: Math.max(18, Math.min(110, Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct)),
     crossRoiScale: Math.max(0.18, Math.min(1.1, (Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct) / 100)),
-    detectCrossesWithConvolution: dom.detectCrossesWithConvolution.checked,
+    detectCrossesWithConvolution: dom.alignmentMarkerTypeCrosses.checked && dom.detectCrossesWithConvolution.checked,
     useCrossAlignment: dom.useCrossAlignment.checked,
     useRectifiedAsSource: false,
     crop: {
@@ -719,6 +774,162 @@ function syncPaperPresetUi() {
     dom.paperWidth.value = String(preset.width);
     dom.paperHeight.value = String(preset.height);
   }
+}
+
+/**
+ * Show or hide controls that only apply to cross-shaped alignment markers.
+ *
+ * @returns {void}
+ */
+function syncAlignmentMarkerUi() {
+  const markerType = dom.alignmentMarkerTypeCircles.checked ? "circles" : "crosses";
+  const showCrossOnlyControls = markerType === "crosses";
+  dom.detectCrossesWithConvolutionRow.hidden = !showCrossOnlyControls;
+  if (!showCrossOnlyControls) {
+    dom.detectCrossesWithConvolution.checked = false;
+  }
+}
+
+/**
+ * Best-effort loader for a sibling settings file that matches the selected image.
+ *
+ * For URL-based demo/server images, this fetches `<imagename>_settings.txt` from the same directory.
+ * For dropped local files, it can consume an explicitly provided sibling settings file if one was
+ * included in the same drag payload.
+ *
+ * @param {string} src
+ * @param {string} filename
+ * @param {File | null} [settingsFile=null]
+ * @returns {Promise<string>}
+ */
+async function loadCompanionSettingsText(src, filename, settingsFile = null) {
+  if (settingsFile) {
+    return await settingsFile.text();
+  }
+  if (!filename || src.startsWith("blob:")) {
+    return "";
+  }
+  try {
+    const settingsUrl = new URL(makeSettingsFilename(filename), new URL(src, window.location.href)).toString();
+    const response = await fetch(settingsUrl, { cache: "no-store" });
+    if (!response.ok) return "";
+    return await response.text();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Apply a standalone settings file without replacing the currently loaded image.
+ *
+ * If an image is already loaded, this reprocesses it using the new settings. If not, it simply
+ * updates the UI so the next loaded image starts from those values.
+ *
+ * @param {File} file
+ * @returns {Promise<void>}
+ */
+async function applySettingsFile(file) {
+  if (!file) return;
+  setBusyState(true);
+  try {
+    const settingsText = await file.text();
+    applyLoadedSettingsText(settingsText);
+    revokeGifUrl();
+    invalidateFrameCaches();
+    invalidateAppearanceCache();
+    if (state.source.image) {
+      setStatus("Loaded settings file.\nRe-analyzing page…");
+      await waitForNextPaint();
+      state.processing.requestId += 1;
+      await processCurrentImage(state.processing.requestId);
+    } else {
+      setStatus("Loaded settings file.\nLoad an image to use them.");
+    }
+  } catch (error) {
+    console.error(error);
+    setStatus(`Failed to load the selected settings file.\n(${error?.message || String(error)})`);
+  } finally {
+    if (!state.processing.active && !state.processing.pending) {
+      setBusyState(false);
+    }
+  }
+}
+
+/**
+ * Apply a tab-separated settings manifest to the current UI controls.
+ *
+ * Unknown keys are ignored so older/newer settings files degrade gracefully.
+ *
+ * @param {string} settingsText
+ * @returns {void}
+ */
+function applyLoadedSettingsText(settingsText) {
+  if (!settingsText.trim()) return;
+  const entries = new Map(
+    settingsText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [key, ...rest] = line.split("\t");
+        return [key, rest.join("\t")];
+      })
+  );
+
+  const setIfPresent = (key, element, transform = (value) => value) => {
+    if (!entries.has(key) || !element) return;
+    element.value = String(transform(entries.get(key)));
+  };
+  const setCheckedIfPresent = (key, element) => {
+    if (!entries.has(key) || !element) return;
+    element.checked = entries.get(key) === "true";
+  };
+
+  setIfPresent("paper_preset", dom.paperPreset);
+  setIfPresent("paper_width", dom.paperWidth);
+  setIfPresent("paper_height", dom.paperHeight);
+  setIfPresent("frame_cols", dom.frameCols);
+  setIfPresent("frame_rows", dom.frameRows);
+  setIfPresent("threshold_method", dom.thresholdMethod);
+  setIfPresent("threshold_offset", dom.thresholdOffset);
+  setIfPresent("search_inset_margin_px", dom.paperMargin);
+  setIfPresent("boundary_threshold", dom.boundarySensitivity);
+  setIfPresent("boundary_persistence_px", dom.boundaryPersistence);
+  const markerType = entries.get("alignment_marker_type");
+  if (markerType === "circles") {
+    dom.alignmentMarkerTypeCircles.checked = true;
+  } else if (markerType === "crosses") {
+    dom.alignmentMarkerTypeCrosses.checked = true;
+  }
+  setIfPresent("alignment_marker_region_scale_pct", dom.crossRoiScale);
+  setCheckedIfPresent("detect_crosses_with_convolution", dom.detectCrossesWithConvolution);
+  setCheckedIfPresent("use_cross_alignment", dom.useCrossAlignment);
+  setIfPresent("crop_left", dom.cropLeft);
+  setIfPresent("crop_right", dom.cropRight);
+  setIfPresent("crop_top", dom.cropTop);
+  setIfPresent("crop_bottom", dom.cropBottom);
+  setCheckedIfPresent("flip_horizontal", dom.flipHorizontal);
+  setCheckedIfPresent("flip_vertical", dom.flipVertical);
+  setCheckedIfPresent("rotate_90_cw", dom.rotate90Cw);
+  setIfPresent("brightness", dom.brightness);
+  setIfPresent("contrast", dom.contrast);
+  setIfPresent("vibrance", dom.vibrance);
+  setIfPresent("color_temperature", dom.temperature);
+  setIfPresent("unsharp_amount", dom.unsharpAmount);
+  setIfPresent("unsharp_radius", dom.unsharpRadius);
+  setCheckedIfPresent("invert", dom.invert);
+  setIfPresent("fps", dom.fps);
+  setCheckedIfPresent("reverse_order", dom.reverseOrder);
+  setCheckedIfPresent("ping_pong", dom.pingPong);
+  setIfPresent("output_scale", dom.outputScale);
+  setIfPresent("encoding_quality", dom.gifQuality);
+  setIfPresent("dither", dom.gifDither);
+  setIfPresent("resampling", dom.gifResampling);
+  setCheckedIfPresent("use_global_palette", dom.gifGlobalPalette);
+
+  syncPaperPresetUi();
+  syncAlignmentMarkerUi();
+  updateSliderReadouts();
 }
 
 /**
@@ -813,6 +1024,8 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     drawCurrentGifPreview();
     dom.exportButton.disabled = state.geometry.frameCount === 0;
     dom.exportZipButton.disabled = state.geometry.frameCount === 0;
+    dom.saveSettingsButton.disabled = state.geometry.frameCount === 0;
+    updatePreviewPlayPauseButton();
     updateExportButtonLabel();
     setStatus(result.statusText);
   } catch (error) {
@@ -945,19 +1158,16 @@ function invalidateFrameCaches() {
 }
 
 /**
- * Refresh the rectified-sheet preview, applying appearance adjustments only when needed.
+ * Refresh the rectified-sheet preview from the unadjusted base page rectification.
+ *
+ * The Rectified Sheet panel is intended as a geometry/debug view, so Appearance controls should
+ * not recolor it even when those same controls affect the live animation preview and exports.
  *
  * @returns {void}
  */
 function refreshAppearanceOutputs() {
   if (!state.geometry.baseRectifiedPageCanvas) return;
-  const filters = readConfig().filters;
-  if (!hasAppearanceAdjustments(filters)) {
-    state.preview.rectifiedCanvas = state.geometry.baseRectifiedPageCanvas;
-  } else {
-    applyVisualAdjustments(state.geometry.baseRectifiedPageCanvas, state.preview.adjustedRectifiedCanvas, filters);
-    state.preview.rectifiedCanvas = state.preview.adjustedRectifiedCanvas;
-  }
+  state.preview.rectifiedCanvas = state.geometry.baseRectifiedPageCanvas;
   primeRectifiedDragAsset(state.preview.rectifiedCanvas);
   renderRectifiedPreview(state.preview.rectifiedCanvas);
 }
@@ -1228,6 +1438,7 @@ async function exportGif() {
   if (!orderedFrameCount) return;
   dom.exportButton.disabled = true;
   dom.exportZipButton.disabled = true;
+  dom.saveSettingsButton.disabled = true;
   updateExportButtonLabel(0);
   setStatus("Encoding GIF…");
 
@@ -1236,6 +1447,7 @@ async function exportGif() {
   if (!firstFrame) {
     dom.exportButton.disabled = false;
     dom.exportZipButton.disabled = false;
+    dom.saveSettingsButton.disabled = false;
     updateExportButtonLabel();
     return;
   }
@@ -1270,6 +1482,7 @@ async function exportGif() {
     downloadBlobWithFilename(blob, state.export.filename);
     dom.exportButton.disabled = false;
     dom.exportZipButton.disabled = false;
+    dom.saveSettingsButton.disabled = false;
     updateExportButtonLabel();
     setStatus("GIF ready.\nFrame count: " + state.geometry.frameCount);
   });
@@ -1327,6 +1540,16 @@ function makeZipFilename(sourceFilename) {
 }
 
 /**
+ * Build a standalone settings-manifest filename using the same timestamped stem as ZIP export.
+ *
+ * @param {string} sourceFilename
+ * @returns {string}
+ */
+function makeSettingsFilename(sourceFilename) {
+  return `${sanitizeFilenameBase(sourceFilename || "frame_sheet")}_settings.txt`;
+}
+
+/**
  * Serialize the current app settings into a simple tab-separated manifest.
  *
  * Each line uses:
@@ -1348,7 +1571,8 @@ function buildSettingsTsv(config) {
     ["search_inset_margin_px", String(config.paperMarginPx)],
     ["boundary_threshold", String(config.boundarySensitivity)],
     ["boundary_persistence_px", String(config.boundaryPersistencePx)],
-    ["cross_region_scale_pct", String(config.crossRoiScalePct)],
+    ["alignment_marker_type", config.alignmentMarkerType],
+    ["alignment_marker_region_scale_pct", String(config.crossRoiScalePct)],
     ["detect_crosses_with_convolution", String(config.detectCrossesWithConvolution)],
     ["use_cross_alignment", String(config.useCrossAlignment)],
     ["crop_left", String(config.crop.left)],
@@ -1392,6 +1616,7 @@ async function exportZip() {
   if (!orderedFrameCount) return;
   dom.exportButton.disabled = true;
   dom.exportZipButton.disabled = true;
+  dom.saveSettingsButton.disabled = true;
   setStatus("Preparing ZIP…");
 
   try {
@@ -1404,7 +1629,7 @@ async function exportZip() {
     const entries = [
       { name: rootDir, data: new Uint8Array(0), isDirectory: true },
       { name: framesDir, data: new Uint8Array(0), isDirectory: true },
-      { name: `${rootDir}settings.txt`, data: settingsBytes },
+      { name: `${rootDir}${makeSettingsFilename(state.source.filename)}`, data: settingsBytes },
     ];
     for (let i = 0; i < orderedFrameCount; i++) {
       const frameCanvas = getAdjustedFrameCanvas(getOrderedFrameIndex(i));
@@ -1428,8 +1653,22 @@ async function exportZip() {
   } finally {
     dom.exportButton.disabled = state.geometry.frameCount === 0;
     dom.exportZipButton.disabled = state.geometry.frameCount === 0;
+    dom.saveSettingsButton.disabled = state.geometry.frameCount === 0;
     updateExportButtonLabel();
   }
+}
+
+/**
+ * Download the same settings manifest used inside ZIP export as a standalone text file.
+ *
+ * @returns {void}
+ */
+function saveSettingsFile() {
+  if (!state.geometry.frameCount) return;
+  const config = readConfig();
+  const settingsText = buildSettingsTsv(config);
+  const blob = new Blob([settingsText], { type: "text/plain;charset=utf-8" });
+  downloadBlobWithFilename(blob, makeSettingsFilename(state.source.filename));
 }
 
 /**

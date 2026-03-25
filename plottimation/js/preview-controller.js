@@ -20,7 +20,9 @@ export function updateAnimationPreviewHeading(dom, state) {
  * @returns {void}
  */
 export function updatePreviewPlayPauseButton(dom, state) {
+  const hasFrames = state.geometry.frameCount > 0;
   const paused = !!state.preview.paused;
+  dom.previewPlayPauseButton.disabled = !hasFrames;
   dom.previewPlayPauseButton.textContent = paused ? "\u23f5" : "\u23f8";
   dom.previewPlayPauseButton.setAttribute("aria-label", paused ? "Play animation" : "Pause animation");
 }

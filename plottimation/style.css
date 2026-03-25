@@ -307,7 +307,6 @@ button,
 
 button:disabled {
   opacity: 0.5;
-  cursor: not-allowed;
 }
 
 button:hover:not(:disabled),
@@ -344,6 +343,26 @@ button:hover:not(:disabled),
 
 .toggle span {
   color: var(--muted);
+}
+
+.radio-group {
+  margin: 10px 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--panel-strong);
+}
+
+.radio-group legend {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.radio-group .toggle {
+  padding: 6px 0 0;
+  border: 0;
+  background: transparent;
 }
 
 .status-group pre {

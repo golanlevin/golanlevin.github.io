@@ -17,16 +17,18 @@
             Make an animated GIF from a photo of a frame-sheet.
           </p>
           <p id="appLedeSecondary" class="lede">
-            v.1.02 • Golan Levin • <a href="https://github.com/golanlevin/plottimation">Documentation</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ">Demo Video</a>
+            v.1.02 • Golan Levin • <a href="https://github.com/golanlevin/plottimation" target="_blank" rel="noopener noreferrer">Documentation</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer">Demo Video</a>
           </p>
+          <p id="appLedeTertiary" class="lede"><em>Note: not yet mobile-friendly</em></p>
         </div>
 
         <section class="control-group">
           <div class="section-head">
             <h2 id="photoHeading">Photo</h2>
             <div class="header-actions">
-              <button id="loadDemoButton" class="header-button" type="button">Load Demo 1</button>
-              <button id="loadDemoButton2" class="header-button" type="button">Load Demo 2</button>
+              <select id="loadDemoSelect" class="header-select" aria-label="Load Demo">
+                <option value="">Load Demo</option>
+              </select>
             </div>
           </div>
           <label id="dropZone" class="drop-zone" for="fileInput">
@@ -35,7 +37,7 @@
             <span class="drop-note">Separate frames with small crosses.</span>
             <span class="drop-note">Page should be in landscape orientation.</span>
           </label>
-          <input id="fileInput" type="file" accept="image/*" />
+          <input id="fileInput" type="file" accept="image/*,.txt,text/plain" />
         </section>
 
         <details class="control-group collapsible">
@@ -110,17 +112,28 @@
 
         <details class="control-group collapsible">
           <summary id="frameAlignmentSummary">Frame Alignment</summary>
+          <fieldset id="alignmentMarkerTypeField" class="radio-group">
+            <legend>Alignment Marker Type:</legend>
+            <label class="toggle">
+              <input id="alignmentMarkerTypeCrosses" name="alignmentMarkerType" type="radio" value="crosses" checked />
+              <span>Crosses</span>
+            </label>
+            <label class="toggle">
+              <input id="alignmentMarkerTypeCircles" name="alignmentMarkerType" type="radio" value="circles" />
+              <span>Dots</span>
+            </label>
+          </fieldset>
           <div class="slider-stack">
             <label>
-              <span>Cross Region Size <output id="crossRoiScaleValue">-- px</output></span>
+              <span>Alignment Marker Region Size <output id="crossRoiScaleValue">-- px</output></span>
               <input id="crossRoiScale" type="range" min="18" max="110" step="1" value="52" />
             </label>
           </div>
           <label class="toggle">
             <input id="useCrossAlignment" type="checkbox" checked />
-            <span>Use cross-based subpixel alignment</span>
+            <span>Do subpixel alignment using markers</span>
           </label>
-          <label class="toggle">
+          <label id="detectCrossesWithConvolutionRow" class="toggle">
             <input id="detectCrossesWithConvolution" type="checkbox" />
             <span>Detect crosses with convolution</span>
           </label>
@@ -211,7 +224,7 @@
         </details>
 
         <details class="control-group collapsible">
-          <summary id="gifExportSummary">GIF Export Options</summary>
+          <summary id="gifExportSummary">Export Options</summary>
           <div class="field-grid">
             <label>
               <span>Frame Rate</span>
@@ -251,6 +264,9 @@
             <input id="gifGlobalPalette" type="checkbox" />
             <span>Use Global Palette</span>
           </label>
+          <div class="export-actions-stack">
+            <button id="saveSettingsButton" class="header-button" type="button" disabled>Save Settings file</button>
+          </div>
         </details>
 
         <section class="control-group status-group">
@@ -289,7 +305,7 @@
 
         <section class="viewer-card">
           <header>
-            <h2 id="crossRegionsHeading">Cross Regions</h2>
+            <h2 id="crossRegionsHeading">Frame Alignment Markers</h2>
           </header>
           <div id="crossRoiGrid" class="cross-roi-grid"></div>
         </section>

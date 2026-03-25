@@ -76,15 +76,15 @@ export function initializeTooltips({ tooltipText, state, dom, applyTooltipState 
  *   makeRectifiedFilename: (sourceFilename: string) => string,
  *   makeLivePreviewDragCue: () => void,
  *   makeGifImageDraggable: () => void,
- *   handleFile: (file: File) => Promise<void>,
- *   loadDemo1: () => void,
- *   loadDemo2: () => void,
+ *   handleFile: (file: File, files?: FileList | File[] | null) => Promise<void>,
+ *   loadSelectedDemo: (filename: string) => void,
  *   renderRectifiedPreview: (rectifiedCanvas: HTMLCanvasElement) => void,
  *   resetAppearanceControls: () => void,
  *   resetTrimControls: () => void,
  *   toggleTooltips: () => void,
  *   togglePreviewPaused: () => void,
  *   syncPaperPresetUi: () => void,
+ *   syncAlignmentMarkerUi: () => void,
  *   updateSliderReadouts: () => void,
  *   scheduleProcess: () => void,
  *   revokeGifUrl: () => void,
@@ -94,7 +94,8 @@ export function initializeTooltips({ tooltipText, state, dom, applyTooltipState 
  *   invalidateFrameCaches: () => void,
  *   drawCurrentGifPreview: () => void,
  *   exportGif: () => Promise<void>,
- *   exportZip: () => Promise<void>
+ *   exportZip: () => Promise<void>,
+ *   saveSettingsFile: () => void
  * }} deps
  * @returns {void}
  */
@@ -106,14 +107,14 @@ export function attachUi({
   makeLivePreviewDragCue,
   makeGifImageDraggable,
   handleFile,
-  loadDemo1,
-  loadDemo2,
+  loadSelectedDemo,
   renderRectifiedPreview,
   resetAppearanceControls,
   resetTrimControls,
   toggleTooltips,
   togglePreviewPaused,
   syncPaperPresetUi,
+  syncAlignmentMarkerUi,
   updateSliderReadouts,
   scheduleProcess,
   revokeGifUrl,
@@ -124,6 +125,7 @@ export function attachUi({
   drawCurrentGifPreview,
   exportGif,
   exportZip,
+  saveSettingsFile,
 }) {
   makeCanvasDraggable(dom.rawCanvas, () => {
     if (state.source.dragUrl && state.source.filename) {
@@ -169,14 +171,18 @@ export function attachUi({
     event.preventDefault();
     dom.dropZone.classList.remove("dragging");
     const file = event.dataTransfer?.files?.[0];
-    if (file) void handleFile(file);
+    if (file) void handleFile(file, event.dataTransfer?.files || null);
   });
   dom.fileInput.addEventListener("change", (event) => {
     const file = event.target.files?.[0];
-    if (file) void handleFile(file);
+    if (file) void handleFile(file, event.target.files || null);
   });
-  dom.loadDemoButton.addEventListener("click", loadDemo1);
-  dom.loadDemoButton2.addEventListener("click", loadDemo2);
+  dom.loadDemoSelect.addEventListener("change", () => {
+    const filename = dom.loadDemoSelect.value;
+    if (!filename) return;
+    loadSelectedDemo(filename);
+    dom.loadDemoSelect.value = "";
+  });
   dom.rectifiedCanvas.addEventListener("click", () => {
     state.preview.showRectifiedDiagnostic = !state.preview.showRectifiedDiagnostic;
     if (state.preview.rectifiedCanvas) {
@@ -197,6 +203,24 @@ export function attachUi({
   dom.paperPreset.addEventListener("change", () => {
     syncPaperPresetUi();
     scheduleProcess();
+  });
+
+  const alignmentMarkerTypeInputs = [
+    dom.alignmentMarkerTypeCrosses,
+    dom.alignmentMarkerTypeCircles,
+  ];
+  alignmentMarkerTypeInputs.forEach((input) => {
+    input.addEventListener("input", () => {
+      syncAlignmentMarkerUi();
+      revokeGifUrl();
+      updateSliderReadouts();
+      scheduleProcess();
+    });
+    input.addEventListener("change", () => {
+      syncAlignmentMarkerUi();
+      revokeGifUrl();
+      scheduleProcess();
+    });
   });
 
   const appearanceInputs = [
@@ -307,4 +331,5 @@ export function attachUi({
   dom.exportZipButton.addEventListener("click", () => {
     void exportZip();
   });
+  dom.saveSettingsButton.addEventListener("click", saveSettingsFile);
 }
