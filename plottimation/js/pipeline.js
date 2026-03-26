@@ -5,6 +5,12 @@ const GUTTER_PCT = 0.01;
 const MIN_CROSS_DETECTION_RATIO = 0.5;
 const MIN_CROSS_DETECTIONS_ABS = 4;
 const bUseCrossOnlyGridDetection = true;
+const PAGE_WARP_LOW_LONG_EDGE_PX = 1100;
+// High-resolution extraction should track the real source-image resolution instead of a fixed
+// paper-size number. The long edge of the extraction warp is capped at ~70.7% of the source
+// diagonal, which is equivalent to the side length of the largest axis-aligned square that fits
+// inside the source image's diagonal span.
+const PAGE_WARP_HIGH_DIAGONAL_CAP_SCALE = 0.75;
 
 // Unnormalized matched-filter kernel for dark "+" registration marks on bright paper.
 // The negative total sum suppresses blank page areas while rewarding the orthogonal cross strokes.
@@ -152,16 +158,15 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
     const ordered = orderCorners(pageQuad.points);
     throwIfAborted(requestId);
 
-    // Build a stable low-res page warp for tuned dot finding, plus a denser warp for extraction.
-    const pageSizeLow = new cv.Size(
-      Math.round(config.paperWidthIn * 100),
-      Math.round(config.paperHeightIn * 100)
-    );
+    // Build a stable low-res page warp and a denser extraction warp from aspect ratio alone.
+    // Paper dimensions are treated only as aspect-ratio hints, not literal output pixels.
+    const pageSizeLow = estimatePageWarpSizeFromAspect(config.paperAspect, PAGE_WARP_LOW_LONG_EDGE_PX);
     const pageSizeHigh = estimateHighResPageWarpSize(
       pageQuad.quadAreaPx,
-      config.paperWidthIn,
-      config.paperHeightIn,
-      pageSizeLow
+      config.paperAspect,
+      pageSizeLow,
+      sourceCanvas.width,
+      sourceCanvas.height
     );
     pageWarpLow = perspectiveWarp(visionSrc, styledSrc, ordered, pageSizeLow);
     pageWarpHigh = perspectiveWarp(visionSrc, styledSrc, ordered, pageSizeHigh);
@@ -452,15 +457,53 @@ function findLargestQuad(binaryMat, totalArea) {
  * Estimate a higher-resolution page warp size from the raw quad area while never going below the low-res warp.
  *
  * @param {number} quadAreaPx
- * @param {number} paperWidthIn
- * @param {number} paperHeightIn
- * @param {cv.Size} pageSizeLow
+ * @param {number} aspect
+ * @param {number} longEdgePx
  * @returns {cv.Size}
  */
-function estimateHighResPageWarpSize(quadAreaPx, paperWidthIn, paperHeightIn, pageSizeLow) {
-  const aspect = Math.max(1e-6, paperWidthIn / paperHeightIn);
-  const widthFromArea = Math.max(1, Math.round(Math.sqrt(Math.max(1, quadAreaPx) * aspect)));
-  const heightFromArea = Math.max(1, Math.round(Math.sqrt(Math.max(1, quadAreaPx) / aspect)));
+function estimatePageWarpSizeFromAspect(aspect, longEdgePx) {
+  const safeAspect = Math.max(0.25, Math.min(4.0, aspect || 1));
+  const safeLongEdge = Math.max(1, Math.round(longEdgePx || PAGE_WARP_LOW_LONG_EDGE_PX));
+  if (safeAspect >= 1) {
+    return new cv.Size(safeLongEdge, Math.max(1, Math.round(safeLongEdge / safeAspect)));
+  }
+  return new cv.Size(Math.max(1, Math.round(safeLongEdge * safeAspect)), safeLongEdge);
+}
+
+/**
+ * Estimate a higher-resolution page warp from the detected page area while keeping the long edge
+ * in a source-dependent reasonable range.
+ *
+ * Paper dimensions are treated only as aspect-ratio hints. Actual extraction resolution now comes
+ * from two things:
+ * - the detected page-quad area in the source image
+ * - a cap derived from the source-image diagonal
+ *
+ * @param {number} quadAreaPx
+ * @param {number} aspect
+ * @param {cv.Size} pageSizeLow
+ * @param {number} sourceWidth
+ * @param {number} sourceHeight
+ * @returns {cv.Size}
+ */
+function estimateHighResPageWarpSize(quadAreaPx, aspect, pageSizeLow, sourceWidth, sourceHeight) {
+  const safeAspect = Math.max(0.25, Math.min(4.0, aspect || 1));
+  let widthFromArea = Math.max(1, Math.round(Math.sqrt(Math.max(1, quadAreaPx) * safeAspect)));
+  let heightFromArea = Math.max(1, Math.round(Math.sqrt(Math.max(1, quadAreaPx) / safeAspect)));
+  const sourceDiagonal = Math.sqrt(
+    Math.max(1, sourceWidth) * Math.max(1, sourceWidth) +
+    Math.max(1, sourceHeight) * Math.max(1, sourceHeight)
+  );
+  const maxLongEdge = Math.max(
+    PAGE_WARP_LOW_LONG_EDGE_PX,
+    Math.floor(PAGE_WARP_HIGH_DIAGONAL_CAP_SCALE * sourceDiagonal)
+  );
+  const longEdge = Math.max(widthFromArea, heightFromArea);
+  if (longEdge > maxLongEdge) {
+    const scale = maxLongEdge / longEdge;
+    widthFromArea = Math.max(1, Math.round(widthFromArea * scale));
+    heightFromArea = Math.max(1, Math.round(heightFromArea * scale));
+  }
   return new cv.Size(
     Math.max(pageSizeLow.width, widthFromArea),
     Math.max(pageSizeLow.height, heightFromArea)
@@ -886,6 +929,7 @@ function rectifyByQuad(pageVision, pageStyled, quad, size, padding = 0) {
  * @returns {number}
  */
 export function getCvInterpolationFlag(mode) {
+  if (mode === "area" && typeof cv.INTER_AREA !== "undefined") return cv.INTER_AREA;
   if (mode === "cubic" && typeof cv.INTER_CUBIC !== "undefined") return cv.INTER_CUBIC;
   if (mode === "lanczos" && typeof cv.INTER_LANCZOS4 !== "undefined") return cv.INTER_LANCZOS4;
   return cv.INTER_LINEAR;

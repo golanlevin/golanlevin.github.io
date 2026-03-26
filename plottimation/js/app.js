@@ -39,6 +39,12 @@ import {
   extractSingleFrameToCanvas,
 } from "./pipeline.js";
 
+const MP4_MUXER_MODULE_URL = "./vendor/mp4-muxer.esm.js";
+let mp4MuxerModulePromise = null;
+// Final output-size scaling can be done either with browser canvas drawImage() or with OpenCV.
+// Keep both code paths available for comparison while evaluating tiny-output quality.
+const bUseOpenCvOutputScaling = true;
+
 const TOOLTIP_TEXT = {
   "#appTitle": "",
   "#appLedePrimary": "",
@@ -86,8 +92,10 @@ const TOOLTIP_TEXT = {
   "#rotate90Cw": "Rotate the post-cropped animation frames 90 degrees clockwise.",
   "#gifExportSummary": "Controls that affect preview playback and exported output files.",
   "#fps": "Playback speed of the preview animation and exported GIF in frames per second.",
-  "#outputScale": "Scales the final animation for preview and export (post-cropping).",
-  "#gifQuality": "GIF encoder quality setting. Lower numbers are slower but higher quality.",
+  "#loopCount": "Repeat the full ordered frame sequence this many times in the preview and exported files.",
+  "#outputWidth": "Sets the final output width in pixels after cropping and rotation; the height stays proportional.",
+  "#outputHeight": "Sets the final output height in pixels after cropping and rotation; the width stays proportional.",
+  "#gifQuality": "Shared encoding quality slider from 1 to 100. Higher values raise MP4 bitrate and map to better GIF encoder quality.",
   "#gifDither": "Selects the dithering method used during GIF color quantization.",
   "#gifGlobalPalette": "Use one shared palette for all GIF frames, instead of per-frame palettes.",
   "#reverseOrder": "Reverse the playback and export order of the animation frames.",
@@ -106,6 +114,7 @@ const TOOLTIP_TEXT = {
   "#animationPreviewHeading": "Live animation preview using the current settings.",
   "#previewPlayPauseButton": "Pause or resume the live animation preview.",
   "#exportZipButton": "Download a ZIP archive containing the current animation frames as PNG files.",
+  "#exportMp4Button": "Render and download an H.264 MP4 movie when this browser supports in-browser MP4 export.",
   "#exportButton": "Render and download the animated GIF using the current settings.",
   "#saveSettingsButton": "Download the current settings as the same tab-separated settings.txt file included in the ZIP export.",
   "#gifPreviewCanvas": "This is a live animation preview. Click 'Export GIF' to generate the GIF.",
@@ -124,6 +133,85 @@ function updateExportButtonLabel(progressPercent = null) {
   dom.exportButton.textContent = (typeof progressPercent === "number")
     ? `Export GIF ...${progressPercent}%`
     : "Export GIF";
+}
+
+/**
+ * Read the shared 1..100 encoding-quality slider.
+ *
+ * @returns {number}
+ */
+function getEncodingQualityValue() {
+  const parsed = Number(dom.gifQuality.value);
+  return Math.max(1, Math.min(100, Number.isFinite(parsed) ? parsed : SETTINGS_DEFAULTS.gifExport.quality));
+}
+
+/**
+ * Map the shared 1..100 quality slider onto gif.js's inverse 20..1 quality scale.
+ *
+ * @param {number} encodingQuality
+ * @returns {number}
+ */
+function mapEncodingQualityToGifEncoderQuality(encodingQuality) {
+  const clamped = Math.max(1, Math.min(100, encodingQuality));
+  const normalized = (clamped - 1) / 99;
+  return Math.max(1, Math.min(20, Math.round(20 - (normalized * 19))));
+}
+
+/**
+ * Convert a legacy gif.js quality value (1..20, lower is better) into the shared 1..100 slider.
+ *
+ * @param {number} gifEncoderQuality
+ * @returns {number}
+ */
+function mapGifEncoderQualityToEncodingQuality(gifEncoderQuality) {
+  const clamped = Math.max(1, Math.min(20, gifEncoderQuality));
+  const normalized = (20 - clamped) / 19;
+  return Math.max(1, Math.min(100, Math.round(1 + (normalized * 99))));
+}
+
+/**
+ * Probe whether this browser can encode H.264 frames with WebCodecs for later MP4 muxing.
+ *
+ * @returns {Promise<{supported:boolean, codec:string}>}
+ */
+async function detectMp4ExportSupport() {
+  if (typeof globalThis.VideoEncoder === "undefined" || typeof VideoEncoder.isConfigSupported !== "function") {
+    return { supported: false, codec: "" };
+  }
+  const candidates = ["avc1.42001f", "avc1.42E01E", "avc1.4D401E"];
+  for (const codec of candidates) {
+    try {
+      const support = await VideoEncoder.isConfigSupported({
+        codec,
+        width: 16,
+        height: 16,
+        bitrate: 500_000,
+        framerate: 20,
+        avc: { format: "avc" },
+      });
+      if (support?.supported) {
+        return { supported: true, codec };
+      }
+    } catch {
+      // Try the next H.264 profile string.
+    }
+  }
+  return { supported: false, codec: "" };
+}
+
+/**
+ * Load the vendored MP4 muxer module on demand.
+ *
+ * MP4 export is comparatively niche and significantly heavier than GIF export, so the muxer stays
+ * out of the startup path and is only imported when support probing/export actually needs it.
+ *
+ * @returns {Promise<any>}
+ */
+function loadMp4MuxerModule() {
+  if (!mp4MuxerModulePromise) {
+    mp4MuxerModulePromise = import(MP4_MUXER_MODULE_URL);
+  }
+  return mp4MuxerModulePromise;
 }
 
 /**
@@ -214,6 +302,31 @@ function updatePreviewPlayPauseButton() {
 }
 
 /**
+ * Keep the Rectified Sheet heading in sync with the currently displayed diagnostic mode.
+ *
+ * @returns {void}
+ */
+function updateRectifiedSheetHeading() {
+  dom.rectifiedSheetHeading.textContent = state.preview.showRectifiedDiagnostic
+    ? "Convolution Debug View"
+    : "Rectified Sheet";
+}
+
+/**
+ * Keep the export buttons synchronized with frame availability and MP4 support.
+ *
+ * @param {boolean} [forceDisabled=false]
+ * @returns {void}
+ */
+function updateExportControlsAvailability(forceDisabled = false) {
+  const hasFrames = state.geometry.frameCount > 0;
+  dom.exportButton.disabled = forceDisabled || !hasFrames;
+  dom.exportZipButton.disabled = forceDisabled || !hasFrames;
+  dom.saveSettingsButton.disabled = forceDisabled || !hasFrames;
+  dom.exportMp4Button.disabled = forceDisabled || !hasFrames || !state.runtime.mp4ExportSupported;
+}
+
+/**
  * Keep the marker-editing header controls synchronized with current state.
  *
  * @returns {void}
@@ -247,12 +360,41 @@ function getOrderedFrameIndex(previewIndex) {
 }
 
 /**
+ * Return the number of frames that should be emitted into exported files after loop repetition
+ * is applied. The live preview intentionally ignores `Number of Loops`.
+ *
+ * @returns {number}
+ */
+function getExportOrderedFrameCount() {
+  const singleLoopCount = getOrderedFrameCount();
+  if (singleLoopCount <= 0) return 0;
+  return singleLoopCount * Math.max(1, readConfig().exportOptions.loopCount || 1);
+}
+
+/**
+ * Map an export-sequence index to the underlying source-frame index, repeating the preview-order
+ * sequence for the requested number of loops.
+ *
+ * @param {number} exportIndex
+ * @returns {number}
+ */
+function getExportOrderedFrameIndex(exportIndex) {
+  const singleLoopCount = getOrderedFrameCount();
+  if (singleLoopCount <= 0) return 0;
+  const localIndex = ((exportIndex % singleLoopCount) + singleLoopCount) % singleLoopCount;
+  return getOrderedFrameIndex(localIndex);
+}
+
+/**
  * Draw the current preview frame via the dedicated preview controller.
  *
  * @returns {void}
  */
 function drawCurrentGifPreview() {
   drawPreviewFrame({ dom, state, getAdjustedFrameCanvas, readConfig });
+  if (state.preview.rectifiedCanvas) {
+    renderRectifiedPreview(state.preview.rectifiedCanvas);
+  }
 }
 
 /**
@@ -362,6 +504,8 @@ function makeLivePreviewDragCue() {
  */
 function clearDerivedPreviews() {
   state.preview.rectifiedCanvas = null;
+  state.preview.rectifiedDiagnosticSourceCanvas = null;
+  state.preview.rectifiedDiagnosticDirty = true;
   releaseRectifiedDragUrl();
   state.preview.rectifiedDragBuildId += 1;
   state.geometry.baseRectifiedCanvas = null;
@@ -375,6 +519,7 @@ function clearDerivedPreviews() {
   state.frames.adjustedCache.clear();
   state.preview.frameIndex = 0;
   state.preview.showRectifiedDiagnostic = false;
+  updateRectifiedSheetHeading();
 
   const rectifiedCtx = dom.rectifiedCanvas.getContext("2d");
   resizeCanvasToBox(dom.rectifiedCanvas);
@@ -388,9 +533,7 @@ function clearDerivedPreviews() {
 
   dom.crossRoiGrid.innerHTML = "";
   dom.crossRoiGrid.classList.add("is-empty");
-  dom.exportButton.disabled = true;
-  dom.exportZipButton.disabled = true;
-  dom.saveSettingsButton.disabled = true;
+  updateExportControlsAvailability(true);
   syncMarkerEditingUi();
   updatePreviewPlayPauseButton();
   updateAnimationPreviewHeading();
@@ -429,7 +572,9 @@ function init() {
   void populateDemoSelect();
   syncPaperPresetUi();
   syncAlignmentMarkerUi();
+  syncMp4ExportUi();
   syncMarkerEditingUi();
+  updateRectifiedSheetHeading();
   dom.gifPreviewCanvas.title = TOOLTIP_TEXT["#gifPreviewCanvas"] || "";
   dom.gifImage.classList.add("hidden");
   dom.gifImage.hidden = true;
@@ -437,6 +582,7 @@ function init() {
   updateAnimationPreviewHeading();
   updateExportButtonLabel();
   updatePreviewPlayPauseButton();
+  updateExportControlsAvailability();
 
   if (typeof cv !== "undefined" && cv.onRuntimeInitialized) {
     cv.onRuntimeInitialized = onOpenCvReady;
@@ -449,6 +595,7 @@ function init() {
   updateSliderReadouts();
   attachResizeHandler();
   startAnimationPreviewLoop();
+  void initializeMp4Support();
 }
 
 /**
@@ -469,6 +616,7 @@ function attachUi() {
     renderRectifiedPreview,
     resetAppearanceControls,
     resetTrimControls,
+    resetExportControls,
     toggleTooltips: () => setTooltipsEnabled(!state.runtime.tooltipsEnabled),
     togglePreviewPaused: () => {
       if (dom.previewPlayPauseButton.disabled) return;
@@ -478,13 +626,15 @@ function attachUi() {
       drawCurrentGifPreview();
     },
     stepPausedPreviewFrame: (direction) => {
-      const orderedFrameCount = getOrderedFrameCount();
-      if (!state.preview.paused || orderedFrameCount <= 0) return;
-      state.preview.frameIndex = (state.preview.frameIndex + direction + orderedFrameCount) % orderedFrameCount;
+      const frameCount = state.geometry.frameCount;
+      if (!state.preview.paused || frameCount <= 0) return;
+      state.preview.frameIndex = (state.preview.frameIndex + direction + frameCount) % frameCount;
       drawCurrentGifPreview();
     },
     toggleMarkerEditing,
     clearMarkerEdits,
+    syncOutputSizeFromWidthInput,
+    syncOutputSizeFromHeightInput,
     syncPaperPresetUi,
     syncAlignmentMarkerUi,
     updateSliderReadouts,
@@ -496,6 +646,7 @@ function attachUi() {
     invalidateFrameCaches,
     drawCurrentGifPreview,
     exportGif,
+    exportMp4,
     exportZip,
     saveSettingsFile,
   });
@@ -513,6 +664,29 @@ function initializeTooltips() {
     dom,
     applyTooltipState: setTooltipsEnabled,
   });
+}
+
+/**
+ * Detect WebCodecs-based MP4 export support after startup and refresh the relevant UI.
+ *
+ * This is asynchronous because `VideoEncoder.isConfigSupported(...)` is async. The rest of the app
+ * can finish booting immediately and then reveal/enable MP4 controls once support is known.
+ *
+ * @returns {Promise<void>}
+ */
+async function initializeMp4Support() {
+  try {
+    const support = await detectMp4ExportSupport();
+    state.runtime.mp4ExportSupported = support.supported;
+    if (support.codec) {
+      state.runtime.mp4Codec = support.codec;
+    }
+  } catch {
+    state.runtime.mp4ExportSupported = false;
+  }
+  syncMp4ExportUi();
+  updateExportControlsAvailability();
+  setTooltipsEnabled(state.runtime.tooltipsEnabled);
 }
 
 /**
@@ -640,6 +814,51 @@ function resetTrimControls() {
 }
 
 /**
+ * Restore Export Options controls to their defaults and return output size to native 100%.
+ *
+ * @returns {void}
+ */
+function resetExportControls() {
+  const previousOutputSize = getRequestedOutputSize();
+  const alreadyReset =
+    (Number(dom.fps.value) || SETTINGS_DEFAULTS.gifExport.fps) === SETTINGS_DEFAULTS.gifExport.fps &&
+    (Number(dom.loopCount.value) || SETTINGS_DEFAULTS.gifExport.loopCount) === SETTINGS_DEFAULTS.gifExport.loopCount &&
+    !dom.reverseOrder.checked &&
+    !dom.pingPong.checked &&
+    getEncodingQualityValue() === SETTINGS_DEFAULTS.gifExport.quality &&
+    (dom.gifDither.value || SETTINGS_DEFAULTS.gifExport.dither) === SETTINGS_DEFAULTS.gifExport.dither &&
+    !dom.gifGlobalPalette.checked &&
+    state.runtime.outputSizeAuto;
+  if (alreadyReset) {
+    return;
+  }
+  dom.fps.value = String(SETTINGS_DEFAULTS.gifExport.fps);
+  dom.loopCount.value = String(SETTINGS_DEFAULTS.gifExport.loopCount);
+  dom.reverseOrder.checked = SETTINGS_DEFAULTS.gifExport.reverseOrder;
+  dom.pingPong.checked = SETTINGS_DEFAULTS.gifExport.pingPong;
+  dom.outputWidth.value = "";
+  dom.outputHeight.value = "";
+  dom.gifQuality.value = String(SETTINGS_DEFAULTS.gifExport.quality);
+  dom.gifDither.value = SETTINGS_DEFAULTS.gifExport.dither;
+  dom.gifGlobalPalette.checked = SETTINGS_DEFAULTS.gifExport.globalPalette;
+  state.runtime.outputWidthPx = 0;
+  state.runtime.outputHeightPx = 0;
+  state.runtime.outputSizeAuto = true;
+  state.runtime.outputSizeAnchor = "auto";
+  state.runtime.pendingOutputScale = null;
+  revokeGifUrl();
+  updateSliderReadouts();
+  const nextOutputSize = getRequestedOutputSize();
+  if (
+    previousOutputSize.width !== nextOutputSize.width ||
+    previousOutputSize.height !== nextOutputSize.height
+  ) {
+    invalidateFrameCaches();
+  }
+  drawCurrentGifPreview();
+}
+
+/**
  * Restore every non-Layout control to its default value.
  *
  * Layout settings are intentionally preserved across image loads, while detection,
@@ -651,6 +870,11 @@ function resetNonLayoutControls() {
   applyNonLayoutDefaults(dom);
   state.geometry.manualMarkerOverrides.clear();
   state.runtime.markerEditingEnabled = false;
+  state.runtime.outputWidthPx = 0;
+  state.runtime.outputHeightPx = 0;
+  state.runtime.outputSizeAuto = true;
+  state.runtime.outputSizeAnchor = "auto";
+  state.runtime.pendingOutputScale = null;
 
   state.preview.paused = false;
   updatePreviewPlayPauseButton();
@@ -709,6 +933,7 @@ function populateResamplingOptions() {
   const previousValue = select.value || "linear";
   select.innerHTML = "";
   const options = [
+    { value: "area", label: "Strong Reduction (Area)" },
     { value: "linear", label: "Balanced (Linear)" },
     { value: "cubic", label: "Sharper (Cubic)" },
   ];
@@ -800,6 +1025,7 @@ function scheduleProcess() {
  *   paperPreset:string,
  *   paperWidthIn:number,
  *   paperHeightIn:number,
+ *   paperAspect:number,
  *   frameCols:number,
  *   frameRows:number,
  *   thresholdMethod:string,
@@ -816,7 +1042,7 @@ function scheduleProcess() {
  *   postCropGeometry:{flipHorizontal:boolean,flipVertical:boolean,rotate90Cw:boolean},
  *   filters:{brightness:number,contrast:number,vibrance:number,temperature:number,unsharpRadius:number,unsharpAmount:number,invert:boolean},
  *   fps:number,
- *   exportOptions:{quality:number,dither:string|false,resampling:string,globalPalette:boolean,outputScale:number,reverseOrder:boolean,pingPong:boolean}
+ *   exportOptions:{encodingQuality:number,quality:number,mp4Quality:number,dither:string|false,resampling:string,globalPalette:boolean,outputWidthPx:number,outputHeightPx:number,outputScale:number,reverseOrder:boolean,pingPong:boolean,loopCount:number}
  * }}
  */
 function readConfig() {
@@ -829,10 +1055,13 @@ function readConfig() {
   const paperHeight = isCustomPaper
     ? (Number(dom.paperHeight.value) || SETTINGS_DEFAULTS.layout.paperHeight)
     : (presetSize?.height || SETTINGS_DEFAULTS.layout.paperHeight);
+  const paperAspect = clampPaperAspect(paperWidth, paperHeight);
+  const encodingQuality = getEncodingQualityValue();
   return {
     paperPreset,
     paperWidthIn: Math.max(1, paperWidth),
     paperHeightIn: Math.max(1, paperHeight),
+    paperAspect,
     frameCols: Math.max(1, Math.min(20, Math.round(Number(dom.frameCols.value) || SETTINGS_DEFAULTS.layout.frameCols))),
     frameRows: Math.max(1, Math.min(20, Math.round(Number(dom.frameRows.value) || SETTINGS_DEFAULTS.layout.frameRows))),
     thresholdMethod: dom.thresholdMethod.value || SETTINGS_DEFAULTS.detection.thresholdMethod,
@@ -868,8 +1097,13 @@ function readConfig() {
     },
     fps: Math.max(1, Math.min(60, Math.round(Number(dom.fps.value) || SETTINGS_DEFAULTS.gifExport.fps))),
     exportOptions: {
-      outputScale: Math.max(0.25, Math.min(1.0, Number(dom.outputScale.value) || SETTINGS_DEFAULTS.gifExport.outputScale)),
-      quality: Math.max(1, Math.min(20, Math.round(Number(dom.gifQuality.value) || SETTINGS_DEFAULTS.gifExport.quality))),
+      loopCount: Math.max(1, Math.min(10, Math.round(Number(dom.loopCount.value) || SETTINGS_DEFAULTS.gifExport.loopCount))),
+      outputWidthPx: getRequestedOutputSize().width,
+      outputHeightPx: getRequestedOutputSize().height,
+      outputScale: getRequestedOutputSize().scale,
+      encodingQuality,
+      quality: mapEncodingQualityToGifEncoderQuality(encodingQuality),
+      mp4Quality: encodingQuality,
       dither: (dom.gifDither.value && dom.gifDither.value !== "off") ? dom.gifDither.value : false,
       resampling: dom.gifResampling.value || "linear",
       globalPalette: dom.gifGlobalPalette.checked,
@@ -877,6 +1111,20 @@ function readConfig() {
       pingPong: dom.pingPong.checked,
     },
   };
+}
+
+/**
+ * Clamp the paper aspect ratio to a sane range so custom sheets cannot request pathological
+ * page geometries. Paper dimensions are treated as aspect-ratio hints, not real-world units.
+ *
+ * @param {number} width
+ * @param {number} height
+ * @returns {number}
+ */
+function clampPaperAspect(width, height) {
+  const safeWidth = Math.max(1e-6, Number(width) || SETTINGS_DEFAULTS.layout.paperWidth);
+  const safeHeight = Math.max(1e-6, Number(height) || SETTINGS_DEFAULTS.layout.paperHeight);
+  return Math.max(0.25, Math.min(4.0, safeWidth / safeHeight));
 }
 
 /**
@@ -908,6 +1156,22 @@ function syncAlignmentMarkerUi() {
   dom.detectCrossesWithConvolutionRow.hidden = !showCrossOnlyControls;
   if (!showCrossOnlyControls) {
     dom.detectCrossesWithConvolution.checked = false;
+  }
+}
+
+/**
+ * Show or hide MP4-specific export controls based on browser support.
+ *
+ * @returns {void}
+ */
+function syncMp4ExportUi() {
+  const supported = !!state.runtime.mp4ExportSupported;
+  dom.exportMp4Button.hidden = false;
+  if (!supported) {
+    dom.exportMp4Button.disabled = true;
+    dom.exportMp4Button.title = "Not supported by this browser";
+  } else {
+    dom.exportMp4Button.removeAttribute("title");
   }
 }
 
@@ -1086,10 +1350,34 @@ function applyLoadedSettingsText(settingsText) {
   setIfPresent("unsharp_radius", dom.unsharpRadius);
   setCheckedIfPresent("invert", dom.invert);
   setIfPresent("fps", dom.fps);
+  setIfPresent("loop_count", dom.loopCount);
   setCheckedIfPresent("reverse_order", dom.reverseOrder);
   setCheckedIfPresent("ping_pong", dom.pingPong);
-  setIfPresent("output_scale", dom.outputScale);
-  setIfPresent("encoding_quality", dom.gifQuality);
+  if (entries.has("output_width")) {
+    dom.outputWidth.value = String(entries.get("output_width"));
+    syncOutputSizeFromWidthInput();
+    if (entries.has("output_height")) {
+      dom.outputHeight.value = String(entries.get("output_height"));
+      syncOutputSizeFromHeightInput();
+    }
+  } else if (entries.has("output_scale")) {
+    state.runtime.outputSizeAuto = false;
+    state.runtime.outputWidthPx = 0;
+    state.runtime.outputHeightPx = 0;
+    state.runtime.outputSizeAnchor = "auto";
+    state.runtime.pendingOutputScale = clampLegacyOutputScale(Number(entries.get("output_scale")));
+    dom.outputWidth.value = "";
+    dom.outputHeight.value = "";
+  }
+  if (entries.has("encoding_quality")) {
+    const rawEncodingQuality = Number(entries.get("encoding_quality"));
+    const normalizedEncodingQuality = (rawEncodingQuality > 20)
+      ? rawEncodingQuality
+      : mapGifEncoderQualityToEncodingQuality(rawEncodingQuality);
+    dom.gifQuality.value = String(Math.max(1, Math.min(100, Math.round(normalizedEncodingQuality || SETTINGS_DEFAULTS.gifExport.quality))));
+  } else if (entries.has("mp4_quality")) {
+    dom.gifQuality.value = String(Math.max(1, Math.min(100, Math.round(Number(entries.get("mp4_quality")) || SETTINGS_DEFAULTS.gifExport.quality))));
+  }
   setIfPresent("dither", dom.gifDither);
   setIfPresent("resampling", dom.gifResampling);
   setCheckedIfPresent("use_global_palette", dom.gifGlobalPalette);
@@ -1126,10 +1414,10 @@ function updateSliderReadouts() {
   dom.paperMarginValue.textContent = `${Math.max(0, Math.min(150, Number(dom.paperMargin.value) || SETTINGS_DEFAULTS.detection.paperMarginPx))} px`;
   dom.boundarySensitivityValue.textContent = `${Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)).toFixed(1)}`;
   dom.boundaryPersistenceValue.textContent = String(Math.max(1, Math.min(15, Number(dom.boundaryPersistence.value) || SETTINGS_DEFAULTS.detection.boundaryPersistencePx)));
-  const outputScale = Math.max(0.25, Math.min(1.0, Number(dom.outputScale.value) || SETTINGS_DEFAULTS.gifExport.outputScale));
-  const scaledSize = getScaledOutputFrameSize(outputScale);
-  dom.outputScaleValue.textContent = `${outputScale.toFixed(2)} (${scaledSize.width}\u00d7${scaledSize.height})`;
-  dom.gifQualityValue.textContent = String(Math.max(1, Math.min(20, Number(dom.gifQuality.value) || SETTINGS_DEFAULTS.gifExport.quality)));
+  const outputSize = getRequestedOutputSize();
+  dom.outputWidth.value = outputSize.width > 0 ? String(outputSize.width) : "";
+  dom.outputHeight.value = outputSize.height > 0 ? String(outputSize.height) : "";
+  dom.gifQualityValue.textContent = String(getEncodingQualityValue());
   dom.cropAspectRatioValue.textContent = getCurrentCropAspectRatioText();
   if (!state.geometry.alignmentInfo) {
     dom.crossRoiScaleValue.textContent = "-- px";
@@ -1160,6 +1448,165 @@ function formatSignedValue(value) {
 }
 
 /**
+ * Clamp an output-scale value to the supported typed/slider range.
+ *
+ * @param {number} value
+ * @returns {number}
+ */
+function clampLegacyOutputScale(value) {
+  return Math.max(0.25, Math.min(1.25, Number(value) || 1));
+}
+
+/**
+ * Clamp a requested output dimension to the supported 1..1999 range.
+ *
+ * @param {number} value
+ * @returns {number}
+ */
+function clampOutputDimension(value) {
+  return Math.max(1, Math.min(1999, Math.round(Number(value) || 0)));
+}
+
+/**
+ * Compute the current frame size after crop and post-crop rotation but before output scaling.
+ *
+ * @returns {{width:number,height:number}|null}
+ */
+function getCurrentOutputGeometrySize() {
+  const alignmentInfo = state.geometry.alignmentInfo;
+  if (!alignmentInfo) return null;
+  const cellWidth = alignmentInfo.gridBounds.width / alignmentInfo.cols;
+  const cellHeight = alignmentInfo.gridBounds.height / alignmentInfo.rows;
+  const cropLeft = Math.max(0, Math.round(Number(dom.cropLeft.value) || 0));
+  const cropRight = Math.max(0, Math.round(Number(dom.cropRight.value) || 0));
+  const cropTop = Math.max(0, Math.round(Number(dom.cropTop.value) || 0));
+  const cropBottom = Math.max(0, Math.round(Number(dom.cropBottom.value) || 0));
+  const rotate90Cw = dom.rotate90Cw.checked;
+  const croppedWidth = Math.max(1, Math.round(cellWidth - cropLeft - cropRight));
+  const croppedHeight = Math.max(1, Math.round(cellHeight - cropTop - cropBottom));
+  return rotate90Cw
+    ? { width: croppedHeight, height: croppedWidth }
+    : { width: croppedWidth, height: croppedHeight };
+}
+
+/**
+ * Convert a requested width into a proportional final output size, clamped to 1999×1999.
+ *
+ * @param {{width:number,height:number}} geometrySize
+ * @param {number} requestedWidth
+ * @returns {{width:number,height:number,scale:number}}
+ */
+function resolveOutputSizeFromWidth(geometrySize, requestedWidth) {
+  const unclampedWidth = clampOutputDimension(requestedWidth);
+  const requestedScale = unclampedWidth / geometrySize.width;
+  const maxScale = Math.min(1999 / geometrySize.width, 1999 / geometrySize.height);
+  const scale = Math.min(requestedScale, maxScale);
+  return {
+    width: Math.max(1, Math.min(1999, Math.round(geometrySize.width * scale))),
+    height: Math.max(1, Math.min(1999, Math.round(geometrySize.height * scale))),
+    scale,
+  };
+}
+
+/**
+ * Convert a requested height into a proportional final output size, clamped to 1999×1999.
+ *
+ * @param {{width:number,height:number}} geometrySize
+ * @param {number} requestedHeight
+ * @returns {{width:number,height:number,scale:number}}
+ */
+function resolveOutputSizeFromHeight(geometrySize, requestedHeight) {
+  const unclampedHeight = clampOutputDimension(requestedHeight);
+  const requestedScale = unclampedHeight / geometrySize.height;
+  const maxScale = Math.min(1999 / geometrySize.width, 1999 / geometrySize.height);
+  const scale = Math.min(requestedScale, maxScale);
+  return {
+    width: Math.max(1, Math.min(1999, Math.round(geometrySize.width * scale))),
+    height: Math.max(1, Math.min(1999, Math.round(geometrySize.height * scale))),
+    scale,
+  };
+}
+
+/**
+ * Capture the current Output Width field as the controlling dimension.
+ *
+ * @returns {void}
+ */
+function syncOutputSizeFromWidthInput() {
+  const geometrySize = getCurrentOutputGeometrySize();
+  const parsed = clampOutputDimension(dom.outputWidth.value);
+  if (!geometrySize) {
+    state.runtime.outputSizeAuto = false;
+    state.runtime.outputSizeAnchor = "width";
+    state.runtime.outputWidthPx = parsed;
+    state.runtime.outputHeightPx = 0;
+    state.runtime.pendingOutputScale = null;
+    return;
+  }
+  const resolved = resolveOutputSizeFromWidth(geometrySize, parsed);
+  state.runtime.outputSizeAuto = false;
+  state.runtime.outputSizeAnchor = "width";
+  state.runtime.outputWidthPx = resolved.width;
+  state.runtime.outputHeightPx = resolved.height;
+  state.runtime.pendingOutputScale = null;
+}
+
+/**
+ * Capture the current Output Height field as the controlling dimension.
+ *
+ * @returns {void}
+ */
+function syncOutputSizeFromHeightInput() {
+  const geometrySize = getCurrentOutputGeometrySize();
+  const parsed = clampOutputDimension(dom.outputHeight.value);
+  if (!geometrySize) {
+    state.runtime.outputSizeAuto = false;
+    state.runtime.outputSizeAnchor = "height";
+    state.runtime.outputWidthPx = 0;
+    state.runtime.outputHeightPx = parsed;
+    state.runtime.pendingOutputScale = null;
+    return;
+  }
+  const resolved = resolveOutputSizeFromHeight(geometrySize, parsed);
+  state.runtime.outputSizeAuto = false;
+  state.runtime.outputSizeAnchor = "height";
+  state.runtime.outputWidthPx = resolved.width;
+  state.runtime.outputHeightPx = resolved.height;
+  state.runtime.pendingOutputScale = null;
+}
+
+/**
+ * Resolve the current final output size from the auto/manual state and current geometry.
+ *
+ * @returns {{width:number,height:number,scale:number}}
+ */
+function getRequestedOutputSize() {
+  const geometrySize = getCurrentOutputGeometrySize();
+  if (!geometrySize) {
+    return { width: 0, height: 0, scale: 1 };
+  }
+  if (Number.isFinite(state.runtime.pendingOutputScale) && state.runtime.pendingOutputScale > 0) {
+    return resolveOutputSizeFromWidth(
+      geometrySize,
+      Math.round(geometrySize.width * state.runtime.pendingOutputScale)
+    );
+  }
+  if (state.runtime.outputSizeAuto) {
+    return resolveOutputSizeFromWidth(geometrySize, geometrySize.width);
+  }
+  if (state.runtime.outputSizeAnchor === "height" && state.runtime.outputHeightPx > 0) {
+    return resolveOutputSizeFromHeight(geometrySize, state.runtime.outputHeightPx);
+  }
+  if (state.runtime.outputWidthPx > 0) {
+    return resolveOutputSizeFromWidth(geometrySize, state.runtime.outputWidthPx);
+  }
+  if (state.runtime.outputHeightPx > 0) {
+    return resolveOutputSizeFromHeight(geometrySize, state.runtime.outputHeightPx);
+  }
+  return resolveOutputSizeFromWidth(geometrySize, geometrySize.width);
+}
+
+/**
  * Run the full geometry/CV pipeline, update caches, and refresh all previews.
  *
  * @param {number} [requestId=state.processing.requestId]
@@ -1179,8 +1626,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
 
   state.processing.active = true;
   setBusyState(true);
-  dom.exportButton.disabled = true;
-  dom.exportZipButton.disabled = true;
+  updateExportControlsAvailability(true);
 
   try {
     const config = readConfig();
@@ -1205,9 +1651,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     refreshAppearanceOutputs();
     renderCrossRoiGrid(result.alignmentInfo);
     drawCurrentGifPreview();
-    dom.exportButton.disabled = state.geometry.frameCount === 0;
-    dom.exportZipButton.disabled = state.geometry.frameCount === 0;
-    dom.saveSettingsButton.disabled = state.geometry.frameCount === 0;
+    updateExportControlsAvailability();
     syncMarkerEditingUi();
     updatePreviewPlayPauseButton();
     updateExportButtonLabel();
@@ -1222,6 +1666,8 @@ async function processCurrentImage(requestId = state.processing.requestId) {
         state.geometry.baseRectifiedPageCanvas = error.partialResult.rectifiedCanvas;
         state.geometry.pagePreviewGridQuad = null;
         state.preview.rectifiedCanvas = error.partialResult.rectifiedCanvas;
+        state.preview.rectifiedDiagnosticSourceCanvas = null;
+        state.preview.rectifiedDiagnosticDirty = true;
         primeRectifiedDragAsset(state.preview.rectifiedCanvas);
         renderRectifiedPreview(error.partialResult.rectifiedCanvas);
       }
@@ -1230,6 +1676,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
       setStatus("Unable to find page boundary. Try adjusting the Thresholding Offset and/or the Thresholding Method.\n(" + (error?.message || String(error)) + ")");
     }
   } finally {
+    updateExportControlsAvailability();
     state.processing.active = false;
     if (state.processing.pending) {
       state.processing.pending = false;
@@ -1264,6 +1711,7 @@ function throwIfProcessAborted(requestId) {
  * @returns {void}
  */
 function renderRectifiedPreview(rectifiedCanvas) {
+  updateRectifiedSheetHeading();
   dom.rectifiedCanvas.parentElement?.classList.remove("is-empty");
   const diagnosticSource = state.geometry.baseRectifiedPageCanvas || rectifiedCanvas;
   const displayCanvas = state.preview.showRectifiedDiagnostic
@@ -1306,7 +1754,135 @@ function renderRectifiedPreview(rectifiedCanvas) {
   ctx.lineTo(offsetX + quad.bl.x * scale, offsetY + quad.bl.y * scale);
   ctx.closePath();
   ctx.stroke();
+
+  const currentFrameQuad = getCurrentPreviewFrameQuadInPagePreview();
+  if (currentFrameQuad) {
+    // Green quad tracks the exact frame currently shown in Animation Preview, using the
+    // same refined/overridden marker positions that drive extraction.
+    ctx.strokeStyle = "rgb(0, 128, 0)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(offsetX + currentFrameQuad.tl.x * scale, offsetY + currentFrameQuad.tl.y * scale);
+    ctx.lineTo(offsetX + currentFrameQuad.tr.x * scale, offsetY + currentFrameQuad.tr.y * scale);
+    ctx.lineTo(offsetX + currentFrameQuad.br.x * scale, offsetY + currentFrameQuad.br.y * scale);
+    ctx.lineTo(offsetX + currentFrameQuad.bl.x * scale, offsetY + currentFrameQuad.bl.y * scale);
+    ctx.closePath();
+    ctx.stroke();
+  }
   ctx.restore();
+}
+
+/**
+ * Resolve one marker to its refined/overridden rectified-sheet location, falling back to the
+ * nominal lattice if that marker is unavailable.
+ *
+ * @param {object} extractionInfo
+ * @param {number} col
+ * @param {number} row
+ * @returns {{x:number, y:number}}
+ */
+function resolveFrameMarkerPoint(extractionInfo, col, row) {
+  const marker = extractionInfo?.markerLookup?.get(`${col},${row}`);
+  if (marker) {
+    return { x: marker.detectedX, y: marker.detectedY };
+  }
+  const bounds = extractionInfo.gridBounds;
+  return {
+    x: bounds.left + bounds.width * (col / extractionInfo.cols),
+    y: bounds.top + bounds.height * (row / extractionInfo.rows),
+  };
+}
+
+/**
+ * Resolve the quadrilateral for one extracted frame using the current marker positions.
+ *
+ * @param {object} extractionInfo
+ * @param {number} col
+ * @param {number} row
+ * @returns {{tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}}}
+ */
+function resolveFrameQuadForPreview(extractionInfo, col, row) {
+  return {
+    tl: resolveFrameMarkerPoint(extractionInfo, col, row),
+    tr: resolveFrameMarkerPoint(extractionInfo, col + 1, row),
+    br: resolveFrameMarkerPoint(extractionInfo, col + 1, row + 1),
+    bl: resolveFrameMarkerPoint(extractionInfo, col, row + 1),
+  };
+}
+
+/**
+ * Return the frame quad corresponding to the frame currently shown in Animation Preview.
+ *
+ * @returns {{tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}} | null}
+ */
+function getCurrentPreviewFrameQuad() {
+  const alignmentInfo = state.geometry.alignmentInfo;
+  if (!alignmentInfo || state.geometry.frameCount <= 0) return null;
+  const orderedIndex = getOrderedFrameIndex(state.preview.frameIndex);
+  const cols = alignmentInfo.cols;
+  const col = orderedIndex % cols;
+  const row = Math.floor(orderedIndex / cols);
+  if (row < 0 || row >= alignmentInfo.rows) return null;
+  return resolveFrameQuadForPreview(alignmentInfo, col, row);
+}
+
+/**
+ * Map one point from extraction-rectified coordinates back into the full page-preview warp.
+ *
+ * @param {{x:number,y:number}} point
+ * @returns {{x:number,y:number}}
+ */
+function mapRectifiedPointToPagePreview(point) {
+  const alignmentInfo = state.geometry.alignmentInfo;
+  const previewQuad = state.geometry.pagePreviewGridQuad;
+  if (!alignmentInfo || !previewQuad || typeof cv === "undefined") {
+    return { x: point.x, y: point.y };
+  }
+  const bounds = alignmentInfo.gridBounds;
+  const srcCorners = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    bounds.left, bounds.top,
+    bounds.left + bounds.width, bounds.top,
+    bounds.left + bounds.width, bounds.top + bounds.height,
+    bounds.left, bounds.top + bounds.height,
+  ]);
+  const dstCorners = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    previewQuad.tl.x, previewQuad.tl.y,
+    previewQuad.tr.x, previewQuad.tr.y,
+    previewQuad.br.x, previewQuad.br.y,
+    previewQuad.bl.x, previewQuad.bl.y,
+  ]);
+  const srcPoint = cv.matFromArray(1, 1, cv.CV_32FC2, [point.x, point.y]);
+  const dstPoint = new cv.Mat();
+  const transform = cv.getPerspectiveTransform(srcCorners, dstCorners);
+  try {
+    cv.perspectiveTransform(srcPoint, dstPoint, transform);
+    return {
+      x: dstPoint.data32F[0],
+      y: dstPoint.data32F[1],
+    };
+  } finally {
+    srcCorners.delete();
+    dstCorners.delete();
+    srcPoint.delete();
+    dstPoint.delete();
+    transform.delete();
+  }
+}
+
+/**
+ * Return the current preview frame quad expressed in the full page-preview coordinate system.
+ *
+ * @returns {{tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}} | null}
+ */
+function getCurrentPreviewFrameQuadInPagePreview() {
+  const quad = getCurrentPreviewFrameQuad();
+  if (!quad) return null;
+  return {
+    tl: mapRectifiedPointToPagePreview(quad.tl),
+    tr: mapRectifiedPointToPagePreview(quad.tr),
+    br: mapRectifiedPointToPagePreview(quad.br),
+    bl: mapRectifiedPointToPagePreview(quad.bl),
+  };
 }
 
 /**
@@ -1316,7 +1892,15 @@ function renderRectifiedPreview(rectifiedCanvas) {
  * @returns {HTMLCanvasElement}
  */
 function getRectifiedConvolutionCanvas(sourceCanvas) {
-  return buildCrossConvolutionCanvas(sourceCanvas, state.preview.rectifiedDiagnosticCanvas);
+  if (
+    state.preview.rectifiedDiagnosticDirty ||
+    state.preview.rectifiedDiagnosticSourceCanvas !== sourceCanvas
+  ) {
+    buildCrossConvolutionCanvas(sourceCanvas, state.preview.rectifiedDiagnosticCanvas);
+    state.preview.rectifiedDiagnosticSourceCanvas = sourceCanvas;
+    state.preview.rectifiedDiagnosticDirty = false;
+  }
+  return state.preview.rectifiedDiagnosticCanvas;
 }
 
 /**
@@ -1352,6 +1936,8 @@ function invalidateFrameCaches() {
 function refreshAppearanceOutputs() {
   if (!state.geometry.baseRectifiedPageCanvas) return;
   state.preview.rectifiedCanvas = state.geometry.baseRectifiedPageCanvas;
+  state.preview.rectifiedDiagnosticSourceCanvas = null;
+  state.preview.rectifiedDiagnosticDirty = true;
   primeRectifiedDragAsset(state.preview.rectifiedCanvas);
   renderRectifiedPreview(state.preview.rectifiedCanvas);
 }
@@ -1383,34 +1969,12 @@ function getBaseFrameCanvas(index) {
       getCvInterpolationFlag(config.exportOptions.resampling)
     );
     const transformedFrame = transformOutputCanvas(frame, config.postCropGeometry);
-    const scaledFrame = scaleOutputCanvas(transformedFrame, config.exportOptions.outputScale, config.exportOptions.resampling);
+    const scaledFrame = scaleOutputCanvas(transformedFrame, config.exportOptions.outputWidthPx, config.exportOptions.resampling);
     state.frames.base[index] = scaledFrame;
     return scaledFrame;
   } finally {
     rectifiedMat.delete();
   }
-}
-
-/**
- * Compute the current post-crop, post-scale frame size shown in the Output Scale readout.
- *
- * @param {number} outputScale
- * @returns {{width:number|string, height:number|string}}
- */
-function getScaledOutputFrameSize(outputScale) {
-  const alignmentInfo = state.geometry.alignmentInfo;
-  if (!alignmentInfo) return { width: "--", height: "--" };
-  const config = readConfig();
-  const cellWidth = alignmentInfo.gridBounds.width / alignmentInfo.cols;
-  const cellHeight = alignmentInfo.gridBounds.height / alignmentInfo.rows;
-  const croppedWidth = Math.max(1, Math.round(cellWidth - config.crop.left - config.crop.right));
-  const croppedHeight = Math.max(1, Math.round(cellHeight - config.crop.top - config.crop.bottom));
-  const geometryWidth = config.postCropGeometry.rotate90Cw ? croppedHeight : croppedWidth;
-  const geometryHeight = config.postCropGeometry.rotate90Cw ? croppedWidth : croppedHeight;
-  return {
-    width: Math.max(1, Math.round(geometryWidth * outputScale)),
-    height: Math.max(1, Math.round(geometryHeight * outputScale)),
-  };
 }
 
 /**
@@ -1435,26 +1999,56 @@ function getCurrentCropAspectRatioText() {
 }
 
 /**
- * Apply the post-crop output scaling used by preview and GIF export.
+ * Apply the post-crop output-size scaling used by preview and export.
+ *
+ * These scaled canvases are cached in `state.frames.base`, so the chosen resize path only runs
+ * once per frame unless geometry/export-size inputs change and invalidate that cache.
  *
  * @param {HTMLCanvasElement} sourceCanvas
- * @param {number} outputScale
+ * @param {number} outputWidthPx
  * @param {string} resampling
  * @returns {HTMLCanvasElement}
  */
-function scaleOutputCanvas(sourceCanvas, outputScale, resampling) {
+function scaleOutputCanvas(sourceCanvas, outputWidthPx, resampling) {
   if (!sourceCanvas) return sourceCanvas;
-  const scale = Math.max(0.25, Math.min(1.0, outputScale || 1));
-  if (Math.abs(scale - 1) < 1e-6) return sourceCanvas;
+  const targetWidth = Math.max(1, Math.round(outputWidthPx || sourceCanvas.width));
+  if (targetWidth === sourceCanvas.width) return sourceCanvas;
+  const scale = targetWidth / sourceCanvas.width;
+  const targetHeight = Math.max(1, Math.round(sourceCanvas.height * scale));
+  if (!bUseOpenCvOutputScaling) {
+    const scaled = document.createElement("canvas");
+    scaled.width = targetWidth;
+    scaled.height = targetHeight;
+    const ctx = scaled.getContext("2d");
+    // Browser-canvas fallback for final output-size change; geometric warps still happen in OpenCV.
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = (resampling === "linear") ? "medium" : "high";
+    ctx.drawImage(sourceCanvas, 0, 0, scaled.width, scaled.height);
+    return scaled;
+  }
+
+  const src = cv.imread(sourceCanvas);
+  const dst = new cv.Mat();
   const scaled = document.createElement("canvas");
-  scaled.width = Math.max(1, Math.round(sourceCanvas.width * scale));
-  scaled.height = Math.max(1, Math.round(sourceCanvas.height * scale));
-  const ctx = scaled.getContext("2d");
-  // Use browser scaling only for the final post-crop output-size change; geometric warps still happen in OpenCV.
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = (resampling === "linear") ? "medium" : "high";
-  ctx.drawImage(sourceCanvas, 0, 0, scaled.width, scaled.height);
-  return scaled;
+  try {
+    // OpenCV path for final output scaling, useful when comparing very small outputs where the
+    // browser's drawImage downsampling can look noticeably worse.
+    cv.resize(
+      src,
+      dst,
+      new cv.Size(targetWidth, targetHeight),
+      0,
+      0,
+      getCvInterpolationFlag(resampling)
+    );
+    scaled.width = targetWidth;
+    scaled.height = targetHeight;
+    cv.imshow(scaled, dst);
+    return scaled;
+  } finally {
+    src.delete();
+    dst.delete();
+  }
 }
 
 /**
@@ -1802,23 +2396,22 @@ function restoreMarkerOverride(tile) {
 /**
  * Materialize all adjusted frames and hand them off to gif.js for encoding.
  *
+ * The shared `Encoding Quality` slider is translated into gif.js's inverse numeric scale in
+ * `readConfig()`, so this function can continue using the encoder's native `quality` field.
+ *
  * @returns {Promise<void>}
  */
 async function exportGif() {
-  const orderedFrameCount = getOrderedFrameCount();
+  const orderedFrameCount = getExportOrderedFrameCount();
   if (!orderedFrameCount) return;
-  dom.exportButton.disabled = true;
-  dom.exportZipButton.disabled = true;
-  dom.saveSettingsButton.disabled = true;
+  updateExportControlsAvailability(true);
   updateExportButtonLabel(0);
   setStatus("Encoding GIF…");
 
   const config = readConfig();
-  const firstFrame = getAdjustedFrameCanvas(getOrderedFrameIndex(0));
+  const firstFrame = getAdjustedFrameCanvas(getExportOrderedFrameIndex(0));
   if (!firstFrame) {
-    dom.exportButton.disabled = false;
-    dom.exportZipButton.disabled = false;
-    dom.saveSettingsButton.disabled = false;
+    updateExportControlsAvailability();
     updateExportButtonLabel();
     return;
   }
@@ -1837,23 +2430,22 @@ async function exportGif() {
   const delay = Math.max(1, Math.round(1000 / config.fps));
   for (let i = 0; i < orderedFrameCount; i++) {
     // Preview stays lazy, but export must realize the full adjusted frame set.
-    gif.addFrame(getAdjustedFrameCanvas(getOrderedFrameIndex(i)), { copy: true, delay });
+    gif.addFrame(getAdjustedFrameCanvas(getExportOrderedFrameIndex(i)), { copy: true, delay });
   }
 
   gif.on("finished", (blob) => {
     revokeGifUrl();
-    state.export.filename = makeGifFilename(state.source.filename, config.exportOptions.quality);
+    state.export.filename = makeGifFilename(state.source.filename, config.exportOptions.encodingQuality);
     state.export.url = URL.createObjectURL(blob);
     dom.gifImage.src = state.export.url;
+    applyGifPreviewDisplaySize(firstFrame.width, firstFrame.height);
     dom.gifPreviewCanvas.hidden = true;
     dom.gifImage.classList.remove("hidden");
     dom.gifImage.hidden = false;
     dom.gifPreviewCanvas.parentElement?.classList.remove("is-empty");
     updateAnimationPreviewHeading();
     downloadBlobWithFilename(blob, state.export.filename);
-    dom.exportButton.disabled = false;
-    dom.exportZipButton.disabled = false;
-    dom.saveSettingsButton.disabled = false;
+    updateExportControlsAvailability();
     updateExportButtonLabel();
     setStatus("GIF ready.\nFrame count: " + state.geometry.frameCount);
   });
@@ -1863,6 +2455,197 @@ async function exportGif() {
     setStatus("Encoding GIF…\n" + progressPercent + "%");
   });
   gif.render();
+}
+
+/**
+ * Ensure exported GIFs remain visible in the GIF Output panel even when the actual file
+ * dimensions are extremely small.
+ *
+ * @param {number} width
+ * @param {number} height
+ * @returns {void}
+ */
+function applyGifPreviewDisplaySize(width, height) {
+  const safeWidth = Math.max(1, Math.round(width || 1));
+  const safeHeight = Math.max(1, Math.round(height || 1));
+  const minDisplay = 32;
+  const scale = (Math.min(safeWidth, safeHeight) < minDisplay)
+    ? (minDisplay / Math.min(safeWidth, safeHeight))
+    : 1;
+  dom.gifImage.style.width = `${Math.max(minDisplay, Math.round(safeWidth * scale))}px`;
+  dom.gifImage.style.height = `${Math.max(minDisplay, Math.round(safeHeight * scale))}px`;
+}
+
+/**
+ * Build an MP4 filename parallel to the GIF export naming scheme.
+ *
+ * @param {string} sourceFilename
+ * @param {number} [quality=75]
+ * @returns {string}
+ */
+function makeMp4Filename(sourceFilename, quality = 75) {
+  return `${makeArchiveStem(sourceFilename)}_q${quality}.mp4`;
+}
+
+/**
+ * Convert the 0..100 MP4 quality slider into an explicit WebCodecs bitrate target.
+ *
+ * The shared `Encoding Quality` slider drives both export formats, but MP4 quality is easier to
+ * express as a bitrate target than as an abstract encoder preset. Short looped animations benefit
+ * from a fairly aggressive bitrate here, because they often contain crisp edges and repeated motion.
+ *
+ * @param {number} width
+ * @param {number} height
+ * @param {number} fps
+ * @param {number} quality
+ * @returns {number}
+ */
+function estimateMp4Bitrate(width, height, fps, quality) {
+  const q = Math.max(0, Math.min(100, quality)) / 100;
+  const bitsPerPixelPerFrame = 0.75 + (q * 3.25);
+  return Math.max(500_000, Math.round(width * height * fps * bitsPerPixelPerFrame));
+}
+
+/**
+ * Ensure MP4 export dimensions meet a conservative H.264-friendly minimum and stay even.
+ *
+ * GIF export can go extremely small, but H.264 is happier with even dimensions and a less tiny
+ * floor. This helper leaves the file logically "small" while avoiding codec configurations that
+ * are fragile across browsers.
+ *
+ * @param {HTMLCanvasElement} sourceCanvas
+ * @returns {{width:number,height:number}}
+ */
+function getMp4ExportDimensions(sourceCanvas) {
+  const safeWidth = Math.max(1, Math.round(sourceCanvas?.width || 1));
+  const safeHeight = Math.max(1, Math.round(sourceCanvas?.height || 1));
+  const minEdge = 16;
+  const minCurrentEdge = Math.min(safeWidth, safeHeight);
+  const scale = minCurrentEdge < minEdge ? (minEdge / minCurrentEdge) : 1;
+  const evenize = (value) => {
+    const rounded = Math.max(minEdge, Math.round(value));
+    return (rounded % 2 === 0) ? rounded : (rounded + 1);
+  };
+  return {
+    width: evenize(safeWidth * scale),
+    height: evenize(safeHeight * scale),
+  };
+}
+
+/**
+ * Draw one source frame into the MP4 encoder canvas, scaling up tiny outputs when needed.
+ *
+ * The encoder always reads from one staging canvas so export can keep reusing the existing lazy
+ * frame-realization path without needing a second extraction/render pipeline for MP4 alone.
+ *
+ * @param {HTMLCanvasElement} sourceCanvas
+ * @param {HTMLCanvasElement} targetCanvas
+ * @returns {void}
+ */
+function drawFrameIntoMp4Canvas(sourceCanvas, targetCanvas) {
+  const ctx = targetCanvas.getContext("2d");
+  ctx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(sourceCanvas, 0, 0, targetCanvas.width, targetCanvas.height);
+}
+
+/**
+ * Encode the ordered frame sequence as an H.264 MP4 using WebCodecs plus mp4-muxer.
+ *
+ * Unlike the earlier MediaRecorder-based attempt, this path:
+ * - uses the shared `Encoding Quality` slider as a real bitrate target
+ * - forces frequent keyframes for short looping animations
+ * - muxes the final `.mp4` fully in-browser without any network dependency
+ *
+ * @returns {Promise<void>}
+ */
+async function exportMp4() {
+  if (!state.runtime.mp4ExportSupported) return;
+  const orderedFrameCount = getExportOrderedFrameCount();
+  if (!orderedFrameCount) return;
+  updateExportControlsAvailability(true);
+  setStatus("Encoding MP4…");
+
+  const config = readConfig();
+  const firstFrame = getAdjustedFrameCanvas(getExportOrderedFrameIndex(0));
+  if (!firstFrame) {
+    updateExportControlsAvailability();
+    return;
+  }
+
+  const mp4Size = getMp4ExportDimensions(firstFrame);
+  const encoderCanvas = document.createElement("canvas");
+  encoderCanvas.width = mp4Size.width;
+  encoderCanvas.height = mp4Size.height;
+  drawFrameIntoMp4Canvas(firstFrame, encoderCanvas);
+
+  try {
+    const { Muxer, ArrayBufferTarget } = await loadMp4MuxerModule();
+    const bitrate = estimateMp4Bitrate(mp4Size.width, mp4Size.height, config.fps, config.exportOptions.mp4Quality);
+    const muxer = new Muxer({
+      target: new ArrayBufferTarget(),
+      fastStart: "in-memory",
+      video: {
+        codec: "avc",
+        width: mp4Size.width,
+        height: mp4Size.height,
+      },
+    });
+    let encoderError = null;
+    const encoder = new VideoEncoder({
+      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+      error: (error) => {
+        encoderError = error;
+      },
+    });
+    encoder.configure({
+      codec: state.runtime.mp4Codec,
+      width: mp4Size.width,
+      height: mp4Size.height,
+      bitrate,
+      framerate: config.fps,
+      avc: { format: "avc" },
+      latencyMode: "quality",
+    });
+
+    const frameDurationUs = Math.max(1, Math.round(1_000_000 / config.fps));
+    // These animations are short loops rather than long-form video, so frequent keyframes make
+    // seeking/turnarounds cleaner and avoid long stretches of predictive frames.
+    const keyframeInterval = 2;
+    for (let i = 0; i < orderedFrameCount; i++) {
+      const frameCanvas = getAdjustedFrameCanvas(getExportOrderedFrameIndex(i));
+      if (!frameCanvas) {
+        throw new Error("Could not prepare one or more frames for MP4 export.");
+      }
+      drawFrameIntoMp4Canvas(frameCanvas, encoderCanvas);
+      const timestampUs = i * frameDurationUs;
+      const frame = new VideoFrame(encoderCanvas, {
+        timestamp: timestampUs,
+        duration: frameDurationUs,
+      });
+      encoder.encode(frame, { keyFrame: i === 0 || (i % keyframeInterval) === 0 });
+      frame.close();
+      if (encoderError) {
+        throw encoderError;
+      }
+      setStatus(`Encoding MP4…\n${Math.round(((i + 1) / orderedFrameCount) * 100)}%`);
+    }
+    await encoder.flush();
+    if (encoderError) {
+      throw encoderError;
+    }
+    encoder.close();
+    muxer.finalize();
+    const mp4Blob = new Blob([muxer.target.buffer], { type: "video/mp4" });
+    downloadBlobWithFilename(mp4Blob, makeMp4Filename(state.source.filename, config.exportOptions.encodingQuality));
+    setStatus(`MP4 ready.\nFrame count: ${orderedFrameCount}`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`MP4 export failed.\n(${error?.message || String(error)})`);
+  } finally {
+    updateExportControlsAvailability();
+  }
 }
 
 /**
@@ -1961,10 +2744,12 @@ function buildSettingsTsv(config) {
     ["unsharp_radius", String(config.filters.unsharpRadius)],
     ["invert", String(config.filters.invert)],
     ["fps", String(config.fps)],
+    ["loop_count", String(config.exportOptions.loopCount)],
     ["reverse_order", String(config.exportOptions.reverseOrder)],
     ["ping_pong", String(config.exportOptions.pingPong)],
-    ["output_scale", String(config.exportOptions.outputScale)],
-    ["encoding_quality", String(config.exportOptions.quality)],
+    ["output_width", String(config.exportOptions.outputWidthPx)],
+    ["output_height", String(config.exportOptions.outputHeightPx)],
+    ["encoding_quality", String(config.exportOptions.encodingQuality)],
     ["dither", String(config.exportOptions.dither || "off")],
     ["resampling", String(config.exportOptions.resampling)],
     ["use_global_palette", String(config.exportOptions.globalPalette)],
@@ -1989,11 +2774,9 @@ function buildSettingsTsv(config) {
  * @returns {Promise<void>}
  */
 async function exportZip() {
-  const orderedFrameCount = getOrderedFrameCount();
+  const orderedFrameCount = getExportOrderedFrameCount();
   if (!orderedFrameCount) return;
-  dom.exportButton.disabled = true;
-  dom.exportZipButton.disabled = true;
-  dom.saveSettingsButton.disabled = true;
+  updateExportControlsAvailability(true);
   setStatus("Preparing ZIP…");
 
   try {
@@ -2009,7 +2792,7 @@ async function exportZip() {
       { name: `${rootDir}${makeSettingsFilename(state.source.filename)}`, data: settingsBytes },
     ];
     for (let i = 0; i < orderedFrameCount; i++) {
-      const frameCanvas = getAdjustedFrameCanvas(getOrderedFrameIndex(i));
+      const frameCanvas = getAdjustedFrameCanvas(getExportOrderedFrameIndex(i));
       if (!frameCanvas) {
         throw new Error("Could not prepare one or more frames for ZIP export.");
       }
@@ -2028,9 +2811,7 @@ async function exportZip() {
     console.error(error);
     setStatus(`ZIP export failed.\n(${error?.message || String(error)})`);
   } finally {
-    dom.exportButton.disabled = state.geometry.frameCount === 0;
-    dom.exportZipButton.disabled = state.geometry.frameCount === 0;
-    dom.saveSettingsButton.disabled = state.geometry.frameCount === 0;
+    updateExportControlsAvailability();
     updateExportButtonLabel();
   }
 }
@@ -2074,7 +2855,7 @@ function revokeGifUrl() {
  * @param {number} [quality=10]
  * @returns {string}
  */
-function makeGifFilename(sourceFilename, quality = 10) {
+function makeGifFilename(sourceFilename, quality = 75) {
   const base = sanitizeFilenameBase(sourceFilename || "frame_sheet");
   const now = new Date();
   const yyyy = now.getFullYear();

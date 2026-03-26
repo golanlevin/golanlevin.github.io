@@ -28,6 +28,10 @@ export function attachResetButton(button, onReset) {
 export function setTooltipsEnabled({ dom, state, enabled, previewTooltipText }) {
   state.runtime.tooltipsEnabled = enabled;
   for (const [element, text] of state.runtime.tooltipRegistry || []) {
+    if (element === dom.exportMp4Button && !state.runtime.mp4ExportSupported) {
+      element.title = "Not supported by this browser";
+      continue;
+    }
     if (enabled && String(text || "").trim()) {
       element.title = text;
     } else {
@@ -35,6 +39,9 @@ export function setTooltipsEnabled({ dom, state, enabled, previewTooltipText }) 
     }
   }
   dom.gifPreviewCanvas.title = previewTooltipText || "";
+  if (!state.runtime.mp4ExportSupported) {
+    dom.exportMp4Button.title = "Not supported by this browser";
+  }
   dom.tooltipToggleButton.textContent = enabled ? "Disable Tooltips" : "Enable Tooltips";
 }
 
@@ -81,11 +88,14 @@ export function initializeTooltips({ tooltipText, state, dom, applyTooltipState 
  *   renderRectifiedPreview: (rectifiedCanvas: HTMLCanvasElement) => void,
  *   resetAppearanceControls: () => void,
  *   resetTrimControls: () => void,
+ *   resetExportControls: () => void,
  *   toggleTooltips: () => void,
  *   togglePreviewPaused: () => void,
  *   stepPausedPreviewFrame: (direction: number) => void,
  *   toggleMarkerEditing: () => void,
  *   clearMarkerEdits: () => void,
+ *   syncOutputSizeFromWidthInput: () => void,
+ *   syncOutputSizeFromHeightInput: () => void,
  *   syncPaperPresetUi: () => void,
  *   syncAlignmentMarkerUi: () => void,
  *   updateSliderReadouts: () => void,
@@ -97,6 +107,7 @@ export function initializeTooltips({ tooltipText, state, dom, applyTooltipState 
  *   invalidateFrameCaches: () => void,
  *   drawCurrentGifPreview: () => void,
  *   exportGif: () => Promise<void>,
+ *   exportMp4: () => Promise<void>,
  *   exportZip: () => Promise<void>,
  *   saveSettingsFile: () => void
  * }} deps
@@ -114,11 +125,14 @@ export function attachUi({
   renderRectifiedPreview,
   resetAppearanceControls,
   resetTrimControls,
+  resetExportControls,
   toggleTooltips,
   togglePreviewPaused,
   stepPausedPreviewFrame,
   toggleMarkerEditing,
   clearMarkerEdits,
+  syncOutputSizeFromWidthInput,
+  syncOutputSizeFromHeightInput,
   syncPaperPresetUi,
   syncAlignmentMarkerUi,
   updateSliderReadouts,
@@ -130,6 +144,7 @@ export function attachUi({
   invalidateFrameCaches,
   drawCurrentGifPreview,
   exportGif,
+  exportMp4,
   exportZip,
   saveSettingsFile,
 }) {
@@ -198,6 +213,7 @@ export function attachUi({
 
   attachResetButton(dom.resetAppearanceButton, resetAppearanceControls);
   attachResetButton(dom.resetTrimButton, resetTrimControls);
+  attachResetButton(dom.resetExportButton, resetExportControls);
   dom.tooltipToggleButton.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -214,12 +230,21 @@ export function attachUi({
     if (target instanceof HTMLElement && target.closest("input, textarea, select")) {
       return;
     }
-    if (event.key === "ArrowLeft") {
+    if (event.key === " " || event.key === "Spacebar") {
+      event.preventDefault();
+      togglePreviewPaused();
+    } else if (event.key === "ArrowLeft") {
       event.preventDefault();
       stepPausedPreviewFrame(-1);
     } else if (event.key === "ArrowRight") {
       event.preventDefault();
       stepPausedPreviewFrame(1);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      stepPausedPreviewFrame(-state.geometry.alignmentInfo?.cols || -1);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      stepPausedPreviewFrame(state.geometry.alignmentInfo?.cols || 1);
     }
   });
 
@@ -304,7 +329,8 @@ export function attachUi({
 
   const lazyFrameInputs = [
     dom.gifResampling,
-    dom.outputScale,
+    dom.outputWidth,
+    dom.outputHeight,
     dom.cropLeft,
     dom.cropRight,
     dom.cropTop,
@@ -313,6 +339,7 @@ export function attachUi({
     dom.flipVertical,
     dom.rotate90Cw,
     dom.fps,
+    dom.loopCount,
     dom.gifQuality,
     dom.gifDither,
     dom.gifGlobalPalette,
@@ -321,11 +348,14 @@ export function attachUi({
   ];
   lazyFrameInputs.forEach((input) => {
     input.addEventListener("input", () => {
+      if (input === dom.outputWidth) syncOutputSizeFromWidthInput();
+      if (input === dom.outputHeight) syncOutputSizeFromHeightInput();
       revokeGifUrl();
       updateSliderReadouts();
       if (
         (input === dom.gifResampling) ||
-        (input === dom.outputScale) ||
+        (input === dom.outputWidth) ||
+        (input === dom.outputHeight) ||
         (input === dom.cropLeft) ||
         (input === dom.cropRight) ||
         (input === dom.cropTop) ||
@@ -337,10 +367,13 @@ export function attachUi({
       drawCurrentGifPreview();
     });
     input.addEventListener("change", () => {
+      if (input === dom.outputWidth) syncOutputSizeFromWidthInput();
+      if (input === dom.outputHeight) syncOutputSizeFromHeightInput();
       revokeGifUrl();
       if (
         (input === dom.gifResampling) ||
-        (input === dom.outputScale) ||
+        (input === dom.outputWidth) ||
+        (input === dom.outputHeight) ||
         (input === dom.cropLeft) ||
         (input === dom.cropRight) ||
         (input === dom.cropTop) ||
@@ -355,6 +388,9 @@ export function attachUi({
 
   dom.exportButton.addEventListener("click", () => {
     void exportGif();
+  });
+  dom.exportMp4Button.addEventListener("click", () => {
+    void exportMp4();
   });
   dom.exportZipButton.addEventListener("click", () => {
     void exportZip();

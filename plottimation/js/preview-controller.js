@@ -1,7 +1,7 @@
 import { renderCanvasFit, resizeCanvasToBox } from "./canvas-view.js";
 
 /**
- * Keep the Animation Preview panel title in sync with whether it is showing the live canvas
+ * Keep the Preview panel title in sync with whether it is showing the live canvas
  * or a completed exported GIF.
  *
  * @param {import("./dom-state.js").dom} dom
@@ -9,7 +9,7 @@ import { renderCanvasFit, resizeCanvasToBox } from "./canvas-view.js";
  * @returns {void}
  */
 export function updateAnimationPreviewHeading(dom, state) {
-  dom.animationPreviewHeading.textContent = state.export.url ? "GIF Output" : "Animation Preview";
+  dom.animationPreviewHeading.textContent = state.export.url ? "GIF Output" : "Preview";
 }
 
 /**

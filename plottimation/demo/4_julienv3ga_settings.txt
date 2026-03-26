@@ -1,7 +1,7 @@
 source_filename	4_julienv3ga.jpg
 paper_preset	custom
-paper_width	1
-paper_height	1
+paper_width	35.0
+paper_height	34.7
 frame_cols	6
 frame_rows	6
 threshold_method	offset-peak

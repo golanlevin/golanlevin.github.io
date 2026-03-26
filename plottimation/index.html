@@ -21,7 +21,7 @@
           <p id="appLedeSecondary" class="lede">
             By @golanlevin • <a href="https://github.com/golanlevin/plottimation/blob/main/README.md" target="_blank" rel="noopener noreferrer">Documentation</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer">Demo Video</a>
           </p>
-          <p id="appLedeTertiary" class="lede">v1.03 • <em>Note: not yet mobile-friendly</em></p>
+          <p id="appLedeTertiary" class="lede">v1.04, 3/2026 • <em>Note: not yet mobile-friendly</em></p>
         </div>
 
         <section class="control-group">
@@ -226,11 +226,28 @@
         </details>
 
         <details class="control-group collapsible">
-          <summary id="gifExportSummary">Export Options</summary>
+          <summary id="gifExportSummary">
+            <span>Export Options</span>
+            <button id="resetExportButton" class="summary-button" type="button">Reset</button>
+          </summary>
+          <div class="field-grid">
+            <label>
+              <span>Output Width</span>
+              <input id="outputWidth" type="number" min="1" max="1999" step="1" value="" inputmode="numeric" />
+            </label>
+            <label>
+              <span>Output Height</span>
+              <input id="outputHeight" type="number" min="1" max="1999" step="1" value="" inputmode="numeric" />
+            </label>
+          </div>
           <div class="field-grid">
             <label>
               <span>Frame Rate</span>
               <input id="fps" type="number" min="1" max="60" step="1" value="20" />
+            </label>
+            <label>
+              <span>Number of Loops</span>
+              <input id="loopCount" type="number" min="1" max="10" step="1" value="1" />
             </label>
           </div>
           <label class="toggle">
@@ -243,18 +260,12 @@
           </label>
           <div class="slider-stack">
             <label>
-              <span>Output Scale <output id="outputScaleValue">1.00 (--×--)</output></span>
-              <input id="outputScale" type="range" min="0.25" max="1.00" step="0.01" value="1.00" />
-            </label>
-          </div>
-          <div class="slider-stack">
-            <label>
-              <span>Encoding Quality (lower is better) <output id="gifQualityValue">10</output></span>
-              <input id="gifQuality" type="range" min="1" max="20" step="1" value="10" />
+              <span>Encoding Quality <output id="gifQualityValue">75</output></span>
+              <input id="gifQuality" type="range" min="1" max="100" step="1" value="75" />
             </label>
           </div>
           <label class="stack-label">
-            <span>Dithering</span>
+            <span>GIF Dithering</span>
             <select id="gifDither">
               <option value="off">Off</option>
               <option value="FloydSteinberg">Standard (Floyd-Steinberg)</option>
@@ -318,10 +329,11 @@
 
         <section class="viewer-card">
           <header>
-            <h2 id="animationPreviewHeading">Animation Preview</h2>
+            <h2 id="animationPreviewHeading">Preview</h2>
             <div class="header-actions">
               <button id="previewPlayPauseButton" class="header-button icon-button" type="button" aria-label="Pause animation">⏸</button>
               <button id="exportZipButton" class="header-button" type="button" disabled>Export ZIP</button>
+              <button id="exportMp4Button" class="header-button" type="button" hidden disabled>Export MP4</button>
               <button id="exportButton" class="header-button" type="button" disabled>Export GIF</button>
             </div>
           </header>

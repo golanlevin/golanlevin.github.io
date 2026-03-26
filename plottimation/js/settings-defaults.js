@@ -45,10 +45,11 @@ export const SETTINGS_DEFAULTS = {
   },
   gifExport: {
     fps: 20,
+    loopCount: 1,
     reverseOrder: false,
     pingPong: false,
-    outputScale: 1.0,
-    quality: 10,
+    outputWidthPx: 0,
+    quality: 75,
     dither: "FloydSteinberg-serpentine",
     globalPalette: false,
   },
@@ -109,9 +110,11 @@ export function applyNonLayoutDefaults(dom) {
   applyCropGeometryDefaults(dom);
 
   dom.fps.value = String(SETTINGS_DEFAULTS.gifExport.fps);
+  dom.loopCount.value = String(SETTINGS_DEFAULTS.gifExport.loopCount);
   dom.reverseOrder.checked = SETTINGS_DEFAULTS.gifExport.reverseOrder;
   dom.pingPong.checked = SETTINGS_DEFAULTS.gifExport.pingPong;
-  dom.outputScale.value = SETTINGS_DEFAULTS.gifExport.outputScale.toFixed(2);
+  dom.outputWidth.value = "";
+  dom.outputHeight.value = "";
   dom.gifQuality.value = String(SETTINGS_DEFAULTS.gifExport.quality);
   dom.gifDither.value = SETTINGS_DEFAULTS.gifExport.dither;
   dom.gifGlobalPalette.checked = SETTINGS_DEFAULTS.gifExport.globalPalette;

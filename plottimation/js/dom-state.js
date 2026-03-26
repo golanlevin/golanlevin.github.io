@@ -24,6 +24,7 @@ export const dom = {
   loadDemoSelect: document.querySelector("#loadDemoSelect"),
   previewPlayPauseButton: document.querySelector("#previewPlayPauseButton"),
   exportZipButton: document.querySelector("#exportZipButton"),
+  exportMp4Button: document.querySelector("#exportMp4Button"),
   exportButton: document.querySelector("#exportButton"),
   saveSettingsButton: document.querySelector("#saveSettingsButton"),
   paperPreset: document.querySelector("#paperPreset"),
@@ -71,8 +72,9 @@ export const dom = {
   unsharpAmountValue: document.querySelector("#unsharpAmountValue"),
   invert: document.querySelector("#invert"),
   fps: document.querySelector("#fps"),
-  outputScale: document.querySelector("#outputScale"),
-  outputScaleValue: document.querySelector("#outputScaleValue"),
+  loopCount: document.querySelector("#loopCount"),
+  outputWidth: document.querySelector("#outputWidth"),
+  outputHeight: document.querySelector("#outputHeight"),
   gifQuality: document.querySelector("#gifQuality"),
   gifQualityValue: document.querySelector("#gifQualityValue"),
   gifDither: document.querySelector("#gifDither"),
@@ -86,6 +88,7 @@ export const dom = {
   rawPhotoNameWrap: document.querySelector("#rawPhotoNameWrap"),
   rawPhotoName: document.querySelector("#rawPhotoName"),
   rawBusy: document.querySelector("#rawBusy"),
+  rectifiedSheetHeading: document.querySelector("#rectifiedSheetHeading"),
   rectifiedCanvas: document.querySelector("#rectifiedCanvas"),
   animationPreviewHeading: document.querySelector("#animationPreviewHeading"),
   gifPreviewCanvas: document.querySelector("#gifPreviewCanvas"),
@@ -96,6 +99,7 @@ export const dom = {
   tooltipToggleButton: document.querySelector("#tooltipToggleButton"),
   resetAppearanceButton: document.querySelector("#resetAppearanceButton"),
   resetTrimButton: document.querySelector("#resetTrimButton"),
+  resetExportButton: document.querySelector("#resetExportButton"),
 };
 
 /**
@@ -109,6 +113,13 @@ export const state = {
     markerEditingEnabled: false,
     lastMarkerClickKey: "",
     lastMarkerClickTime: 0,
+    outputWidthPx: 0,
+    outputHeightPx: 0,
+    outputSizeAuto: true,
+    outputSizeAnchor: "auto",
+    pendingOutputScale: null,
+    mp4ExportSupported: false,
+    mp4Codec: "avc1.42001f",
   },
   source: {
     image: null,
@@ -134,6 +145,8 @@ export const state = {
   preview: {
     adjustedRectifiedCanvas: document.createElement("canvas"),
     rectifiedDiagnosticCanvas: document.createElement("canvas"),
+    rectifiedDiagnosticSourceCanvas: null,
+    rectifiedDiagnosticDirty: true,
     rectifiedCanvas: null,
     rectifiedDragUrl: "",
     rectifiedDragBuildId: 0,
