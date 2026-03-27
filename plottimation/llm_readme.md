@@ -129,7 +129,6 @@ Defined in `js/dom-state.js`.
   - `outputHeightPx`
   - `outputSizeAuto`
   - `outputSizeAnchor`
-  - `pendingOutputScale` (legacy settings compatibility)
   - `mp4ExportSupported`
   - `mp4Codec`
 
@@ -200,7 +199,7 @@ There are two page warps:
   - estimated from detected page area
   - constrained by the paper aspect ratio
   - capped by:
-    - `floor(0.707 * sqrt(sourceWidth^2 + sourceHeight^2))`
+    - `floor(0.75 * sqrt(sourceWidth^2 + sourceHeight^2))`
 
 Important: paper size is now treated only as an aspect-ratio hint. It no longer directly sets extraction resolution.
 
@@ -313,14 +312,17 @@ Keyboard when paused:
 
 Current export controls:
 
-- `Frame Rate`
-- `Reverse Order`
-- `Ping-Pong`
 - `Output Width`
 - `Output Height`
+- `Frame Rate`
+- `Loops in Export`
+- `Reverse Order`
+- `Ping-Pong`
 - `Encoding Quality`
+- `Resampling`
 - `GIF Dithering`
 - `Use Global Palette`
+- `Save Settings file`
 
 `Output Width` and `Output Height`:
 
@@ -341,11 +343,6 @@ Interpretation:
   mapped internally onto gif.js `quality` in inverse `20..1` form
 - MP4:
   used directly as the bitrate-driving quality parameter
-
-Backward compatibility:
-
-- older settings files with GIF-style `encoding_quality` in `1..20` are converted forward
-- older `mp4_quality` values are still accepted as fallback
 
 ## GIF export
 
@@ -423,6 +420,12 @@ Sidebar panels:
 - `Export Options`
 - `Status`
 
+`Layout` details:
+
+- `Paper Orientation` switches preset labels and effective preset dimensions between landscape and portrait
+- when `Paper Size` is `Custom`, the orientation radios are disabled
+- paper size is used only as an aspect-ratio hint, not as a literal pixel-resolution request
+
 Accordion behavior:
 
 - collapsible panels behave accordion-style
@@ -450,17 +453,25 @@ The app is still desktop-first. The current recommended roadmap is:
 1. Responsive layout
    - stack panels on narrow viewports
    - reduce simultaneous visible complexity
+   - consider collapsing the right-side viewers into a single active panel on phones
+   - keep `Photo` and `Status` easy to reach without long scrolling
 
 2. Touch-first interaction cleanup
    - remove hover-only dependencies for essential actions
    - enlarge touch targets
+   - treat desktop drag/export affordances in `drag-assets.js` as optional desktop-only behavior
+   - provide tap-accessible alternatives for any preview/debug interactions that currently assume mouse hover or drag
 
 3. Performance safeguards
    - optional preview downscaling on mobile
    - better warnings for very large sources / outputs
+   - consider more aggressive caps or defaults for GIF/MP4 export on smaller devices
+   - keep the low-res detection path fast, and avoid forcing full-size recomputation from purely UI-side changes
 
 4. UI simplification
    - consider `Basic` vs `Advanced` control grouping
+   - preserve the current module split so alternate mobile wiring can live mostly in `ui-controls.js`, `load-controller.js`, and CSS
+   - avoid putting mobile-specific branching back into the core CV/export code unless absolutely necessary
 
 The refactor into:
 

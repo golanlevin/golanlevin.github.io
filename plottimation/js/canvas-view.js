@@ -24,6 +24,8 @@ export function renderCanvasFit(sourceCanvas, targetCanvas) {
   resizeCanvasToBox(targetCanvas);
   const ctx = targetCanvas.getContext("2d");
   ctx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
 
   const scale = Math.min(targetCanvas.width / sourceCanvas.width, targetCanvas.height / sourceCanvas.height);
   const drawW = sourceCanvas.width * scale;

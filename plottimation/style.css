@@ -101,13 +101,10 @@ select {
 }
 
 .drop-note {
+  margin-top: 4px;
   font-size: 0.82rem;
   line-height: 1.05;
   color: var(--muted);
-}
-
-.drop-lead:last-of-type {
-  margin-bottom: 6px;
 }
 
 .control-group {
@@ -511,7 +508,7 @@ body.has-loaded-image .output-preview {
 
 body.has-loaded-image .viewer-stage.is-empty,
 body.has-loaded-image .output-preview.is-empty,
-body.has-loaded-image .cross-roi-grid.is-empty {
+.cross-roi-grid.is-empty {
   background-color: #edf0f3;
   background-image: repeating-linear-gradient(
     -45deg,
@@ -559,14 +556,8 @@ body.has-loaded-image .cross-roi-grid.is-empty {
   gap: 6px;
   min-height: 0;
   overflow: auto;
-  background-color: #edf0f3;
-  background-image: repeating-linear-gradient(
-    -45deg,
-    rgba(120, 126, 136, 0.045) 0,
-    rgba(120, 126, 136, 0.045) 8px,
-    rgba(237, 240, 243, 0) 8px,
-    rgba(237, 240, 243, 0) 18px
-  );
+  background-color: #f3f4f6;
+  background-image: none;
 }
 
 .cross-roi-empty {

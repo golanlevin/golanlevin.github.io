@@ -1,5 +1,6 @@
-source_filename	test_3_6x5.jpg
+source_filename	3_spinnyrect.jpg
 paper_preset	letter
+paper_orientation	landscape
 paper_width	11
 paper_height	8.5
 frame_cols	6
@@ -28,10 +29,12 @@ unsharp_amount	0
 unsharp_radius	1
 invert	false
 fps	20
+loop_count	1
 reverse_order	false
 ping_pong	false
-output_scale	1
-encoding_quality	2
+output_width	345
+output_height	269
+encoding_quality	100
 dither	FloydSteinberg-serpentine
 resampling	linear
 use_global_palette	false

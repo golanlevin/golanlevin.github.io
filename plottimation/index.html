@@ -36,8 +36,7 @@
           <label id="dropZone" class="drop-zone" for="fileInput">
             <span class="drop-lead">Drop a photo or scan here,</span>
             <span class="drop-lead">or click to choose a file.</span>
-            <span class="drop-note">Separate frames with small crosses.</span>
-            <span class="drop-note">Page should be in landscape orientation.</span>
+            <span class="drop-note">Ensure that frames are<br />separated by small crosses.</span>
           </label>
           <input id="fileInput" type="file" accept="image/*,.txt,text/plain" />
         </section>
@@ -54,13 +53,24 @@
               <input id="frameRows" type="number" min="1" max="20" step="1" value="4" />
             </label>
           </div>
+          <fieldset id="paperOrientationField" class="radio-group">
+            <legend>Paper Orientation</legend>
+            <label class="toggle">
+              <input id="paperOrientationLandscape" name="paperOrientation" type="radio" value="landscape" checked />
+              <span>Landscape</span>
+            </label>
+            <label class="toggle">
+              <input id="paperOrientationPortrait" name="paperOrientation" type="radio" value="portrait" />
+              <span>Portrait</span>
+            </label>
+          </fieldset>
           <label class="stack-label">
-            <span>Paper Size (Landscape)</span>
+            <span id="paperPresetLabel">Paper Size</span>
             <select id="paperPreset">
               <option value="letter" selected>Letter (11×8.5 in)</option>
               <option value="legal">Legal (14×8.5 in)</option>
               <option value="tabloid">Tabloid (17×11 in)</option>
-              <option value="9x12">9×12 in</option>
+              <option value="12x9">12×9 in</option>
               <option value="18x12">18×12 in</option>
               <option value="24x18">24×18 in</option>
               <option value="36x24">36×24 in</option>
@@ -176,13 +186,6 @@
             <input id="invert" type="checkbox" />
             <span>Invert</span>
           </label>
-          <label class="stack-label">
-            <span>Resampling</span>
-            <select id="gifResampling">
-              <option value="linear" selected>Linear</option>
-              <option value="cubic">Cubic</option>
-            </select>
-          </label>
         </details>
 
         <details class="control-group collapsible">
@@ -246,7 +249,7 @@
               <input id="fps" type="number" min="1" max="60" step="1" value="20" />
             </label>
             <label>
-              <span>Number of Loops</span>
+              <span>Loops in Export</span>
               <input id="loopCount" type="number" min="1" max="10" step="1" value="1" />
             </label>
           </div>
@@ -264,6 +267,13 @@
               <input id="gifQuality" type="range" min="1" max="100" step="1" value="75" />
             </label>
           </div>
+          <label class="stack-label">
+            <span>Resampling</span>
+            <select id="gifResampling">
+              <option value="linear" selected>Linear</option>
+              <option value="cubic">Cubic</option>
+            </select>
+          </label>
           <label class="stack-label">
             <span>GIF Dithering</span>
             <select id="gifDither">
@@ -324,7 +334,7 @@
               <button id="clearMarkerEditsButton" class="header-button" type="button" hidden>Clear Edits</button>
             </div>
           </header>
-          <div id="crossRoiGrid" class="cross-roi-grid"></div>
+          <div id="crossRoiGrid" class="cross-roi-grid is-empty"></div>
         </section>
 
         <section class="viewer-card">

@@ -257,6 +257,17 @@ export function attachUi({
     syncPaperPresetUi();
     scheduleProcess();
   });
+  [dom.paperOrientationLandscape, dom.paperOrientationPortrait].forEach((input) => {
+    input.addEventListener("input", () => {
+      syncPaperPresetUi();
+      updateSliderReadouts();
+      scheduleProcess();
+    });
+    input.addEventListener("change", () => {
+      syncPaperPresetUi();
+      scheduleProcess();
+    });
+  });
 
   const alignmentMarkerTypeInputs = [
     dom.alignmentMarkerTypeCrosses,

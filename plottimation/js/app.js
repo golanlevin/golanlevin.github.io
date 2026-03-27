@@ -55,7 +55,7 @@ const TOOLTIP_TEXT = {
   "#layoutSummary": "Sets the frame-grid dimensions and paper format assumptions.",
   "#frameCols": "Number of animation frame columns in the plotted grid.",
   "#frameRows": "Number of animation frame rows in the plotted grid.",
-  "#paperPreset": "Choose a landscape paper preset, or Custom to enter your own dimensions.",
+  "#paperPreset": "Choose a paper preset, or Custom to enter your own dimensions.",
   "#paperWidth": "Custom paper width (arbitrary units) when Paper Size is set to Custom.",
   "#paperHeight": "Custom paper height (arbitrary units) when Paper Size is set to Custom.",
   "#pageGridDetectionSummary": "Controls for finding the paper and locating the outer frame-grid region on the page.",
@@ -155,18 +155,6 @@ function mapEncodingQualityToGifEncoderQuality(encodingQuality) {
   const clamped = Math.max(1, Math.min(100, encodingQuality));
   const normalized = (clamped - 1) / 99;
   return Math.max(1, Math.min(20, Math.round(20 - (normalized * 19))));
-}
-
-/**
- * Convert a legacy gif.js quality value (1..20, lower is better) into the shared 1..100 slider.
- *
- * @param {number} gifEncoderQuality
- * @returns {number}
- */
-function mapGifEncoderQualityToEncodingQuality(gifEncoderQuality) {
-  const clamped = Math.max(1, Math.min(20, gifEncoderQuality));
-  const normalized = (20 - clamped) / 19;
-  return Math.max(1, Math.min(100, Math.round(1 + (normalized * 99))));
 }
 
 /**
@@ -428,6 +416,9 @@ function setTooltipsEnabled(enabled) {
     enabled,
     previewTooltipText: TOOLTIP_TEXT["#gifPreviewCanvas"] || "",
   });
+  if (state.geometry.alignmentInfo) {
+    renderCrossRoiGrid(state.geometry.alignmentInfo);
+  }
 }
 
 /**
@@ -620,6 +611,14 @@ function attachUi() {
     toggleTooltips: () => setTooltipsEnabled(!state.runtime.tooltipsEnabled),
     togglePreviewPaused: () => {
       if (dom.previewPlayPauseButton.disabled) return;
+      if (state.export.url) {
+        revokeGifUrl();
+        state.preview.paused = true;
+        state.preview.lastTime = performance.now();
+        updatePreviewPlayPauseButton();
+        drawCurrentGifPreview();
+        return;
+      }
       state.preview.paused = !state.preview.paused;
       state.preview.lastTime = performance.now();
       updatePreviewPlayPauseButton();
@@ -940,6 +939,9 @@ function populateResamplingOptions() {
   if (typeof cv !== "undefined" && typeof cv.INTER_LANCZOS4 !== "undefined") {
     options.push({ value: "lanczos", label: "Maximum Detail (Lanczos)" });
   }
+  if (typeof cv !== "undefined" && typeof cv.INTER_NEAREST !== "undefined") {
+    options.push({ value: "nearest", label: "Pixelated (Nearest Neighbor)" });
+  }
   for (const option of options) {
     const el = document.createElement("option");
     el.value = option.value;
@@ -1049,15 +1051,23 @@ function readConfig() {
   const paperPreset = dom.paperPreset.value || SETTINGS_DEFAULTS.layout.paperPreset;
   const presetSize = PAPER_PRESETS[paperPreset];
   const isCustomPaper = paperPreset === "custom";
+  const paperOrientation = dom.paperOrientationPortrait.checked ? "portrait" : "landscape";
+  const orientedPresetWidth = (paperOrientation === "portrait")
+    ? (presetSize?.height || SETTINGS_DEFAULTS.layout.paperHeight)
+    : (presetSize?.width || SETTINGS_DEFAULTS.layout.paperWidth);
+  const orientedPresetHeight = (paperOrientation === "portrait")
+    ? (presetSize?.width || SETTINGS_DEFAULTS.layout.paperWidth)
+    : (presetSize?.height || SETTINGS_DEFAULTS.layout.paperHeight);
   const paperWidth = isCustomPaper
     ? (Number(dom.paperWidth.value) || SETTINGS_DEFAULTS.layout.paperWidth)
-    : (presetSize?.width || SETTINGS_DEFAULTS.layout.paperWidth);
+    : orientedPresetWidth;
   const paperHeight = isCustomPaper
     ? (Number(dom.paperHeight.value) || SETTINGS_DEFAULTS.layout.paperHeight)
-    : (presetSize?.height || SETTINGS_DEFAULTS.layout.paperHeight);
+    : orientedPresetHeight;
   const paperAspect = clampPaperAspect(paperWidth, paperHeight);
   const encodingQuality = getEncodingQualityValue();
   return {
+    paperOrientation,
     paperPreset,
     paperWidthIn: Math.max(1, paperWidth),
     paperHeightIn: Math.max(1, paperHeight),
@@ -1128,7 +1138,48 @@ function clampPaperAspect(width, height) {
 }
 
 /**
- * Show or hide the custom paper size fields based on the current preset selection.
+ * Return the current paper-orientation selection. Presets use this to swap their displayed
+ * and effective width/height ordering without changing the underlying preset catalog.
+ *
+ * @returns {"landscape"|"portrait"}
+ */
+function getPaperOrientation() {
+  return dom.paperOrientationPortrait.checked ? "portrait" : "landscape";
+}
+
+/**
+ * Format one preset option label using the active paper orientation. Custom stays unchanged.
+ *
+ * @param {string} presetKey
+ * @returns {string}
+ */
+function formatPaperPresetLabel(presetKey) {
+  if (presetKey === "custom") return "Custom";
+  const preset = PAPER_PRESETS[presetKey];
+  if (!preset) return presetKey;
+  const orientation = getPaperOrientation();
+  const width = orientation === "portrait" ? preset.height : preset.width;
+  const height = orientation === "portrait" ? preset.width : preset.height;
+  const units = preset.width > 100 ? "mm" : "in";
+  const baseLabelMap = {
+    letter: "Letter",
+    legal: "Legal",
+    tabloid: "Tabloid",
+    "12x9": "12×9",
+    "18x12": "18×12",
+    "24x18": "24×18",
+    "36x24": "36×24",
+    a4: "A4",
+    a3: "A3",
+    a2: "A2",
+    a1: "A1",
+  };
+  return `${baseLabelMap[presetKey] || presetKey} (${width}×${height} ${units})`;
+}
+
+/**
+ * Show or hide the custom paper size fields based on the current preset selection, refresh
+ * the preset labels for the current orientation, and disable orientation when Custom is active.
  *
  * @returns {void}
  */
@@ -1136,12 +1187,21 @@ function syncPaperPresetUi() {
   const presetKey = dom.paperPreset.value || "letter";
   const isCustom = presetKey === "custom";
   const preset = PAPER_PRESETS[presetKey];
+  const orientation = getPaperOrientation();
+  dom.paperPresetLabel.textContent = "Paper Size";
+  Array.from(dom.paperPreset.options).forEach((option) => {
+    option.textContent = formatPaperPresetLabel(option.value);
+  });
   dom.customPaperFields.hidden = !isCustom;
   dom.paperWidth.disabled = !isCustom;
   dom.paperHeight.disabled = !isCustom;
+  dom.paperOrientationLandscape.disabled = isCustom;
+  dom.paperOrientationPortrait.disabled = isCustom;
   if (!isCustom && preset) {
-    dom.paperWidth.value = String(preset.width);
-    dom.paperHeight.value = String(preset.height);
+    const width = orientation === "portrait" ? preset.height : preset.width;
+    const height = orientation === "portrait" ? preset.width : preset.height;
+    dom.paperWidth.value = String(width);
+    dom.paperHeight.value = String(height);
   }
 }
 
@@ -1317,6 +1377,11 @@ function applyLoadedSettingsText(settingsText) {
   };
 
   setIfPresent("paper_preset", dom.paperPreset);
+  if (entries.get("paper_orientation") === "portrait") {
+    dom.paperOrientationPortrait.checked = true;
+  } else if (entries.has("paper_orientation")) {
+    dom.paperOrientationLandscape.checked = true;
+  }
   setIfPresent("paper_width", dom.paperWidth);
   setIfPresent("paper_height", dom.paperHeight);
   setIfPresent("frame_cols", dom.frameCols);
@@ -1360,23 +1425,14 @@ function applyLoadedSettingsText(settingsText) {
       dom.outputHeight.value = String(entries.get("output_height"));
       syncOutputSizeFromHeightInput();
     }
-  } else if (entries.has("output_scale")) {
-    state.runtime.outputSizeAuto = false;
-    state.runtime.outputWidthPx = 0;
-    state.runtime.outputHeightPx = 0;
-    state.runtime.outputSizeAnchor = "auto";
-    state.runtime.pendingOutputScale = clampLegacyOutputScale(Number(entries.get("output_scale")));
-    dom.outputWidth.value = "";
-    dom.outputHeight.value = "";
   }
   if (entries.has("encoding_quality")) {
-    const rawEncodingQuality = Number(entries.get("encoding_quality"));
-    const normalizedEncodingQuality = (rawEncodingQuality > 20)
-      ? rawEncodingQuality
-      : mapGifEncoderQualityToEncodingQuality(rawEncodingQuality);
-    dom.gifQuality.value = String(Math.max(1, Math.min(100, Math.round(normalizedEncodingQuality || SETTINGS_DEFAULTS.gifExport.quality))));
-  } else if (entries.has("mp4_quality")) {
-    dom.gifQuality.value = String(Math.max(1, Math.min(100, Math.round(Number(entries.get("mp4_quality")) || SETTINGS_DEFAULTS.gifExport.quality))));
+    dom.gifQuality.value = String(
+      Math.max(
+        1,
+        Math.min(100, Math.round(Number(entries.get("encoding_quality")) || SETTINGS_DEFAULTS.gifExport.quality))
+      )
+    );
   }
   setIfPresent("dither", dom.gifDither);
   setIfPresent("resampling", dom.gifResampling);
@@ -1904,15 +1960,14 @@ function getRectifiedConvolutionCanvas(sourceCanvas) {
 }
 
 /**
- * Invalidate all appearance-adjusted frame/rectified caches while keeping base geometry intact.
+ * Invalidate all appearance-adjusted frame caches while keeping the base geometry/debug previews
+ * intact. The Rectified Sheet no longer depends on Appearance, so it must keep its canvas handle
+ * in order for the animated frame quad to continue updating during preview playback.
  *
  * @returns {void}
  */
 function invalidateAppearanceCache() {
   state.frames.adjustedCache.clear();
-  state.preview.rectifiedCanvas = null;
-  releaseRectifiedDragUrl();
-  state.preview.rectifiedDragBuildId += 1;
 }
 
 /**
@@ -2226,13 +2281,15 @@ function buildMarkerTileElement(tile, alignmentInfo) {
 
   if (tile.kind === "unrefined") {
     wrapper.title = "";
-  } else {
+  } else if (state.runtime.tooltipsEnabled) {
     const colContrast = Number.isFinite(tile.colContrast) ? tile.colContrast.toFixed(2) : "--";
     const rowContrast = Number.isFinite(tile.rowContrast) ? tile.rowContrast.toFixed(2) : "--";
     const darkFrac = Number.isFinite(tile.darkFrac) ? tile.darkFrac.toFixed(4) : "--";
     const convStrength = Number.isFinite(tile.convolutionStrength) ? ` | conv ${tile.convolutionStrength.toFixed(4)}` : "";
     const manualTag = state.geometry.manualMarkerOverrides.has(getMarkerKey(tile.col, tile.row)) ? " | manual override" : "";
     wrapper.title = `(${tile.col}, ${tile.row}) ${tile.accepted ? "accepted" : "rejected"} | col ${colContrast} | row ${rowContrast} | ink ${darkFrac}${convStrength}${manualTag}`;
+  } else {
+    wrapper.title = "";
   }
 
   if (state.runtime.markerEditingEnabled) {
@@ -2435,7 +2492,12 @@ async function exportGif() {
 
   gif.on("finished", (blob) => {
     revokeGifUrl();
-    state.export.filename = makeGifFilename(state.source.filename, config.exportOptions.encodingQuality);
+    state.export.filename = makeGifFilename(
+      state.source.filename,
+      config.exportOptions.encodingQuality,
+      firstFrame.width,
+      firstFrame.height
+    );
     state.export.url = URL.createObjectURL(blob);
     dom.gifImage.src = state.export.url;
     applyGifPreviewDisplaySize(firstFrame.width, firstFrame.height);
@@ -2481,10 +2543,12 @@ function applyGifPreviewDisplaySize(width, height) {
  *
  * @param {string} sourceFilename
  * @param {number} [quality=75]
+ * @param {number} [width=0]
+ * @param {number} [height=0]
  * @returns {string}
  */
-function makeMp4Filename(sourceFilename, quality = 75) {
-  return `${makeArchiveStem(sourceFilename)}_q${quality}.mp4`;
+function makeMp4Filename(sourceFilename, quality = 75, width = 0, height = 0) {
+  return `${makeArchiveStem(sourceFilename, width, height)}_q${quality}.mp4`;
 }
 
 /**
@@ -2638,7 +2702,15 @@ async function exportMp4() {
     encoder.close();
     muxer.finalize();
     const mp4Blob = new Blob([muxer.target.buffer], { type: "video/mp4" });
-    downloadBlobWithFilename(mp4Blob, makeMp4Filename(state.source.filename, config.exportOptions.encodingQuality));
+    downloadBlobWithFilename(
+      mp4Blob,
+      makeMp4Filename(
+        state.source.filename,
+        config.exportOptions.encodingQuality,
+        mp4Size.width,
+        mp4Size.height
+      )
+    );
     setStatus(`MP4 ready.\nFrame count: ${orderedFrameCount}`);
   } catch (error) {
     console.error(error);
@@ -2663,34 +2735,41 @@ async function canvasToPngBytes(canvas) {
 }
 
 /**
- * Build a timestamped archive stem shared by ZIP exports and their root folder.
+ * Build a timestamped archive stem shared by ZIP exports and other animation-file outputs.
  *
  * Example:
- * `mySrcImage_anim_20260324_154546`
+ * `mySrcImage_anim_260324154546_320x240`
  *
  * @param {string} sourceFilename
+ * @param {number} [width=0]
+ * @param {number} [height=0]
  * @returns {string}
  */
-function makeArchiveStem(sourceFilename) {
+function makeArchiveStem(sourceFilename, width = 0, height = 0) {
   const base = sanitizeFilenameBase(sourceFilename || "frame_sheet");
   const now = new Date();
-  const yyyy = now.getFullYear();
+  const yy = String(now.getFullYear()).slice(-2);
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
   const hh = String(now.getHours()).padStart(2, "0");
   const mi = String(now.getMinutes()).padStart(2, "0");
   const ss = String(now.getSeconds()).padStart(2, "0");
-  return `${base}_anim_${yyyy}${mm}${dd}_${hh}${mi}${ss}`;
+  const safeWidth = Math.max(1, Math.round(width || 0));
+  const safeHeight = Math.max(1, Math.round(height || 0));
+  const sizePart = (safeWidth > 0 && safeHeight > 0) ? `_${safeWidth}x${safeHeight}` : "";
+  return `${base}_anim_${yy}${mm}${dd}${hh}${mi}${ss}${sizePart}`;
 }
 
 /**
  * Build a ZIP filename for frame export.
  *
  * @param {string} sourceFilename
+ * @param {number} [width=0]
+ * @param {number} [height=0]
  * @returns {string}
  */
-function makeZipFilename(sourceFilename) {
-  return `${makeArchiveStem(sourceFilename)}.zip`;
+function makeZipFilename(sourceFilename, width = 0, height = 0) {
+  return `${makeArchiveStem(sourceFilename, width, height)}.zip`;
 }
 
 /**
@@ -2716,6 +2795,7 @@ function buildSettingsTsv(config) {
   const rows = [
     ["source_filename", state.source.filename || ""],
     ["paper_preset", config.paperPreset],
+    ["paper_orientation", config.paperOrientation],
     ["paper_width", String(config.paperWidthIn)],
     ["paper_height", String(config.paperHeightIn)],
     ["frame_cols", String(config.frameCols)],
@@ -2782,7 +2862,11 @@ async function exportZip() {
   try {
     const config = readConfig();
     const base = sanitizeFilenameBase(state.source.filename || "frame_sheet");
-    const archiveStem = makeArchiveStem(state.source.filename);
+    const archiveStem = makeArchiveStem(
+      state.source.filename,
+      config.exportOptions.outputWidthPx,
+      config.exportOptions.outputHeightPx
+    );
     const rootDir = `${archiveStem}/`;
     const framesDir = `${rootDir}frames/`;
     const settingsBytes = new TextEncoder().encode(buildSettingsTsv(config));
@@ -2805,7 +2889,14 @@ async function exportZip() {
     }
 
     const zipBlob = createStoredZip(entries);
-    downloadBlobWithFilename(zipBlob, makeZipFilename(state.source.filename));
+    downloadBlobWithFilename(
+      zipBlob,
+      makeZipFilename(
+        state.source.filename,
+        config.exportOptions.outputWidthPx,
+        config.exportOptions.outputHeightPx
+      )
+    );
     setStatus(`ZIP ready.\nFrame count: ${orderedFrameCount}`);
   } catch (error) {
     console.error(error);
@@ -2849,22 +2940,16 @@ function revokeGifUrl() {
 }
 
 /**
- * Build a friendly exported GIF filename from the source name, timestamp, and quality.
+ * Build a friendly exported GIF filename from the source name, compact timestamp, size, and quality.
  *
  * @param {string} sourceFilename
- * @param {number} [quality=10]
+ * @param {number} [quality=75]
+ * @param {number} [width=0]
+ * @param {number} [height=0]
  * @returns {string}
  */
-function makeGifFilename(sourceFilename, quality = 75) {
-  const base = sanitizeFilenameBase(sourceFilename || "frame_sheet");
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mi = String(now.getMinutes()).padStart(2, "0");
-  const ss = String(now.getSeconds()).padStart(2, "0");
-  return `${base}_anim_${yyyy}${mm}${dd}_${hh}${mi}${ss}_q${quality}.gif`;
+function makeGifFilename(sourceFilename, quality = 75, width = 0, height = 0) {
+  return `${makeArchiveStem(sourceFilename, width, height)}_q${quality}.gif`;
 }
 
 /**

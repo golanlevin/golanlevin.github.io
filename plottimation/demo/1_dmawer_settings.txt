@@ -1,5 +1,6 @@
-source_filename	mySrcImage.jpg
+source_filename	1_dmawer.jpg
 paper_preset	letter
+paper_orientation	landscape
 paper_width	11
 paper_height	8.5
 frame_cols	5
@@ -28,10 +29,12 @@ unsharp_amount	0
 unsharp_radius	1
 invert	false
 fps	20
+loop_count	1
 reverse_order	false
 ping_pong	false
-output_scale	1
-encoding_quality	10
+output_width	480
+output_height	392
+encoding_quality	90
 dither	FloydSteinberg-serpentine
 resampling	linear
-use_global_palette	false
+use_global_palette	true

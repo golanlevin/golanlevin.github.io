@@ -7,6 +7,7 @@
  */
 export const SETTINGS_DEFAULTS = {
   layout: {
+    paperOrientation: "landscape",
     paperPreset: "letter",
     paperWidth: 11,
     paperHeight: 8.5,

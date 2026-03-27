@@ -932,6 +932,7 @@ export function getCvInterpolationFlag(mode) {
   if (mode === "area" && typeof cv.INTER_AREA !== "undefined") return cv.INTER_AREA;
   if (mode === "cubic" && typeof cv.INTER_CUBIC !== "undefined") return cv.INTER_CUBIC;
   if (mode === "lanczos" && typeof cv.INTER_LANCZOS4 !== "undefined") return cv.INTER_LANCZOS4;
+  if (mode === "nearest" && typeof cv.INTER_NEAREST !== "undefined") return cv.INTER_NEAREST;
   return cv.INTER_LINEAR;
 }
 
