@@ -1,3 +1,9 @@
+/**
+ * Minimal local ZIP writer.
+ *
+ * This module creates simple store-only ZIP archives for frame export without adding another
+ * external dependency.
+ */
 const ZIP_UTF8_FLAG = 0x0800;
 const ZIP_STORE_METHOD = 0;
 const DIR_EXTERNAL_ATTR = 0x10;

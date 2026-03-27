@@ -1,4 +1,10 @@
 /**
+ * UI event wiring helpers.
+ *
+ * This module attaches button, slider, checkbox, keyboard, and tooltip behavior so the main app
+ * can supply callbacks without carrying the full DOM-listener implementation inline.
+ */
+/**
  * Wire a small header reset button without toggling the parent details element.
  *
  * @param {HTMLButtonElement | null} button
@@ -322,7 +328,6 @@ export function attachUi({
     dom.paperMargin,
     dom.boundarySensitivity,
     dom.boundaryPersistence,
-    dom.crossRoiScale,
     dom.detectCrossesWithConvolution,
     dom.useCrossAlignment,
   ];
@@ -336,6 +341,15 @@ export function attachUi({
       revokeGifUrl();
       scheduleProcess();
     });
+  });
+
+  dom.crossRoiScale.addEventListener("input", () => {
+    updateSliderReadouts();
+  });
+  dom.crossRoiScale.addEventListener("change", () => {
+    revokeGifUrl();
+    updateSliderReadouts();
+    scheduleProcess();
   });
 
   const lazyFrameInputs = [

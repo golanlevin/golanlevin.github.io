@@ -50,24 +50,55 @@ Legacy circle-based code still exists in `js/pipeline.js` as `_old` helpers, but
 
 ## Current JS module layout
 
+All project-owned JS files now begin with a short responsibility block comment so future refactors
+can identify module boundaries more quickly.
+
 - `js/app.js`
   Main orchestrator. Owns:
   - startup
   - support probing
   - config reading
-  - status updates
   - raw/rectified preview rendering
-  - marker-grid rendering
   - marker manual overrides
-  - settings import/export
-  - GIF / MP4 / ZIP export flows
   - lazy frame and appearance cache glue
+  - coordination across the narrower controller modules
 
 - `js/dom-state.js`
   Shared DOM handles and grouped app state.
 
 - `js/settings-defaults.js`
   Canonical startup/reset defaults for all non-Layout settings.
+
+- `js/settings-io.js`
+  Settings-file helpers:
+  - sibling settings lookup
+  - settings TSV parsing/application
+  - settings TSV serialization
+  - standalone settings filename generation
+
+- `js/marker-editor.js`
+  Frame Alignment Markers UI:
+  - tile-grid rendering
+  - reticle overlay drawing
+  - pointer drag editing
+  - double-click restore
+  - marker tooltip text
+
+- `js/status-controller.js`
+  Status and non-preview heading helpers:
+  - Status panel text
+  - page-boundary warning state
+  - `Page & Grid Detection` warning heading
+  - `Rectified Sheet` / `Convolution Debug View` heading text
+
+- `js/export-controller.js`
+  Export helpers:
+  - GIF generation
+  - WebCodecs + mp4-muxer MP4 generation
+  - ZIP frame archive generation
+  - export filename construction
+  - standalone settings-file download
+  - export-button label text and GIF URL cleanup
 
 - `js/preview-controller.js`
   Preview-only behavior:
@@ -182,6 +213,7 @@ Steps:
 2. threshold by:
    - `Offset Peak`, or
    - `Otsu`
+   - `Triangle`
 3. detect largest bright quad
 4. order corners
 
@@ -199,7 +231,7 @@ There are two page warps:
   - estimated from detected page area
   - constrained by the paper aspect ratio
   - capped by:
-    - `floor(0.75 * sqrt(sourceWidth^2 + sourceHeight^2))`
+    - `floor(0.90 * sqrt(sourceWidth^2 + sourceHeight^2))`
 
 Important: paper size is now treated only as an aspect-ratio hint. It no longer directly sets extraction resolution.
 
@@ -436,6 +468,11 @@ On new image load:
 - all collapsible panels are closed
 - non-Layout settings reset to defaults
 - preview panels clear to striped empty state
+- `Frame Alignment Markers` also starts striped when empty, then switches to plain `rgb(243,244,246)` once marker tiles are present
+
+Failure cue:
+
+- if page-boundary detection fails, the `Page & Grid Detection` heading becomes `Page & Grid Detection ⚠️`
 
 ## Empty-state / onboarding cues
 
@@ -489,3 +526,4 @@ was done partly to make this future work easier.
 - mobile-friendly layout and interaction model
 - possible additional export formats such as Animated WebP or APNG
 - further `app.js` decomposition if the orchestration layer grows much more
+- adaptive thresholding for uneven lighting

@@ -1,4 +1,10 @@
 /**
+ * Appearance-processing helpers.
+ *
+ * This module applies the post-extraction visual adjustments used by preview and export,
+ * including OKLab tonal changes, color temperature, unsharp mask, and invert.
+ */
+/**
  * Report whether any appearance controls require a non-identity color pass.
  *
  * @param {{brightness:number, contrast:number, vibrance:number, temperature:number, unsharpRadius:number, unsharpAmount:number, invert:boolean}} filters

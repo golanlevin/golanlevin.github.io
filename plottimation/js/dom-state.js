@@ -1,4 +1,10 @@
 /**
+ * Shared DOM handles and mutable runtime state.
+ *
+ * This module centralizes the app's queried DOM elements, paper preset catalog, and the grouped
+ * state objects used across the rest of the codebase.
+ */
+/**
  * Preset paper dimensions used only for aspect ratio and UI convenience.
  */
 export const PAPER_PRESETS = {
@@ -37,6 +43,7 @@ export const dom = {
   paperHeight: document.querySelector("#paperHeight"),
   frameCols: document.querySelector("#frameCols"),
   frameRows: document.querySelector("#frameRows"),
+  pageGridDetectionSummary: document.querySelector("#pageGridDetectionSummary"),
   thresholdMethod: document.querySelector("#thresholdMethod"),
   thresholdOffset: document.querySelector("#thresholdOffset"),
   thresholdOffsetValue: document.querySelector("#thresholdOffsetValue"),

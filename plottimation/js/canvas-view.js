@@ -1,4 +1,10 @@
 /**
+ * Canvas display helpers.
+ *
+ * This module handles simple browser-canvas tasks such as copying images into canvases,
+ * resizing preview backing stores to their CSS boxes, and fitting one canvas into another.
+ */
+/**
  * Copy an HTML image element into a canvas at native resolution.
  *
  * @param {HTMLImageElement} image

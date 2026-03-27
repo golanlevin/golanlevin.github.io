@@ -1,4 +1,10 @@
 /**
+ * Desktop drag/download helpers.
+ *
+ * This module owns the cached blob URLs and event wiring used when the user drags the raw photo,
+ * rectified sheet, or exported GIF out of the browser window.
+ */
+/**
  * Revoke the cached blob URL used for fast rectified-sheet drag/download.
  *
  * @param {import("./dom-state.js").state} state

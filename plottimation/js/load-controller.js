@@ -1,4 +1,10 @@
 /**
+ * Image-load controller helpers.
+ *
+ * This module handles busy-state spinners, object-URL ownership, file-type discrimination,
+ * and the staged process of loading a new source image into the app.
+ */
+/**
  * Toggle the small busy spinners used during image loading and processing.
  *
  * @param {import("./dom-state.js").dom} dom

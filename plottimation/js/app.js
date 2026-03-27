@@ -1,7 +1,35 @@
+/**
+ * Main application orchestrator.
+ *
+ * This module ties together UI state, preview rendering, the OpenCV pipeline, settings I/O,
+ * export flows, and cache invalidation. Most other modules are narrower helpers that are called
+ * from here.
+ */
 import { PAPER_PRESETS, dom, state } from "./dom-state.js";
 import { SETTINGS_DEFAULTS, applyAppearanceDefaults, applyCropGeometryDefaults, applyNonLayoutDefaults } from "./settings-defaults.js";
+import {
+  loadCompanionSettingsText as loadCompanionSettingsTextViaIo,
+  applyLoadedSettingsText as applyLoadedSettingsTextViaIo,
+  makeSettingsFilename as makeSettingsFilenameViaIo,
+  buildSettingsTsv as buildSettingsTsvViaIo,
+} from "./settings-io.js";
+import { renderCrossRoiGrid as renderCrossRoiGridViaEditor } from "./marker-editor.js";
 import { applyVisualAdjustments, hasAppearanceAdjustments } from "./appearance.js";
 import { drawImageToCanvas, renderCanvasFit, resizeCanvasToBox } from "./canvas-view.js";
+import {
+  updateExportButtonLabel as updateExportButtonLabelViaController,
+  revokeGifUrl as revokeGifUrlViaController,
+  sanitizeFilenameBase,
+  exportGif as exportGifViaController,
+  exportMp4 as exportMp4ViaController,
+  exportZip as exportZipViaController,
+  saveSettingsFile as saveSettingsFileViaController,
+} from "./export-controller.js";
+import {
+  updateRectifiedSheetHeading as syncRectifiedSheetHeading,
+  updatePageGridDetectionHeading as syncPageGridDetectionHeading,
+  setStatus as syncStatusText,
+} from "./status-controller.js";
 import {
   setBusyState as syncBusyState,
   releaseOwnedSourceUrl as releaseSourceUrl,
@@ -30,7 +58,6 @@ import {
   drawCurrentGifPreview as drawPreviewFrame,
   rerenderPreviews as rerenderPreviewSurfaces,
 } from "./preview-controller.js";
-import { createStoredZip } from "./zip-builder.js";
 import {
   runPipeline,
   estimateCrossRoiSidePx,
@@ -38,9 +65,6 @@ import {
   getCvInterpolationFlag,
   extractSingleFrameToCanvas,
 } from "./pipeline.js";
-
-const MP4_MUXER_MODULE_URL = "./vendor/mp4-muxer.esm.js";
-let mp4MuxerModulePromise = null;
 // Final output-size scaling can be done either with browser canvas drawImage() or with OpenCV.
 // Keep both code paths available for comparison while evaluating tiny-output quality.
 const bUseOpenCvOutputScaling = true;
@@ -130,9 +154,7 @@ init();
  * @returns {void}
  */
 function updateExportButtonLabel(progressPercent = null) {
-  dom.exportButton.textContent = (typeof progressPercent === "number")
-    ? `Export GIF ...${progressPercent}%`
-    : "Export GIF";
+  updateExportButtonLabelViaController(dom, progressPercent);
 }
 
 /**
@@ -185,21 +207,6 @@ async function detectMp4ExportSupport() {
     }
   }
   return { supported: false, codec: "" };
-}
-
-/**
- * Load the vendored MP4 muxer module on demand.
- *
- * MP4 export is comparatively niche and significantly heavier than GIF export, so the muxer stays
- * out of the startup path and is only imported when support probing/export actually needs it.
- *
- * @returns {Promise<any>}
- */
-function loadMp4MuxerModule() {
-  if (!mp4MuxerModulePromise) {
-    mp4MuxerModulePromise = import(MP4_MUXER_MODULE_URL);
-  }
-  return mp4MuxerModulePromise;
 }
 
 /**
@@ -289,15 +296,12 @@ function updatePreviewPlayPauseButton() {
   syncPreviewPlayPauseButton(dom, state);
 }
 
-/**
- * Keep the Rectified Sheet heading in sync with the currently displayed diagnostic mode.
- *
- * @returns {void}
- */
 function updateRectifiedSheetHeading() {
-  dom.rectifiedSheetHeading.textContent = state.preview.showRectifiedDiagnostic
-    ? "Convolution Debug View"
-    : "Rectified Sheet";
+  syncRectifiedSheetHeading(dom, state);
+}
+
+function updatePageGridDetectionHeading(showWarning = false) {
+  syncPageGridDetectionHeading(dom, showWarning);
 }
 
 /**
@@ -429,6 +433,16 @@ function setTooltipsEnabled(enabled) {
  */
 function setBusyState(busy) {
   syncBusyState(dom, state, busy);
+}
+
+/**
+ * Toggle a body-level cursor cue while geometry-affecting CV work is queued or running.
+ *
+ * @param {boolean} active
+ * @returns {void}
+ */
+function setGeometryProcessingCursor(active) {
+  document.body.classList.toggle("geometry-processing", !!active);
 }
 
 /**
@@ -565,6 +579,7 @@ function init() {
   syncAlignmentMarkerUi();
   syncMp4ExportUi();
   syncMarkerEditingUi();
+  updatePageGridDetectionHeading(false);
   updateRectifiedSheetHeading();
   dom.gifPreviewCanvas.title = TOOLTIP_TEXT["#gifPreviewCanvas"] || "";
   dom.gifImage.classList.add("hidden");
@@ -901,6 +916,8 @@ function onOpenCvReady() {
 function cancelInFlightProcessing() {
   state.processing.requestId += 1;
   state.processing.pending = false;
+  window.clearTimeout(state.processing.timer);
+  setGeometryProcessingCursor(false);
 }
 
 /**
@@ -1015,6 +1032,7 @@ function scheduleProcess() {
   state.processing.requestId += 1;
   const requestId = state.processing.requestId;
   window.clearTimeout(state.processing.timer);
+  setGeometryProcessingCursor(true);
   state.processing.timer = window.setTimeout(() => {
     void processCurrentImage(requestId);
   }, 220);
@@ -1280,33 +1298,13 @@ function clearMarkerEdits() {
   drawCurrentGifPreview();
 }
 
-/**
- * Best-effort loader for a sibling settings file that matches the selected image.
- *
- * For URL-based demo/server images, this fetches `<imagename>_settings.txt` from the same directory.
- * For dropped local files, it can consume an explicitly provided sibling settings file if one was
- * included in the same drag payload.
- *
- * @param {string} src
- * @param {string} filename
- * @param {File | null} [settingsFile=null]
- * @returns {Promise<string>}
- */
-async function loadCompanionSettingsText(src, filename, settingsFile = null) {
-  if (settingsFile) {
-    return await settingsFile.text();
-  }
-  if (!filename || src.startsWith("blob:")) {
-    return "";
-  }
-  try {
-    const settingsUrl = new URL(makeSettingsFilename(filename), new URL(src, window.location.href)).toString();
-    const response = await fetch(settingsUrl, { cache: "no-store" });
-    if (!response.ok) return "";
-    return await response.text();
-  } catch {
-    return "";
-  }
+function loadCompanionSettingsText(src, filename, settingsFile = null) {
+  return loadCompanionSettingsTextViaIo({
+    src,
+    filename,
+    settingsFile,
+    makeSettingsFilename,
+  });
 }
 
 /**
@@ -1345,113 +1343,20 @@ async function applySettingsFile(file) {
   }
 }
 
-/**
- * Apply a tab-separated settings manifest to the current UI controls.
- *
- * Unknown keys are ignored so older/newer settings files degrade gracefully.
- *
- * @param {string} settingsText
- * @returns {void}
- */
 function applyLoadedSettingsText(settingsText) {
-  if (!settingsText.trim()) return;
-  state.geometry.manualMarkerOverrides.clear();
-  const entries = new Map(
-    settingsText
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const [key, ...rest] = line.split("\t");
-        return [key, rest.join("\t")];
-      })
-  );
-
-  const setIfPresent = (key, element, transform = (value) => value) => {
-    if (!entries.has(key) || !element) return;
-    element.value = String(transform(entries.get(key)));
-  };
-  const setCheckedIfPresent = (key, element) => {
-    if (!entries.has(key) || !element) return;
-    element.checked = entries.get(key) === "true";
-  };
-
-  setIfPresent("paper_preset", dom.paperPreset);
-  if (entries.get("paper_orientation") === "portrait") {
-    dom.paperOrientationPortrait.checked = true;
-  } else if (entries.has("paper_orientation")) {
-    dom.paperOrientationLandscape.checked = true;
-  }
-  setIfPresent("paper_width", dom.paperWidth);
-  setIfPresent("paper_height", dom.paperHeight);
-  setIfPresent("frame_cols", dom.frameCols);
-  setIfPresent("frame_rows", dom.frameRows);
-  setIfPresent("threshold_method", dom.thresholdMethod);
-  setIfPresent("threshold_offset", dom.thresholdOffset);
-  setIfPresent("search_inset_margin_px", dom.paperMargin);
-  setIfPresent("boundary_threshold", dom.boundarySensitivity);
-  setIfPresent("boundary_persistence_px", dom.boundaryPersistence);
-  const markerType = entries.get("alignment_marker_type");
-  if (markerType === "circles") {
-    dom.alignmentMarkerTypeCircles.checked = true;
-  } else if (markerType === "crosses") {
-    dom.alignmentMarkerTypeCrosses.checked = true;
-  }
-  setIfPresent("alignment_marker_region_scale_pct", dom.crossRoiScale);
-  setCheckedIfPresent("detect_crosses_with_convolution", dom.detectCrossesWithConvolution);
-  setCheckedIfPresent("use_cross_alignment", dom.useCrossAlignment);
-  setIfPresent("crop_left", dom.cropLeft);
-  setIfPresent("crop_right", dom.cropRight);
-  setIfPresent("crop_top", dom.cropTop);
-  setIfPresent("crop_bottom", dom.cropBottom);
-  setCheckedIfPresent("flip_horizontal", dom.flipHorizontal);
-  setCheckedIfPresent("flip_vertical", dom.flipVertical);
-  setCheckedIfPresent("rotate_90_cw", dom.rotate90Cw);
-  setIfPresent("brightness", dom.brightness);
-  setIfPresent("contrast", dom.contrast);
-  setIfPresent("vibrance", dom.vibrance);
-  setIfPresent("color_temperature", dom.temperature);
-  setIfPresent("unsharp_amount", dom.unsharpAmount);
-  setIfPresent("unsharp_radius", dom.unsharpRadius);
-  setCheckedIfPresent("invert", dom.invert);
-  setIfPresent("fps", dom.fps);
-  setIfPresent("loop_count", dom.loopCount);
-  setCheckedIfPresent("reverse_order", dom.reverseOrder);
-  setCheckedIfPresent("ping_pong", dom.pingPong);
-  if (entries.has("output_width")) {
-    dom.outputWidth.value = String(entries.get("output_width"));
-    syncOutputSizeFromWidthInput();
-    if (entries.has("output_height")) {
-      dom.outputHeight.value = String(entries.get("output_height"));
-      syncOutputSizeFromHeightInput();
-    }
-  }
-  if (entries.has("encoding_quality")) {
-    dom.gifQuality.value = String(
-      Math.max(
-        1,
-        Math.min(100, Math.round(Number(entries.get("encoding_quality")) || SETTINGS_DEFAULTS.gifExport.quality))
-      )
-    );
-  }
-  setIfPresent("dither", dom.gifDither);
-  setIfPresent("resampling", dom.gifResampling);
-  setCheckedIfPresent("use_global_palette", dom.gifGlobalPalette);
-
-  for (const [key, value] of entries.entries()) {
-    const match = /^marker_override_(\d+)_(\d+)$/.exec(key);
-    if (!match) continue;
-    const [xText, yText] = String(value || "").split(",");
-    const x = Number(xText);
-    const y = Number(yText);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    state.geometry.manualMarkerOverrides.set(getMarkerKey(Number(match[1]), Number(match[2])), { x, y });
-  }
-
-  syncPaperPresetUi();
-  syncAlignmentMarkerUi();
-  syncMarkerEditingUi();
-  updateSliderReadouts();
+  applyLoadedSettingsTextViaIo({
+    settingsText,
+    dom,
+    state,
+    settingsDefaults: SETTINGS_DEFAULTS,
+    getMarkerKey,
+    syncOutputSizeFromWidthInput,
+    syncOutputSizeFromHeightInput,
+    syncPaperPresetUi,
+    syncAlignmentMarkerUi,
+    syncMarkerEditingUi,
+    updateSliderReadouts,
+  });
 }
 
 /**
@@ -1489,7 +1394,7 @@ function updateSliderReadouts() {
     config.paperWidthIn * 100,
     config.paperHeightIn * 100
   );
-  dom.crossRoiScaleValue.textContent = `${roiSizePx} px`;
+  dom.crossRoiScaleValue.textContent = `${roiSizePx}×${roiSizePx} px`;
 }
 
 /**
@@ -1671,6 +1576,7 @@ function getRequestedOutputSize() {
 async function processCurrentImage(requestId = state.processing.requestId) {
   if (!state.runtime.cvReady) {
     setBusyState(false);
+    setGeometryProcessingCursor(false);
     setStatus("OpenCV is still loading.");
     return;
   }
@@ -1729,7 +1635,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
       }
       console.error(error);
       updateExportButtonLabel();
-      setStatus("Unable to find page boundary. Try adjusting the Thresholding Offset and/or the Thresholding Method.\n(" + (error?.message || String(error)) + ")");
+      setStatus("Unable to find page boundary. Try adjusting the Thresholding Offset or other Page & Grid Detection settings.\n(" + (error?.message || String(error)) + ")");
     }
   } finally {
     updateExportControlsAvailability();
@@ -1737,11 +1643,13 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     if (state.processing.pending) {
       state.processing.pending = false;
       window.clearTimeout(state.processing.timer);
+      setGeometryProcessingCursor(true);
       state.processing.timer = window.setTimeout(() => {
         void processCurrentImage(state.processing.requestId);
       }, 0);
     } else {
       setBusyState(false);
+      setGeometryProcessingCursor(false);
     }
   }
 }
@@ -1978,6 +1886,46 @@ function invalidateAppearanceCache() {
 function invalidateFrameCaches() {
   state.frames.base = new Array(state.geometry.frameCount);
   state.frames.adjustedCache.clear();
+}
+
+/**
+ * Return the extracted frame indices affected by one alignment marker.
+ *
+ * Marker `(c, r)` can influence up to four neighboring frame cells:
+ * `(c-1, r-1)`, `(c, r-1)`, `(c-1, r)`, `(c, r)`.
+ *
+ * @param {number} markerCol
+ * @param {number} markerRow
+ * @returns {number[]}
+ */
+function getAffectedFrameIndicesForMarker(markerCol, markerRow) {
+  const alignmentInfo = state.geometry.alignmentInfo;
+  if (!alignmentInfo) return [];
+  const indices = [];
+  for (let row = markerRow - 1; row <= markerRow; row++) {
+    for (let col = markerCol - 1; col <= markerCol; col++) {
+      if (col < 0 || row < 0 || col >= alignmentInfo.cols || row >= alignmentInfo.rows) continue;
+      indices.push((row * alignmentInfo.cols) + col);
+    }
+  }
+  return indices;
+}
+
+/**
+ * Invalidate only the extracted/adjusted frames touched by one edited marker.
+ *
+ * This keeps interactive marker dragging responsive by avoiding unnecessary re-extraction of
+ * frames that do not depend on the moved marker.
+ *
+ * @param {number} markerCol
+ * @param {number} markerRow
+ * @returns {void}
+ */
+function invalidateFramesForMarker(markerCol, markerRow) {
+  for (const index of getAffectedFrameIndicesForMarker(markerCol, markerRow)) {
+    state.frames.base[index] = undefined;
+    state.frames.adjustedCache.delete(index);
+  }
 }
 
 /**
@@ -2221,175 +2169,15 @@ function renderRawPreview() {
  * @returns {void}
  */
 function renderCrossRoiGrid(alignmentInfo) {
-  const grid = dom.crossRoiGrid;
-  grid.innerHTML = "";
-  if (!alignmentInfo || !alignmentInfo.crossRoiTiles || alignmentInfo.crossRoiTiles.length === 0) {
-    grid.classList.add("is-empty");
-    grid.textContent = "";
-    syncMarkerEditingUi();
-    return;
-  }
-  grid.classList.remove("is-empty");
-  grid.style.gridTemplateColumns = `repeat(${alignmentInfo.cols + 1}, max-content)`;
-  for (let row = 0; row <= alignmentInfo.rows; row++) {
-    for (let col = 0; col <= alignmentInfo.cols; col++) {
-      const isCorner = ((col === 0) || (col === alignmentInfo.cols)) && ((row === 0) || (row === alignmentInfo.rows));
-      if (isCorner && !alignmentInfo.includeCornerCrosses) {
-        const spacer = document.createElement("div");
-        spacer.className = "cross-roi-empty";
-        grid.appendChild(spacer);
-        continue;
-      }
-      const tile = alignmentInfo.crossRoiTileMap.get(`${col},${row}`);
-      if (tile) {
-        grid.appendChild(buildMarkerTileElement(tile, alignmentInfo));
-      } else {
-        const spacer = document.createElement("div");
-        spacer.className = "cross-roi-empty";
-        grid.appendChild(spacer);
-      }
-    }
-  }
-  syncMarkerEditingUi();
-}
-
-/**
- * Build one interactive marker tile wrapper with an overlay reticle.
- *
- * @param {object} tile
- * @param {object} alignmentInfo
- * @returns {HTMLDivElement}
- */
-function buildMarkerTileElement(tile, alignmentInfo) {
-  const wrapper = document.createElement("div");
-  wrapper.className = "cross-roi-tile-wrap";
-  if (state.runtime.markerEditingEnabled) wrapper.classList.add("editing-enabled");
-  if (state.geometry.manualMarkerOverrides.has(getMarkerKey(tile.col, tile.row))) {
-    wrapper.classList.add("manual-override");
-  }
-
-  tile.canvas.classList.add("cross-roi-tile");
-  const overlay = document.createElement("canvas");
-  overlay.className = "cross-roi-overlay";
-  overlay.width = tile.canvas.width;
-  overlay.height = tile.canvas.height;
-  overlay.style.width = `${tile.canvas.width}px`;
-  overlay.style.height = `${tile.canvas.height}px`;
-  drawMarkerTileOverlay(overlay, tile);
-  wrapper.appendChild(tile.canvas);
-  wrapper.appendChild(overlay);
-
-  if (tile.kind === "unrefined") {
-    wrapper.title = "";
-  } else if (state.runtime.tooltipsEnabled) {
-    const colContrast = Number.isFinite(tile.colContrast) ? tile.colContrast.toFixed(2) : "--";
-    const rowContrast = Number.isFinite(tile.rowContrast) ? tile.rowContrast.toFixed(2) : "--";
-    const darkFrac = Number.isFinite(tile.darkFrac) ? tile.darkFrac.toFixed(4) : "--";
-    const convStrength = Number.isFinite(tile.convolutionStrength) ? ` | conv ${tile.convolutionStrength.toFixed(4)}` : "";
-    const manualTag = state.geometry.manualMarkerOverrides.has(getMarkerKey(tile.col, tile.row)) ? " | manual override" : "";
-    wrapper.title = `(${tile.col}, ${tile.row}) ${tile.accepted ? "accepted" : "rejected"} | col ${colContrast} | row ${rowContrast} | ink ${darkFrac}${convStrength}${manualTag}`;
-  } else {
-    wrapper.title = "";
-  }
-
-  if (state.runtime.markerEditingEnabled) {
-    wrapper.addEventListener("pointerdown", (event) => {
-      event.preventDefault();
-      const markerKey = getMarkerKey(tile.col, tile.row);
-      const now = performance.now();
-      const isDoubleClick =
-        state.geometry.manualMarkerOverrides.has(markerKey) &&
-        state.runtime.lastMarkerClickKey === markerKey &&
-        (now - state.runtime.lastMarkerClickTime) <= 320;
-      state.runtime.lastMarkerClickKey = markerKey;
-      state.runtime.lastMarkerClickTime = now;
-      if (isDoubleClick) {
-        restoreMarkerOverride(tile);
-        return;
-      }
-      const updateOverlayFromEvent = (pointerEvent) => {
-        const local = getMarkerTileLocalPoint(pointerEvent, wrapper, tile.canvas.width, tile.canvas.height);
-        drawMarkerTileOverlay(overlay, tile, local);
-        return local;
-      };
-      let local = updateOverlayFromEvent(event);
-      // Apply immediately so the live preview follows the drag instead of waiting for mouse-up.
-      applyMarkerOverride(tile, local, false);
-      const handleMove = (moveEvent) => {
-        local = updateOverlayFromEvent(moveEvent);
-        applyMarkerOverride(tile, local, false);
-      };
-      const handleUp = () => {
-        window.removeEventListener("pointermove", handleMove);
-        window.removeEventListener("pointerup", handleUp);
-        window.removeEventListener("pointercancel", handleUp);
-        applyMarkerOverride(tile, local, true);
-      };
-      window.addEventListener("pointermove", handleMove);
-      window.addEventListener("pointerup", handleUp);
-      window.addEventListener("pointercancel", handleUp);
-    });
-  }
-
-  return wrapper;
-}
-
-/**
- * Draw the marker reticle overlay for one ROI tile.
- *
- * @param {HTMLCanvasElement} overlay
- * @param {object} tile
- * @param {{x:number, y:number} | null} [localOverride=null]
- * @returns {void}
- */
-function drawMarkerTileOverlay(overlay, tile, localOverride = null) {
-  const ctx = overlay.getContext("2d");
-  ctx.clearRect(0, 0, overlay.width, overlay.height);
-  const current = localOverride || getMarkerTileCurrentLocalPoint(tile);
-  const isManual = !!localOverride || state.geometry.manualMarkerOverrides.has(getMarkerKey(tile.col, tile.row));
-  ctx.save();
-  ctx.strokeStyle = isManual ? "rgba(0, 128, 0, 0.95)" : (tile.accepted ? "rgba(255, 0, 0, 0.55)" : "rgba(255, 0, 0, 0.3)");
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(current.x + 0.5, 0);
-  ctx.lineTo(current.x + 0.5, overlay.height);
-  ctx.moveTo(0, current.y + 0.5);
-  ctx.lineTo(overlay.width, current.y + 0.5);
-  ctx.stroke();
-  ctx.restore();
-}
-
-/**
- * Convert a tile's current detected or manually overridden marker position into tile-local pixels.
- *
- * @param {object} tile
- * @returns {{x:number, y:number}}
- */
-function getMarkerTileCurrentLocalPoint(tile) {
-  const center = (tile.canvas.width - 1) * 0.5;
-  return {
-    x: center + (tile.detectedX - tile.x),
-    y: center + (tile.detectedY - tile.y),
-  };
-}
-
-/**
- * Convert a pointer event over a marker tile into a clamped local tile coordinate.
- *
- * @param {PointerEvent} event
- * @param {HTMLElement} element
- * @param {number} width
- * @param {number} height
- * @returns {{x:number, y:number}}
- */
-function getMarkerTileLocalPoint(event, element, width, height) {
-  const rect = element.getBoundingClientRect();
-  const x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * width;
-  const y = ((event.clientY - rect.top) / Math.max(1, rect.height)) * height;
-  return {
-    x: Math.max(0, Math.min(width - 1, x)),
-    y: Math.max(0, Math.min(height - 1, y)),
-  };
+  renderCrossRoiGridViaEditor({
+    dom,
+    state,
+    alignmentInfo,
+    getMarkerKey,
+    syncMarkerEditingUi,
+    onApplyOverride: applyMarkerOverride,
+    onRestoreOverride: restoreMarkerOverride,
+  });
 }
 
 /**
@@ -2412,7 +2200,7 @@ function applyMarkerOverride(tile, local, finalize) {
     applyManualMarkerOverrides(state.geometry.alignmentInfo);
   }
   revokeGifUrl();
-  invalidateFrameCaches();
+  invalidateFramesForMarker(tile.col, tile.row);
   syncMarkerEditingUi();
   if (finalize) {
     renderCrossRoiGrid(state.geometry.alignmentInfo);
@@ -2444,342 +2232,14 @@ function restoreMarkerOverride(tile) {
     }
   }
   revokeGifUrl();
-  invalidateFrameCaches();
+  invalidateFramesForMarker(tile.col, tile.row);
   syncMarkerEditingUi();
   renderCrossRoiGrid(state.geometry.alignmentInfo);
   drawCurrentGifPreview();
 }
 
-/**
- * Materialize all adjusted frames and hand them off to gif.js for encoding.
- *
- * The shared `Encoding Quality` slider is translated into gif.js's inverse numeric scale in
- * `readConfig()`, so this function can continue using the encoder's native `quality` field.
- *
- * @returns {Promise<void>}
- */
-async function exportGif() {
-  const orderedFrameCount = getExportOrderedFrameCount();
-  if (!orderedFrameCount) return;
-  updateExportControlsAvailability(true);
-  updateExportButtonLabel(0);
-  setStatus("Encoding GIF…");
-
-  const config = readConfig();
-  const firstFrame = getAdjustedFrameCanvas(getExportOrderedFrameIndex(0));
-  if (!firstFrame) {
-    updateExportControlsAvailability();
-    updateExportButtonLabel();
-    return;
-  }
-
-  const gif = new GIF({
-    workers: 2,
-    quality: config.exportOptions.quality,
-    width: firstFrame.width,
-    height: firstFrame.height,
-    repeat: 0,
-    dither: config.exportOptions.dither,
-    globalPalette: config.exportOptions.globalPalette,
-    workerScript: "js/gif.worker.js",
-  });
-
-  const delay = Math.max(1, Math.round(1000 / config.fps));
-  for (let i = 0; i < orderedFrameCount; i++) {
-    // Preview stays lazy, but export must realize the full adjusted frame set.
-    gif.addFrame(getAdjustedFrameCanvas(getExportOrderedFrameIndex(i)), { copy: true, delay });
-  }
-
-  gif.on("finished", (blob) => {
-    revokeGifUrl();
-    state.export.filename = makeGifFilename(
-      state.source.filename,
-      config.exportOptions.encodingQuality,
-      firstFrame.width,
-      firstFrame.height
-    );
-    state.export.url = URL.createObjectURL(blob);
-    dom.gifImage.src = state.export.url;
-    applyGifPreviewDisplaySize(firstFrame.width, firstFrame.height);
-    dom.gifPreviewCanvas.hidden = true;
-    dom.gifImage.classList.remove("hidden");
-    dom.gifImage.hidden = false;
-    dom.gifPreviewCanvas.parentElement?.classList.remove("is-empty");
-    updateAnimationPreviewHeading();
-    downloadBlobWithFilename(blob, state.export.filename);
-    updateExportControlsAvailability();
-    updateExportButtonLabel();
-    setStatus("GIF ready.\nFrame count: " + state.geometry.frameCount);
-  });
-  gif.on("progress", (progress) => {
-    const progressPercent = Math.round(progress * 100);
-    updateExportButtonLabel(progressPercent);
-    setStatus("Encoding GIF…\n" + progressPercent + "%");
-  });
-  gif.render();
-}
-
-/**
- * Ensure exported GIFs remain visible in the GIF Output panel even when the actual file
- * dimensions are extremely small.
- *
- * @param {number} width
- * @param {number} height
- * @returns {void}
- */
-function applyGifPreviewDisplaySize(width, height) {
-  const safeWidth = Math.max(1, Math.round(width || 1));
-  const safeHeight = Math.max(1, Math.round(height || 1));
-  const minDisplay = 32;
-  const scale = (Math.min(safeWidth, safeHeight) < minDisplay)
-    ? (minDisplay / Math.min(safeWidth, safeHeight))
-    : 1;
-  dom.gifImage.style.width = `${Math.max(minDisplay, Math.round(safeWidth * scale))}px`;
-  dom.gifImage.style.height = `${Math.max(minDisplay, Math.round(safeHeight * scale))}px`;
-}
-
-/**
- * Build an MP4 filename parallel to the GIF export naming scheme.
- *
- * @param {string} sourceFilename
- * @param {number} [quality=75]
- * @param {number} [width=0]
- * @param {number} [height=0]
- * @returns {string}
- */
-function makeMp4Filename(sourceFilename, quality = 75, width = 0, height = 0) {
-  return `${makeArchiveStem(sourceFilename, width, height)}_q${quality}.mp4`;
-}
-
-/**
- * Convert the 0..100 MP4 quality slider into an explicit WebCodecs bitrate target.
- *
- * The shared `Encoding Quality` slider drives both export formats, but MP4 quality is easier to
- * express as a bitrate target than as an abstract encoder preset. Short looped animations benefit
- * from a fairly aggressive bitrate here, because they often contain crisp edges and repeated motion.
- *
- * @param {number} width
- * @param {number} height
- * @param {number} fps
- * @param {number} quality
- * @returns {number}
- */
-function estimateMp4Bitrate(width, height, fps, quality) {
-  const q = Math.max(0, Math.min(100, quality)) / 100;
-  const bitsPerPixelPerFrame = 0.75 + (q * 3.25);
-  return Math.max(500_000, Math.round(width * height * fps * bitsPerPixelPerFrame));
-}
-
-/**
- * Ensure MP4 export dimensions meet a conservative H.264-friendly minimum and stay even.
- *
- * GIF export can go extremely small, but H.264 is happier with even dimensions and a less tiny
- * floor. This helper leaves the file logically "small" while avoiding codec configurations that
- * are fragile across browsers.
- *
- * @param {HTMLCanvasElement} sourceCanvas
- * @returns {{width:number,height:number}}
- */
-function getMp4ExportDimensions(sourceCanvas) {
-  const safeWidth = Math.max(1, Math.round(sourceCanvas?.width || 1));
-  const safeHeight = Math.max(1, Math.round(sourceCanvas?.height || 1));
-  const minEdge = 16;
-  const minCurrentEdge = Math.min(safeWidth, safeHeight);
-  const scale = minCurrentEdge < minEdge ? (minEdge / minCurrentEdge) : 1;
-  const evenize = (value) => {
-    const rounded = Math.max(minEdge, Math.round(value));
-    return (rounded % 2 === 0) ? rounded : (rounded + 1);
-  };
-  return {
-    width: evenize(safeWidth * scale),
-    height: evenize(safeHeight * scale),
-  };
-}
-
-/**
- * Draw one source frame into the MP4 encoder canvas, scaling up tiny outputs when needed.
- *
- * The encoder always reads from one staging canvas so export can keep reusing the existing lazy
- * frame-realization path without needing a second extraction/render pipeline for MP4 alone.
- *
- * @param {HTMLCanvasElement} sourceCanvas
- * @param {HTMLCanvasElement} targetCanvas
- * @returns {void}
- */
-function drawFrameIntoMp4Canvas(sourceCanvas, targetCanvas) {
-  const ctx = targetCanvas.getContext("2d");
-  ctx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(sourceCanvas, 0, 0, targetCanvas.width, targetCanvas.height);
-}
-
-/**
- * Encode the ordered frame sequence as an H.264 MP4 using WebCodecs plus mp4-muxer.
- *
- * Unlike the earlier MediaRecorder-based attempt, this path:
- * - uses the shared `Encoding Quality` slider as a real bitrate target
- * - forces frequent keyframes for short looping animations
- * - muxes the final `.mp4` fully in-browser without any network dependency
- *
- * @returns {Promise<void>}
- */
-async function exportMp4() {
-  if (!state.runtime.mp4ExportSupported) return;
-  const orderedFrameCount = getExportOrderedFrameCount();
-  if (!orderedFrameCount) return;
-  updateExportControlsAvailability(true);
-  setStatus("Encoding MP4…");
-
-  const config = readConfig();
-  const firstFrame = getAdjustedFrameCanvas(getExportOrderedFrameIndex(0));
-  if (!firstFrame) {
-    updateExportControlsAvailability();
-    return;
-  }
-
-  const mp4Size = getMp4ExportDimensions(firstFrame);
-  const encoderCanvas = document.createElement("canvas");
-  encoderCanvas.width = mp4Size.width;
-  encoderCanvas.height = mp4Size.height;
-  drawFrameIntoMp4Canvas(firstFrame, encoderCanvas);
-
-  try {
-    const { Muxer, ArrayBufferTarget } = await loadMp4MuxerModule();
-    const bitrate = estimateMp4Bitrate(mp4Size.width, mp4Size.height, config.fps, config.exportOptions.mp4Quality);
-    const muxer = new Muxer({
-      target: new ArrayBufferTarget(),
-      fastStart: "in-memory",
-      video: {
-        codec: "avc",
-        width: mp4Size.width,
-        height: mp4Size.height,
-      },
-    });
-    let encoderError = null;
-    const encoder = new VideoEncoder({
-      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-      error: (error) => {
-        encoderError = error;
-      },
-    });
-    encoder.configure({
-      codec: state.runtime.mp4Codec,
-      width: mp4Size.width,
-      height: mp4Size.height,
-      bitrate,
-      framerate: config.fps,
-      avc: { format: "avc" },
-      latencyMode: "quality",
-    });
-
-    const frameDurationUs = Math.max(1, Math.round(1_000_000 / config.fps));
-    // These animations are short loops rather than long-form video, so frequent keyframes make
-    // seeking/turnarounds cleaner and avoid long stretches of predictive frames.
-    const keyframeInterval = 2;
-    for (let i = 0; i < orderedFrameCount; i++) {
-      const frameCanvas = getAdjustedFrameCanvas(getExportOrderedFrameIndex(i));
-      if (!frameCanvas) {
-        throw new Error("Could not prepare one or more frames for MP4 export.");
-      }
-      drawFrameIntoMp4Canvas(frameCanvas, encoderCanvas);
-      const timestampUs = i * frameDurationUs;
-      const frame = new VideoFrame(encoderCanvas, {
-        timestamp: timestampUs,
-        duration: frameDurationUs,
-      });
-      encoder.encode(frame, { keyFrame: i === 0 || (i % keyframeInterval) === 0 });
-      frame.close();
-      if (encoderError) {
-        throw encoderError;
-      }
-      setStatus(`Encoding MP4…\n${Math.round(((i + 1) / orderedFrameCount) * 100)}%`);
-    }
-    await encoder.flush();
-    if (encoderError) {
-      throw encoderError;
-    }
-    encoder.close();
-    muxer.finalize();
-    const mp4Blob = new Blob([muxer.target.buffer], { type: "video/mp4" });
-    downloadBlobWithFilename(
-      mp4Blob,
-      makeMp4Filename(
-        state.source.filename,
-        config.exportOptions.encodingQuality,
-        mp4Size.width,
-        mp4Size.height
-      )
-    );
-    setStatus(`MP4 ready.\nFrame count: ${orderedFrameCount}`);
-  } catch (error) {
-    console.error(error);
-    setStatus(`MP4 export failed.\n(${error?.message || String(error)})`);
-  } finally {
-    updateExportControlsAvailability();
-  }
-}
-
-/**
- * Convert a canvas into a PNG byte array.
- *
- * @param {HTMLCanvasElement} canvas
- * @returns {Promise<Uint8Array>}
- */
-async function canvasToPngBytes(canvas) {
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-  if (!blob) {
-    throw new Error("Could not encode PNG frame.");
-  }
-  return new Uint8Array(await blob.arrayBuffer());
-}
-
-/**
- * Build a timestamped archive stem shared by ZIP exports and other animation-file outputs.
- *
- * Example:
- * `mySrcImage_anim_260324154546_320x240`
- *
- * @param {string} sourceFilename
- * @param {number} [width=0]
- * @param {number} [height=0]
- * @returns {string}
- */
-function makeArchiveStem(sourceFilename, width = 0, height = 0) {
-  const base = sanitizeFilenameBase(sourceFilename || "frame_sheet");
-  const now = new Date();
-  const yy = String(now.getFullYear()).slice(-2);
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mi = String(now.getMinutes()).padStart(2, "0");
-  const ss = String(now.getSeconds()).padStart(2, "0");
-  const safeWidth = Math.max(1, Math.round(width || 0));
-  const safeHeight = Math.max(1, Math.round(height || 0));
-  const sizePart = (safeWidth > 0 && safeHeight > 0) ? `_${safeWidth}x${safeHeight}` : "";
-  return `${base}_anim_${yy}${mm}${dd}${hh}${mi}${ss}${sizePart}`;
-}
-
-/**
- * Build a ZIP filename for frame export.
- *
- * @param {string} sourceFilename
- * @param {number} [width=0]
- * @param {number} [height=0]
- * @returns {string}
- */
-function makeZipFilename(sourceFilename, width = 0, height = 0) {
-  return `${makeArchiveStem(sourceFilename, width, height)}.zip`;
-}
-
-/**
- * Build a standalone settings-manifest filename using the same timestamped stem as ZIP export.
- *
- * @param {string} sourceFilename
- * @returns {string}
- */
 function makeSettingsFilename(sourceFilename) {
-  return `${sanitizeFilenameBase(sourceFilename || "frame_sheet")}_settings.txt`;
+  return makeSettingsFilenameViaIo(sourceFilename, sanitizeFilenameBase);
 }
 
 /**
@@ -2792,194 +2252,87 @@ function makeSettingsFilename(sourceFilename) {
  * @returns {string}
  */
 function buildSettingsTsv(config) {
-  const rows = [
-    ["source_filename", state.source.filename || ""],
-    ["paper_preset", config.paperPreset],
-    ["paper_orientation", config.paperOrientation],
-    ["paper_width", String(config.paperWidthIn)],
-    ["paper_height", String(config.paperHeightIn)],
-    ["frame_cols", String(config.frameCols)],
-    ["frame_rows", String(config.frameRows)],
-    ["threshold_method", config.thresholdMethod],
-    ["threshold_offset", String(config.thresholdOffset)],
-    ["search_inset_margin_px", String(config.paperMarginPx)],
-    ["boundary_threshold", String(config.boundarySensitivity)],
-    ["boundary_persistence_px", String(config.boundaryPersistencePx)],
-    ["alignment_marker_type", config.alignmentMarkerType],
-    ["alignment_marker_region_scale_pct", String(config.crossRoiScalePct)],
-    ["detect_crosses_with_convolution", String(config.detectCrossesWithConvolution)],
-    ["use_cross_alignment", String(config.useCrossAlignment)],
-    ["crop_left", String(config.crop.left)],
-    ["crop_right", String(config.crop.right)],
-    ["crop_top", String(config.crop.top)],
-    ["crop_bottom", String(config.crop.bottom)],
-    ["flip_horizontal", String(config.postCropGeometry.flipHorizontal)],
-    ["flip_vertical", String(config.postCropGeometry.flipVertical)],
-    ["rotate_90_cw", String(config.postCropGeometry.rotate90Cw)],
-    ["brightness", String(config.filters.brightness)],
-    ["contrast", String(config.filters.contrast)],
-    ["vibrance", String(config.filters.vibrance)],
-    ["color_temperature", String(config.filters.temperature)],
-    ["unsharp_amount", String(config.filters.unsharpAmount)],
-    ["unsharp_radius", String(config.filters.unsharpRadius)],
-    ["invert", String(config.filters.invert)],
-    ["fps", String(config.fps)],
-    ["loop_count", String(config.exportOptions.loopCount)],
-    ["reverse_order", String(config.exportOptions.reverseOrder)],
-    ["ping_pong", String(config.exportOptions.pingPong)],
-    ["output_width", String(config.exportOptions.outputWidthPx)],
-    ["output_height", String(config.exportOptions.outputHeightPx)],
-    ["encoding_quality", String(config.exportOptions.encodingQuality)],
-    ["dither", String(config.exportOptions.dither || "off")],
-    ["resampling", String(config.exportOptions.resampling)],
-    ["use_global_palette", String(config.exportOptions.globalPalette)],
-  ];
-  const overrideRows = [...state.geometry.manualMarkerOverrides.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, point]) => {
-      const [col, row] = key.split(",");
-      return [`marker_override_${col}_${row}`, `${point.x},${point.y}`];
-    });
-  return [...rows, ...overrideRows].map(([key, value]) => `${key}\t${value}`).join("\n") + "\n";
+  return buildSettingsTsvViaIo({
+    config,
+    sourceFilename: state.source.filename,
+    manualMarkerOverrides: state.geometry.manualMarkerOverrides,
+    sanitizeFilenameBase,
+  });
+}
+
+function revokeGifUrl() {
+  revokeGifUrlViaController({ dom, state, updateAnimationPreviewHeading });
+}
+
+/**
+ * Materialize all adjusted frames and hand them off to the export controller's GIF encoder.
+ *
+ * @returns {Promise<void>}
+ */
+async function exportGif() {
+  return exportGifViaController({
+    dom,
+    state,
+    readConfig,
+    getExportOrderedFrameCount,
+    getExportOrderedFrameIndex,
+    getAdjustedFrameCanvas,
+    revokeGifUrl,
+    updateAnimationPreviewHeading,
+    updateExportControlsAvailability,
+    setStatus,
+  });
+}
+
+/**
+ * Encode the ordered frame sequence as an H.264 MP4 using the export controller.
+ *
+ * @returns {Promise<void>}
+ */
+async function exportMp4() {
+  return exportMp4ViaController({
+    state,
+    readConfig,
+    getExportOrderedFrameCount,
+    getExportOrderedFrameIndex,
+    getAdjustedFrameCanvas,
+    updateExportControlsAvailability,
+    setStatus,
+  });
 }
 
 /**
  * Export the current ordered animation frames as a ZIP archive of PNG files.
  *
- * Archive layout:
- * - `frames/`
- * - `frames/<base>_anim_000.png`
- * - ...
- *
  * @returns {Promise<void>}
  */
 async function exportZip() {
-  const orderedFrameCount = getExportOrderedFrameCount();
-  if (!orderedFrameCount) return;
-  updateExportControlsAvailability(true);
-  setStatus("Preparing ZIP…");
-
-  try {
-    const config = readConfig();
-    const base = sanitizeFilenameBase(state.source.filename || "frame_sheet");
-    const archiveStem = makeArchiveStem(
-      state.source.filename,
-      config.exportOptions.outputWidthPx,
-      config.exportOptions.outputHeightPx
-    );
-    const rootDir = `${archiveStem}/`;
-    const framesDir = `${rootDir}frames/`;
-    const settingsBytes = new TextEncoder().encode(buildSettingsTsv(config));
-    const entries = [
-      { name: rootDir, data: new Uint8Array(0), isDirectory: true },
-      { name: framesDir, data: new Uint8Array(0), isDirectory: true },
-      { name: `${rootDir}${makeSettingsFilename(state.source.filename)}`, data: settingsBytes },
-    ];
-    for (let i = 0; i < orderedFrameCount; i++) {
-      const frameCanvas = getAdjustedFrameCanvas(getExportOrderedFrameIndex(i));
-      if (!frameCanvas) {
-        throw new Error("Could not prepare one or more frames for ZIP export.");
-      }
-      const pngBytes = await canvasToPngBytes(frameCanvas);
-      const frameNumber = String(i).padStart(3, "0");
-      entries.push({
-        name: `${framesDir}${base}_anim_${frameNumber}.png`,
-        data: pngBytes,
-      });
-    }
-
-    const zipBlob = createStoredZip(entries);
-    downloadBlobWithFilename(
-      zipBlob,
-      makeZipFilename(
-        state.source.filename,
-        config.exportOptions.outputWidthPx,
-        config.exportOptions.outputHeightPx
-      )
-    );
-    setStatus(`ZIP ready.\nFrame count: ${orderedFrameCount}`);
-  } catch (error) {
-    console.error(error);
-    setStatus(`ZIP export failed.\n(${error?.message || String(error)})`);
-  } finally {
-    updateExportControlsAvailability();
-    updateExportButtonLabel();
-  }
+  return exportZipViaController({
+    state,
+    readConfig,
+    getExportOrderedFrameCount,
+    getExportOrderedFrameIndex,
+    getAdjustedFrameCanvas,
+    buildSettingsTsv,
+    makeSettingsFilename,
+    updateExportControlsAvailability,
+    setStatus,
+    updateExportButtonLabel,
+  });
 }
 
 /**
- * Download the same settings manifest used inside ZIP export as a standalone text file.
+ * Download the current settings manifest as a standalone text file.
  *
  * @returns {void}
  */
 function saveSettingsFile() {
-  if (!state.geometry.frameCount) return;
-  const config = readConfig();
-  const settingsText = buildSettingsTsv(config);
-  const blob = new Blob([settingsText], { type: "text/plain;charset=utf-8" });
-  downloadBlobWithFilename(blob, makeSettingsFilename(state.source.filename));
-}
-
-/**
- * Revoke and hide any previously exported GIF URL.
- *
- * @returns {void}
- */
-function revokeGifUrl() {
-  if (!state.export.url) return;
-  URL.revokeObjectURL(state.export.url);
-  state.export.url = "";
-  state.export.filename = "";
-  // Any settings change invalidates the exported GIF and returns the panel to live preview mode.
-  dom.gifPreviewCanvas.hidden = false;
-  dom.gifImage.classList.add("hidden");
-  dom.gifImage.hidden = true;
-  dom.gifImage.removeAttribute("src");
-  dom.gifPreviewCanvas.parentElement?.classList.add("is-empty");
-  updateAnimationPreviewHeading();
-}
-
-/**
- * Build a friendly exported GIF filename from the source name, compact timestamp, size, and quality.
- *
- * @param {string} sourceFilename
- * @param {number} [quality=75]
- * @param {number} [width=0]
- * @param {number} [height=0]
- * @returns {string}
- */
-function makeGifFilename(sourceFilename, quality = 75, width = 0, height = 0) {
-  return `${makeArchiveStem(sourceFilename, width, height)}_q${quality}.gif`;
-}
-
-/**
- * Strip unsupported characters from a filename stem.
- *
- * @param {string} filename
- * @returns {string}
- */
-function sanitizeFilenameBase(filename) {
-  const withoutExt = filename.replace(/\.[^.]+$/, "");
-  const cleaned = withoutExt.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
-  return cleaned || "frame_sheet";
-}
-
-/**
- * Trigger a download for an in-memory blob with a caller-supplied filename.
- *
- * @param {Blob} blob
- * @param {string} filename
- * @returns {void}
- */
-function downloadBlobWithFilename(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  return saveSettingsFileViaController({
+    state,
+    readConfig,
+    buildSettingsTsv,
+    makeSettingsFilename,
+  });
 }
 
 /**
@@ -2989,9 +2342,5 @@ function downloadBlobWithFilename(blob, filename) {
  * @returns {void}
  */
 function setStatus(text) {
-  dom.statusText.textContent = text;
-  dom.statusText.classList.toggle(
-    "status-page-boundary-failure",
-    String(text || "").startsWith("Unable to find page boundary.")
-  );
+  syncStatusText(dom, text);
 }

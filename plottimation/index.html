@@ -21,7 +21,8 @@
           <p id="appLedeSecondary" class="lede">
             By @golanlevin • <a href="https://github.com/golanlevin/plottimation/blob/main/README.md" target="_blank" rel="noopener noreferrer">Documentation</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer">Demo Video</a>
           </p>
-          <p id="appLedeTertiary" class="lede">v1.04, 3/2026 • <em>Note: not yet mobile-friendly</em></p>
+          <p id="appLedeTertiary" class="lede">v1.05, 3/2026 • <em>Note: not yet mobile-friendly</em></p>
+          <p id="appLedeQuaternary" class="lede"><a href="https://buymeacoffee.com/golanlevin" target="_blank" rel="noopener noreferrer">Buy Me A Coffee</a> :)</p>
         </div>
 
         <section class="control-group">
@@ -100,6 +101,7 @@
             <select id="thresholdMethod">
               <option value="offset-peak" selected>Offset Peak</option>
               <option value="otsu">Otsu</option>
+              <option value="triangle">Triangle</option>
             </select>
           </label>
           <div class="slider-stack">
@@ -308,7 +310,7 @@
         <section class="viewer-card">
           <header>
             <div class="status-headline">
-              <h2 id="rawPhotoHeading">Raw Photo <span id="rawPhotoNameWrap" class="header-note" hidden>(<a id="rawPhotoName" target="_blank" rel="noopener noreferrer"></a>)</span></h2>
+              <h2 id="rawPhotoHeading">1. Raw Photo <span id="rawPhotoNameWrap" class="header-note" hidden>(<a id="rawPhotoName" target="_blank" rel="noopener noreferrer"></a>)</span></h2>
               <span id="rawBusy" class="status-busy" hidden aria-hidden="true"></span>
             </div>
           </header>
@@ -319,7 +321,7 @@
 
         <section class="viewer-card">
           <header>
-            <h2 id="rectifiedSheetHeading">Rectified Sheet</h2>
+            <h2 id="rectifiedSheetHeading">2. Rectified Sheet</h2>
           </header>
           <div class="viewer-stage">
             <canvas id="rectifiedCanvas"></canvas>
@@ -328,7 +330,7 @@
 
         <section class="viewer-card">
           <header>
-            <h2 id="crossRegionsHeading">Frame Alignment Markers</h2>
+            <h2 id="crossRegionsHeading">3. Frame Alignment Markers</h2>
             <div class="header-actions">
               <button id="toggleMarkerEditingButton" class="header-button" type="button" disabled>Enable Overrides</button>
               <button id="clearMarkerEditsButton" class="header-button" type="button" hidden>Clear Edits</button>
@@ -339,7 +341,7 @@
 
         <section class="viewer-card">
           <header>
-            <h2 id="animationPreviewHeading">Preview</h2>
+            <h2 id="animationPreviewHeading">4. Preview</h2>
             <div class="header-actions">
               <button id="previewPlayPauseButton" class="header-button icon-button" type="button" aria-label="Pause animation">⏸</button>
               <button id="exportZipButton" class="header-button" type="button" disabled>Export ZIP</button>

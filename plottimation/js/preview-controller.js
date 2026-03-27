@@ -1,3 +1,9 @@
+/**
+ * Live preview controller helpers.
+ *
+ * This module owns the animation-preview heading state, play/pause button state, playback order,
+ * RAF loop, and the drawing of the current preview frame into the Preview panel.
+ */
 import { renderCanvasFit, resizeCanvasToBox } from "./canvas-view.js";
 
 /**
@@ -9,7 +15,7 @@ import { renderCanvasFit, resizeCanvasToBox } from "./canvas-view.js";
  * @returns {void}
  */
 export function updateAnimationPreviewHeading(dom, state) {
-  dom.animationPreviewHeading.textContent = state.export.url ? "GIF Output" : "Preview";
+  dom.animationPreviewHeading.textContent = state.export.url ? "4. GIF Output" : "4. Preview";
 }
 
 /**

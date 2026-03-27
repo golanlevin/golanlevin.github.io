@@ -29,6 +29,11 @@ body {
   background: var(--bg);
 }
 
+body.geometry-processing,
+body.geometry-processing * {
+  cursor: progress;
+}
+
 button,
 input,
 select {

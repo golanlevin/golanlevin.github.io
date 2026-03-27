@@ -1,3 +1,9 @@
+/**
+ * Computer-vision pipeline.
+ *
+ * This module performs page detection, page warping, coarse grid detection, marker localization,
+ * and frame extraction using OpenCV.
+ */
 const IGNORE_PX = 8;
 const DOT_DIM_PCT_COLS = 0.03;
 const DOT_DIM_PCT_ROWS = 0.02;
@@ -7,10 +13,9 @@ const MIN_CROSS_DETECTIONS_ABS = 4;
 const bUseCrossOnlyGridDetection = true;
 const PAGE_WARP_LOW_LONG_EDGE_PX = 1100;
 // High-resolution extraction should track the real source-image resolution instead of a fixed
-// paper-size number. The long edge of the extraction warp is capped at ~70.7% of the source
-// diagonal, which is equivalent to the side length of the largest axis-aligned square that fits
-// inside the source image's diagonal span.
-const PAGE_WARP_HIGH_DIAGONAL_CAP_SCALE = 0.75;
+// paper-size number. The long edge of the extraction warp is capped at 90% of the source-image
+// diagonal so extraction preserves more detail while still preventing pathological warp sizes.
+const PAGE_WARP_HIGH_DIAGONAL_CAP_SCALE = 0.90;
 
 // Unnormalized matched-filter kernel for dark "+" registration marks on bright paper.
 // The negative total sum suppresses blank page areas while rewarding the orthogonal cross strokes.
@@ -372,6 +377,11 @@ function buildFrameGridRectification_fromCrosses(visionSrc, styledSrc, pageWarpH
 /**
  * Estimate the grayscale threshold used to isolate the page.
  *
+ * Supported methods:
+ * - `offset-peak`: histogram peak plus offset
+ * - `otsu`: Otsu automatic threshold plus offset
+ * - `triangle`: Triangle automatic threshold plus offset
+ *
  * @param {cv.Mat} grayImg
  * @param {string} [method="offset-peak"]
  * @param {number} [offset=-20]
@@ -383,6 +393,15 @@ function estimatePaperThreshold(grayImg, method = "offset-peak", offset = -20) {
     try {
       const otsu = cv.threshold(grayImg, scratch, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
       return Math.max(0, Math.min(255, Math.round(otsu + offset)));
+    } finally {
+      scratch.delete();
+    }
+  }
+  if (method === "triangle") {
+    const scratch = new cv.Mat();
+    try {
+      const triangle = cv.threshold(grayImg, scratch, 0, 255, cv.THRESH_BINARY | cv.THRESH_TRIANGLE);
+      return Math.max(0, Math.min(255, Math.round(triangle + offset)));
     } finally {
       scratch.delete();
     }

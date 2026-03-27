@@ -1,4 +1,10 @@
 /**
+ * Canonical user-setting defaults.
+ *
+ * This module provides one source of truth for reset values and safe fallbacks when controls are
+ * empty or invalid.
+ */
+/**
  * Central default values for user-facing settings.
  *
  * Keep this file in sync with the corresponding initial values in `index.html`.
