@@ -68,6 +68,7 @@ import {
 // Final output-size scaling can be done either with browser canvas drawImage() or with OpenCV.
 // Keep both code paths available for comparison while evaluating tiny-output quality.
 const bUseOpenCvOutputScaling = true;
+const MOBILE_VIEWER_BREAKPOINT_PX = 960;
 
 const TOOLTIP_TEXT = {
   "#appTitle": "",
@@ -321,15 +322,196 @@ function updateExportControlsAvailability(forceDisabled = false) {
 /**
  * Keep the marker-editing header controls synchronized with current state.
  *
+ * Mobile currently treats the marker panel as read-only, so the override controls are hidden
+ * there even when alignment data exists.
+ *
  * @returns {void}
  */
 function syncMarkerEditingUi() {
   const hasAlignmentInfo = !!state.geometry.alignmentInfo;
   const hasEdits = state.geometry.manualMarkerOverrides.size > 0;
-  dom.toggleMarkerEditingButton.disabled = !hasAlignmentInfo;
+  const allowEditing = hasAlignmentInfo && !state.runtime.mobileSingleViewerMode;
+  dom.toggleMarkerEditingButton.hidden = state.runtime.mobileSingleViewerMode;
+  dom.toggleMarkerEditingButton.disabled = !allowEditing;
   dom.toggleMarkerEditingButton.textContent = state.runtime.markerEditingEnabled ? "Disable Overrides" : "Enable Overrides";
-  dom.clearMarkerEditsButton.hidden = !hasEdits;
+  dom.clearMarkerEditsButton.hidden = state.runtime.mobileSingleViewerMode || !hasEdits;
   dom.clearMarkerEditsButton.disabled = !hasEdits;
+}
+
+/**
+ * Detect whether the viewport should use the mobile single-viewer layout.
+ *
+ * @returns {boolean}
+ */
+function isMobileSingleViewerMode() {
+  return window.innerWidth <= MOBILE_VIEWER_BREAKPOINT_PX;
+}
+
+/**
+ * Apply the current responsive viewer mode and active-tab state to the workspace.
+ *
+ * Desktop keeps all four viewer cards visible. Mobile switches to one visible viewer card at a
+ * time, moves the accordion control groups below the viewer, moves Status to the bottom, and
+ * forces the marker panel into read-only mode for now.
+ *
+ * @returns {void}
+ */
+function syncResponsiveViewerUi() {
+  const mobileMode = isMobileSingleViewerMode();
+  const previousMode = state.runtime.mobileSingleViewerMode;
+  const collapsibleGroups = [
+    dom.layoutGroup,
+    dom.pageGridDetectionGroup,
+    dom.frameAlignmentGroup,
+    dom.appearanceGroup,
+    dom.cropGeometryGroup,
+    dom.exportOptionsGroup,
+  ];
+  state.runtime.mobileSingleViewerMode = mobileMode;
+  document.body.classList.toggle("mobile-layout", mobileMode);
+  document.body.classList.toggle("mobile-raw-active", mobileMode && state.runtime.activeViewerTab === "raw");
+  document.body.classList.toggle("mobile-preview-active", mobileMode && state.runtime.activeViewerTab === "preview");
+  document.body.classList.toggle("mobile-rectified-active", mobileMode && state.runtime.activeViewerTab === "rectified");
+  document.body.classList.toggle("mobile-markers-active", mobileMode && state.runtime.activeViewerTab === "markers");
+  if (mobileMode) {
+    collapsibleGroups.forEach((group) => {
+      if (group && dom.mobileControlStack && group.parentElement !== dom.mobileControlStack) {
+        dom.mobileControlStack.appendChild(group);
+      }
+    });
+    state.preview.showRectifiedDiagnostic = false;
+    if (dom.statusGroup && dom.appShell?.lastElementChild !== dom.statusGroup) {
+      dom.appShell?.appendChild(dom.statusGroup);
+    }
+    if (dom.statusGroup) dom.statusGroup.open = true;
+  } else {
+    if (dom.statusGroup && dom.controlPanel?.lastElementChild !== dom.statusGroup) {
+      dom.controlPanel?.appendChild(dom.statusGroup);
+    }
+    collapsibleGroups.forEach((group) => {
+      if (group && dom.controlPanel && group.parentElement !== dom.controlPanel) {
+        dom.controlPanel.insertBefore(group, dom.statusGroup);
+      }
+    });
+  }
+
+  const validViews = new Set(["raw", "rectified", "markers", "preview"]);
+  if (!validViews.has(state.runtime.activeViewerTab)) {
+    state.runtime.activeViewerTab = "raw";
+  }
+
+  const tabButtons = [
+    dom.viewerTabRaw,
+    dom.viewerTabRectified,
+    dom.viewerTabMarkers,
+    dom.viewerTabPreview,
+  ];
+  tabButtons.forEach((button) => {
+    const isActive = button?.dataset.view === state.runtime.activeViewerTab;
+    button?.classList.toggle("is-active", isActive);
+    button?.setAttribute("aria-pressed", String(isActive));
+  });
+
+  const cards = [
+    dom.rawViewerCard,
+    dom.rectifiedViewerCard,
+    dom.markersViewerCard,
+    dom.previewViewerCard,
+  ];
+  cards.forEach((card) => {
+    const isActive = card?.dataset.view === state.runtime.activeViewerTab;
+    card?.classList.toggle("viewer-active", !mobileMode || isActive);
+  });
+
+  if (mobileMode && state.runtime.markerEditingEnabled) {
+    state.runtime.markerEditingEnabled = false;
+    renderCrossRoiGrid(state.geometry.alignmentInfo);
+  } else if (previousMode !== mobileMode) {
+    syncMarkerEditingUi();
+  }
+  syncMobileMarkerGridLayout();
+}
+
+/**
+ * Keep the mobile Preview card's aspect-ratio hint aligned with the current output dimensions.
+ *
+ * This lets the mobile preview panel collapse to the same maximized animation shape instead of
+ * reserving the full viewer height with extra blank space.
+ *
+ * @returns {void}
+ */
+function updateMobilePreviewAspectRatio() {
+  const config = readConfig();
+  const width = Math.max(1, Math.round(config.exportOptions.outputWidthPx || state.runtime.outputWidthPx || 1));
+  const height = Math.max(1, Math.round(config.exportOptions.outputHeightPx || state.runtime.outputHeightPx || 1));
+  dom.previewViewerCard?.style.setProperty("--mobile-preview-aspect", `${width} / ${height}`);
+}
+
+/**
+ * Keep the mobile Rectified Sheet card's aspect-ratio hint aligned with the displayed sheet.
+ *
+ * @param {HTMLCanvasElement | null} rectifiedCanvas
+ * @returns {void}
+ */
+function updateMobileRectifiedAspectRatio(rectifiedCanvas) {
+  const width = Math.max(1, Math.round(rectifiedCanvas?.width || 1));
+  const height = Math.max(1, Math.round(rectifiedCanvas?.height || 1));
+  dom.rectifiedViewerCard?.style.setProperty("--mobile-rectified-aspect", `${width} / ${height}`);
+}
+
+/**
+ * Scale the marker diagnostic grid to fit the mobile viewport width and set the viewport height
+ * to the scaled grid height. Desktop keeps the unscaled scrollable grid behavior.
+ *
+ * @returns {void}
+ */
+function syncMobileMarkerGridLayout() {
+  const viewport = dom.crossRoiViewport;
+  const grid = dom.crossRoiGrid;
+  if (!viewport || !grid) return;
+  if (!state.runtime.mobileSingleViewerMode || grid.classList.contains("is-empty")) {
+    viewport.style.height = "";
+    grid.style.width = "";
+    grid.style.height = "";
+    grid.style.setProperty("--mobile-marker-grid-scale", "1");
+    return;
+  }
+  const intrinsicWidth = Math.max(1, Math.round(grid.scrollWidth || 1));
+  const intrinsicHeight = Math.max(1, Math.round(grid.scrollHeight || 1));
+  const availableWidth = Math.max(1, Math.round(viewport.clientWidth || 1));
+  const scale = Math.min(1, availableWidth / intrinsicWidth);
+  grid.style.width = `${intrinsicWidth}px`;
+  grid.style.height = `${intrinsicHeight}px`;
+  grid.style.setProperty("--mobile-marker-grid-scale", String(scale));
+  viewport.style.height = `${Math.ceil(intrinsicHeight * scale)}px`;
+}
+
+/**
+ * Keep the mobile Raw Photo card's aspect-ratio hint aligned with the loaded source image.
+ *
+ * @returns {void}
+ */
+function updateMobileRawAspectRatio() {
+  const width = Math.max(1, Math.round(state.source.canvas?.width || 1));
+  const height = Math.max(1, Math.round(state.source.canvas?.height || 1));
+  dom.rawViewerCard?.style.setProperty("--mobile-raw-aspect", `${width} / ${height}`);
+}
+
+/**
+ * Switch the active mobile viewer tab while leaving the desktop multi-panel view unchanged.
+ *
+ * The rerender is deferred one animation frame so hidden canvases are not resized while their
+ * cards are still `display:none`.
+ *
+ * @param {string} view
+ * @returns {void}
+ */
+function setActiveViewerTab(view) {
+  state.runtime.activeViewerTab = view;
+  syncResponsiveViewerUi();
+  window.requestAnimationFrame(() => {
+    rerenderPreviews();
+  });
 }
 
 /**
@@ -383,6 +565,7 @@ function getExportOrderedFrameIndex(exportIndex) {
  * @returns {void}
  */
 function drawCurrentGifPreview() {
+  updateMobilePreviewAspectRatio();
   drawPreviewFrame({ dom, state, getAdjustedFrameCanvas, readConfig });
   if (state.preview.rectifiedCanvas) {
     renderRectifiedPreview(state.preview.rectifiedCanvas);
@@ -538,6 +721,8 @@ function clearDerivedPreviews() {
 
   dom.crossRoiGrid.innerHTML = "";
   dom.crossRoiGrid.classList.add("is-empty");
+  dom.crossRoiViewport?.classList.add("is-empty");
+  syncMobileMarkerGridLayout();
   updateExportControlsAvailability(true);
   syncMarkerEditingUi();
   updatePreviewPlayPauseButton();
@@ -568,16 +753,25 @@ function clearAllPreviews() {
 /**
  * Bootstrap the application once the module is loaded.
  *
+ * This wires both the desktop layout and the narrower-screen mobile layout. The responsive
+ * reparenting of control groups happens later inside `syncResponsiveViewerUi()`.
+ *
  * @returns {void}
  */
 function init() {
   attachUi();
   initAccordionPanels();
   initializeTooltips();
+  dom.statusGroup?.addEventListener("toggle", () => {
+    if (state.runtime.mobileSingleViewerMode && dom.statusGroup) {
+      dom.statusGroup.open = true;
+    }
+  });
   void populateDemoSelect();
   syncPaperPresetUi();
   syncAlignmentMarkerUi();
   syncMp4ExportUi();
+  syncResponsiveViewerUi();
   syncMarkerEditingUi();
   updatePageGridDetectionHeading(false);
   updateRectifiedSheetHeading();
@@ -651,6 +845,7 @@ function attachUi() {
     syncOutputSizeFromHeightInput,
     syncPaperPresetUi,
     syncAlignmentMarkerUi,
+    setActiveViewerTab,
     updateSliderReadouts,
     scheduleProcess,
     revokeGifUrl,
@@ -977,7 +1172,10 @@ function attachResizeHandler() {
   window.addEventListener("resize", () => {
     window.clearTimeout(state.preview.resizeTimer);
     state.preview.resizeTimer = window.setTimeout(() => {
-      rerenderPreviews();
+      syncResponsiveViewerUi();
+      window.requestAnimationFrame(() => {
+        rerenderPreviews();
+      });
     }, 40);
   });
 }
@@ -1009,6 +1207,7 @@ async function loadImageSource(src, filename = "", mimeType = "image/jpeg", sett
     dom,
     state,
     setStatus,
+    setActiveViewerTab,
     collapseAllPanels,
     resetNonLayoutControls,
     revokeGifUrl,
@@ -1681,6 +1880,7 @@ function renderRectifiedPreview(rectifiedCanvas) {
   const displayCanvas = state.preview.showRectifiedDiagnostic
     ? getRectifiedConvolutionCanvas(diagnosticSource)
     : rectifiedCanvas;
+  updateMobileRectifiedAspectRatio(displayCanvas);
   renderCanvasFit(displayCanvas, dom.rectifiedCanvas);
   const targetCanvas = dom.rectifiedCanvas;
   const scale = Math.min(targetCanvas.width / displayCanvas.width, targetCanvas.height / displayCanvas.height);
@@ -2135,6 +2335,7 @@ function getAdjustedFrameCanvas(index) {
  * @returns {void}
  */
 function renderRawPreview() {
+  updateMobileRawAspectRatio();
   renderCanvasFit(state.source.canvas, dom.rawCanvas);
   dom.rawCanvas.parentElement?.classList.remove("is-empty");
   if (!state.source.rawPageContour || state.source.rawPageContour.length !== 4) return;
@@ -2178,6 +2379,7 @@ function renderCrossRoiGrid(alignmentInfo) {
     onApplyOverride: applyMarkerOverride,
     onRestoreOverride: restoreMarkerOverride,
   });
+  syncMobileMarkerGridLayout();
 }
 
 /**

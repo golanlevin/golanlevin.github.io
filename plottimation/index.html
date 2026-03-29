@@ -9,8 +9,8 @@
     <script src="js/gif.js"></script>
   </head>
   <body>
-    <div class="app-shell">
-      <aside class="control-panel">
+    <div id="appShell" class="app-shell">
+      <aside id="controlPanel" class="control-panel">
         <div class="panel-head">
           <div class="title-row">
             <h1 id="appTitle">Plottimation Tool</h1>
@@ -19,10 +19,9 @@
             Make an animated GIF from a photo of a frame-sheet.
           </p>
           <p id="appLedeSecondary" class="lede">
-            By @golanlevin • <a href="https://github.com/golanlevin/plottimation/blob/main/README.md" target="_blank" rel="noopener noreferrer">Documentation</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer">Demo Video</a>
+            v1.06, 3/2026 • <a href="https://github.com/golanlevin/plottimation/blob/main/README.md" target="_blank" rel="noopener noreferrer">Documentation</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer">Demo Video</a>
           </p>
-          <p id="appLedeTertiary" class="lede">v1.05, 3/2026 • <em>Note: not yet mobile-friendly</em></p>
-          <p id="appLedeQuaternary" class="lede"><a href="https://buymeacoffee.com/golanlevin" target="_blank" rel="noopener noreferrer">Buy Me A Coffee</a> :)</p>
+          <p id="appLedeTertiary" class="lede">By @golanlevin • <a href="https://buymeacoffee.com/golanlevin" target="_blank" rel="noopener noreferrer">Buy me a coffee</a> :)</p>
         </div>
 
         <section class="control-group">
@@ -35,16 +34,18 @@
             </div>
           </div>
           <label id="dropZone" class="drop-zone" for="fileInput">
-            <span class="drop-lead">Drop a photo or scan here,</span>
-            <span class="drop-lead">or click to choose a file.</span>
+            <span class="drop-lead desktop-only-inline">Drop a photo or scan here,</span>
+            <span class="drop-lead desktop-only-inline">or click to choose a file.</span>
+            <span class="drop-lead mobile-only-inline-block">Choose a photo to begin,</span>
+            <span class="drop-lead mobile-only-inline-block">or load a demo.</span>
             <span class="drop-note">Ensure that frames are<br />separated by small crosses.</span>
           </label>
           <input id="fileInput" type="file" accept="image/*,.txt,text/plain" />
         </section>
 
-        <details class="control-group collapsible">
+        <details id="layoutGroup" class="control-group collapsible">
           <summary id="layoutSummary">Layout</summary>
-          <div class="field-grid">
+          <div id="frameGridFields" class="field-grid">
             <label>
               <span>Frame Columns</span>
               <input id="frameCols" type="number" min="1" max="20" step="1" value="5" />
@@ -54,34 +55,36 @@
               <input id="frameRows" type="number" min="1" max="20" step="1" value="4" />
             </label>
           </div>
-          <fieldset id="paperOrientationField" class="radio-group">
-            <legend>Paper Orientation</legend>
-            <label class="toggle">
-              <input id="paperOrientationLandscape" name="paperOrientation" type="radio" value="landscape" checked />
-              <span>Landscape</span>
+          <div id="paperLayoutRow">
+            <fieldset id="paperOrientationField" class="radio-group">
+              <legend>Paper Orientation</legend>
+              <label class="toggle">
+                <input id="paperOrientationLandscape" name="paperOrientation" type="radio" value="landscape" checked />
+                <span>Landscape</span>
+              </label>
+              <label class="toggle">
+                <input id="paperOrientationPortrait" name="paperOrientation" type="radio" value="portrait" />
+                <span>Portrait</span>
+              </label>
+            </fieldset>
+            <label class="stack-label">
+              <span id="paperPresetLabel">Paper Size</span>
+              <select id="paperPreset">
+                <option value="letter" selected>Letter (11×8.5 in)</option>
+                <option value="legal">Legal (14×8.5 in)</option>
+                <option value="tabloid">Tabloid (17×11 in)</option>
+                <option value="12x9">12×9 in</option>
+                <option value="18x12">18×12 in</option>
+                <option value="24x18">24×18 in</option>
+                <option value="36x24">36×24 in</option>
+                <option value="a4">A4 (297×210 mm)</option>
+                <option value="a3">A3 (420×297 mm)</option>
+                <option value="a2">A2 (594×420 mm)</option>
+                <option value="a1">A1 (841×594 mm)</option>
+                <option value="custom">Custom</option>
+              </select>
             </label>
-            <label class="toggle">
-              <input id="paperOrientationPortrait" name="paperOrientation" type="radio" value="portrait" />
-              <span>Portrait</span>
-            </label>
-          </fieldset>
-          <label class="stack-label">
-            <span id="paperPresetLabel">Paper Size</span>
-            <select id="paperPreset">
-              <option value="letter" selected>Letter (11×8.5 in)</option>
-              <option value="legal">Legal (14×8.5 in)</option>
-              <option value="tabloid">Tabloid (17×11 in)</option>
-              <option value="12x9">12×9 in</option>
-              <option value="18x12">18×12 in</option>
-              <option value="24x18">24×18 in</option>
-              <option value="36x24">36×24 in</option>
-              <option value="a4">A4 (297×210 mm)</option>
-              <option value="a3">A3 (420×297 mm)</option>
-              <option value="a2">A2 (594×420 mm)</option>
-              <option value="a1">A1 (841×594 mm)</option>
-              <option value="custom">Custom</option>
-            </select>
-          </label>
+          </div>
           <div id="customPaperFields" class="field-grid" hidden>
             <label>
               <span>Sheet Width</span>
@@ -94,7 +97,7 @@
           </div>
         </details>
 
-        <details class="control-group collapsible">
+        <details id="pageGridDetectionGroup" class="control-group collapsible">
           <summary id="pageGridDetectionSummary">Page &amp; Grid Detection</summary>
           <label class="stack-label">
             <span>Thresholding Method</span>
@@ -109,22 +112,22 @@
               <span>Thresholding Offset <output id="thresholdOffsetValue">-20</output></span>
               <input id="thresholdOffset" type="range" min="-128" max="128" step="1" value="-20" />
             </label>
-            <label>
+            <label id="paperMarginRow">
               <span>Search Inset Margin <output id="paperMarginValue">80 px</output></span>
               <input id="paperMargin" type="range" min="0" max="150" step="1" value="80" />
             </label>
-            <label>
+            <label id="boundarySensitivityRow">
               <span>Boundary Threshold <output id="boundarySensitivityValue">8.0</output></span>
               <input id="boundarySensitivity" type="range" min="0" max="20" step="0.1" value="8.0" />
             </label>
-            <label>
+            <label id="boundaryPersistenceRow">
               <span>Boundary Persistence <output id="boundaryPersistenceValue">7</output></span>
               <input id="boundaryPersistence" type="range" min="1" max="15" step="1" value="7" />
             </label>
           </div>
         </details>
 
-        <details class="control-group collapsible">
+        <details id="frameAlignmentGroup" class="control-group collapsible">
           <summary id="frameAlignmentSummary">Automatic Frame Alignment</summary>
           <fieldset id="alignmentMarkerTypeField" class="radio-group">
             <legend>Alignment Marker Type:</legend>
@@ -143,7 +146,7 @@
               <input id="crossRoiScale" type="range" min="18" max="110" step="1" value="52" />
             </label>
           </div>
-          <label class="toggle">
+          <label id="useCrossAlignmentRow" class="toggle">
             <input id="useCrossAlignment" type="checkbox" checked />
             <span>Do subpixel alignment using markers</span>
           </label>
@@ -153,12 +156,12 @@
           </label>
         </details>
 
-        <details class="control-group collapsible">
+        <details id="appearanceGroup" class="control-group collapsible">
           <summary id="appearanceSummary">
             <span>Appearance</span>
             <button id="resetAppearanceButton" class="summary-button" type="button">Reset</button>
           </summary>
-          <div class="slider-stack">
+          <div id="appearanceSliderStack" class="slider-stack">
             <label>
               <span>Brightness <output id="brightnessValue">+0</output></span>
               <input id="brightness" type="range" min="-100" max="100" step="1" value="0" />
@@ -175,11 +178,11 @@
               <span>Color Temperature <output id="temperatureValue">+0</output></span>
               <input id="temperature" type="range" min="-100" max="100" step="1" value="0" />
             </label>
-            <label>
+            <label id="unsharpAmountRow">
               <span>Unsharp Mask Amount <output id="unsharpAmountValue">0.0</output></span>
               <input id="unsharpAmount" type="range" min="0" max="500" step="1" value="0" />
             </label>
-            <label>
+            <label id="unsharpRadiusRow">
               <span>Unsharp Mask Radius <output id="unsharpRadiusValue">1.0</output></span>
               <input id="unsharpRadius" type="range" min="0.1" max="100" step="0.1" value="1.0" />
             </label>
@@ -190,12 +193,12 @@
           </label>
         </details>
 
-        <details class="control-group collapsible">
+        <details id="cropGeometryGroup" class="control-group collapsible">
           <summary id="cropOutputSummary">
             <span>Crop &amp; Geometry</span>
             <button id="resetTrimButton" class="summary-button" type="button">Reset</button>
           </summary>
-          <div class="field-grid">
+          <div id="cropFieldGrid" class="field-grid">
             <label>
               <span>Crop Left</span>
               <input id="cropLeft" type="number" min="0" step="1" value="0" />
@@ -216,11 +219,11 @@
           <div class="stack-label crop-aspect-readout">
             <span>Aspect Ratio <output id="cropAspectRatioValue">--</output></span>
           </div>
-          <label class="toggle">
+          <label id="flipHorizontalRow" class="toggle">
             <input id="flipHorizontal" type="checkbox" />
             <span>Flip Horizontal</span>
           </label>
-          <label class="toggle">
+          <label id="flipVerticalRow" class="toggle">
             <input id="flipVertical" type="checkbox" />
             <span>Flip Vertical</span>
           </label>
@@ -230,7 +233,7 @@
           </label>
         </details>
 
-        <details class="control-group collapsible">
+        <details id="exportOptionsGroup" class="control-group collapsible">
           <summary id="gifExportSummary">
             <span>Export Options</span>
             <button id="resetExportButton" class="summary-button" type="button">Reset</button>
@@ -250,33 +253,33 @@
               <span>Frame Rate</span>
               <input id="fps" type="number" min="1" max="60" step="1" value="20" />
             </label>
-            <label>
+            <label id="loopCountRow">
               <span>Loops in Export</span>
               <input id="loopCount" type="number" min="1" max="10" step="1" value="1" />
             </label>
           </div>
-          <label class="toggle">
+          <label id="reverseOrderRow" class="toggle">
             <input id="reverseOrder" type="checkbox" />
             <span>Reverse Order</span>
           </label>
-          <label class="toggle">
+          <label id="pingPongRow" class="toggle">
             <input id="pingPong" type="checkbox" />
             <span>Ping-Pong (doubles file size)</span>
           </label>
-          <div class="slider-stack">
+          <div id="encodingQualityRow" class="slider-stack">
             <label>
               <span>Encoding Quality <output id="gifQualityValue">75</output></span>
               <input id="gifQuality" type="range" min="1" max="100" step="1" value="75" />
             </label>
           </div>
-          <label class="stack-label">
+          <label id="resamplingRow" class="stack-label">
             <span>Resampling</span>
             <select id="gifResampling">
               <option value="linear" selected>Linear</option>
               <option value="cubic">Cubic</option>
             </select>
           </label>
-          <label class="stack-label">
+          <label id="gifDitherRow" class="stack-label">
             <span>GIF Dithering</span>
             <select id="gifDither">
               <option value="off">Off</option>
@@ -285,7 +288,7 @@
               <option value="Atkinson">Retro (Atkinson)</option>
             </select>
           </label>
-          <label class="toggle">
+          <label id="gifGlobalPaletteRow" class="toggle">
             <input id="gifGlobalPalette" type="checkbox" />
             <span>Use Global Palette</span>
           </label>
@@ -294,7 +297,7 @@
           </div>
         </details>
 
-        <details class="control-group status-group independent-collapsible" open>
+        <details id="statusGroup" class="control-group status-group independent-collapsible" open>
           <summary id="statusSummary">
             <div class="status-headline">
               <h2 id="statusHeading">Status</h2>
@@ -306,8 +309,15 @@
         </details>
       </aside>
 
-      <main class="workspace">
-        <section class="viewer-card">
+      <main id="workspace" class="workspace">
+        <nav class="viewer-tabs" aria-label="Viewer panels">
+          <button id="viewerTabRaw" class="viewer-tab is-active" type="button" data-view="raw" aria-pressed="true">Raw</button>
+          <button id="viewerTabRectified" class="viewer-tab" type="button" data-view="rectified" aria-pressed="false">Rectified</button>
+          <button id="viewerTabMarkers" class="viewer-tab" type="button" data-view="markers" aria-pressed="false">Markers</button>
+          <button id="viewerTabPreview" class="viewer-tab" type="button" data-view="preview" aria-pressed="false">Preview</button>
+        </nav>
+
+        <section id="rawViewerCard" class="viewer-card" data-view="raw">
           <header>
             <div class="status-headline">
               <h2 id="rawPhotoHeading">1. Raw Photo <span id="rawPhotoNameWrap" class="header-note" hidden>(<a id="rawPhotoName" target="_blank" rel="noopener noreferrer"></a>)</span></h2>
@@ -319,7 +329,7 @@
           </div>
         </section>
 
-        <section class="viewer-card">
+        <section id="rectifiedViewerCard" class="viewer-card" data-view="rectified">
           <header>
             <h2 id="rectifiedSheetHeading">2. Rectified Sheet</h2>
           </header>
@@ -328,18 +338,20 @@
           </div>
         </section>
 
-        <section class="viewer-card">
+        <section id="markersViewerCard" class="viewer-card" data-view="markers">
           <header>
-            <h2 id="crossRegionsHeading">3. Frame Alignment Markers</h2>
-            <div class="header-actions">
+            <h2 id="crossRegionsHeading">3. Frame Alignment Markers <span id="mobileMarkersReadOnlyNote" class="header-note mobile-only-inline">(read-only)</span></h2>
+            <div id="markerHeaderActions" class="header-actions">
               <button id="toggleMarkerEditingButton" class="header-button" type="button" disabled>Enable Overrides</button>
               <button id="clearMarkerEditsButton" class="header-button" type="button" hidden>Clear Edits</button>
             </div>
           </header>
-          <div id="crossRoiGrid" class="cross-roi-grid is-empty"></div>
+          <div id="crossRoiViewport" class="cross-roi-viewport is-empty">
+            <div id="crossRoiGrid" class="cross-roi-grid is-empty"></div>
+          </div>
         </section>
 
-        <section class="viewer-card">
+        <section id="previewViewerCard" class="viewer-card" data-view="preview">
           <header>
             <h2 id="animationPreviewHeading">4. Preview</h2>
             <div class="header-actions">
@@ -355,6 +367,10 @@
           </div>
         </section>
       </main>
+
+      <div id="mobileControlStack" class="mobile-control-stack">
+        <p id="mobileControlNote" class="mobile-control-note">Note: use desktop version for advanced controls.</p>
+      </div>
     </div>
 
     <script type="module" src="js/app.js"></script>

@@ -182,14 +182,17 @@ export function renderCrossRoiGrid({
   onRestoreOverride,
 }) {
   const grid = dom.crossRoiGrid;
+  const viewport = dom.crossRoiViewport;
   grid.innerHTML = "";
   if (!alignmentInfo || !alignmentInfo.crossRoiTiles || alignmentInfo.crossRoiTiles.length === 0) {
     grid.classList.add("is-empty");
+    viewport?.classList.add("is-empty");
     grid.textContent = "";
     syncMarkerEditingUi();
     return;
   }
   grid.classList.remove("is-empty");
+  viewport?.classList.remove("is-empty");
   grid.style.gridTemplateColumns = `repeat(${alignmentInfo.cols + 1}, max-content)`;
   for (let row = 0; row <= alignmentInfo.rows; row++) {
     for (let col = 0; col <= alignmentInfo.cols; col++) {

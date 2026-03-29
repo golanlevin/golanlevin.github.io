@@ -10,7 +10,12 @@
 - a ZIP of PNG frames plus settings
 - a standalone settings text file
 
-It is currently optimized for desktop browsers and is explicitly not yet mobile-friendly.
+It now has a first-pass mobile layout in addition to the desktop interface:
+
+- desktop keeps the original sidebar + four simultaneous viewer panels
+- narrow screens switch to a single-column layout with one viewer tab visible at a time
+- mobile intentionally hides or simplifies several advanced controls
+- mobile marker inspection is currently read-only
 
 ## Active sheet format
 
@@ -107,6 +112,15 @@ can identify module boundaries more quickly.
   - frame ordering for reverse/ping-pong
   - RAF preview loop
   - current preview draw
+
+Responsive viewer behavior currently lives in `js/app.js` + `js/ui-controls.js`:
+- desktop keeps all four large viewer panels visible
+- narrow screens (`<= 960px`) switch to a single-column layout with viewer tabs
+- mobile shows one of `Raw / Rectified / Markers / Preview` at a time
+- mobile moves the collapsible control groups below the viewer and moves `Status` to the bottom
+- `Frame Alignment Markers` is currently read-only on mobile; override buttons are hidden there
+- mobile disables the Rectified Sheet convolution toggle
+- mobile marker tiles are scaled to fit width instead of requiring scrollbars
 
 - `js/load-controller.js`
   Source loading:
@@ -321,6 +335,11 @@ Clicking the panel toggles between:
 
 The convolution diagnostic canvas is cached so playback does not force repeated expensive recomputation.
 
+On mobile:
+
+- the Rectified Sheet tab auto-sizes to the current sheet aspect ratio
+- tapping does not toggle the convolution diagnostic view
+
 ## Preview behavior
 
 Live panel title:
@@ -339,6 +358,11 @@ Keyboard when paused:
 - `Space`: play/pause
 - `Left` / `Right`: previous / next frame
 - `Up` / `Down`: jump by one row of frames
+
+On mobile:
+
+- the Preview tab auto-sizes to the current output aspect ratio
+- the play/pause button is hidden
 
 ## Export options
 
@@ -452,6 +476,20 @@ Sidebar panels:
 - `Export Options`
 - `Status`
 
+Desktop viewer panels:
+
+- `1. Raw Photo`
+- `2. Rectified Sheet`
+- `3. Frame Alignment Markers`
+- `4. Preview`
+
+Mobile viewer tabs:
+
+- `Raw`
+- `Rectified`
+- `Markers`
+- `Preview`
+
 `Layout` details:
 
 - `Paper Orientation` switches preset labels and effective preset dimensions between landscape and portrait
@@ -462,6 +500,8 @@ Accordion behavior:
 
 - collapsible panels behave accordion-style
 - `Status` is independent and can stay open
+- on mobile, the accordion panels are moved below the viewer inside a shared light panel
+- on mobile, `Status` is moved to the bottom and forced open
 
 On new image load:
 
@@ -469,6 +509,7 @@ On new image load:
 - non-Layout settings reset to defaults
 - preview panels clear to striped empty state
 - `Frame Alignment Markers` also starts striped when empty, then switches to plain `rgb(243,244,246)` once marker tiles are present
+- on mobile, the active viewer tab is reset to `Raw`
 
 Failure cue:
 
@@ -483,29 +524,43 @@ Before first load:
 
 These cues disappear after the first successful image load.
 
-## Mobile-friendly roadmap
+## Current mobile pass
 
-The app is still desktop-first. The current recommended roadmap is:
+The current mobile interface includes:
 
-1. Responsive layout
-   - stack panels on narrow viewports
-   - reduce simultaneous visible complexity
-   - consider collapsing the right-side viewers into a single active panel on phones
-   - keep `Photo` and `Status` easy to reach without long scrolling
+- single-column layout
+- viewer tabs instead of four simultaneous large panels
+- auto-height `Raw`, `Rectified`, `Markers`, and `Preview` tabs
+- simplified `Photo` copy:
+  - `Choose a photo to begin,`
+  - `or load a demo.`
+- moved accordion controls below the viewer
+- moved `Status` panel to the bottom
+- a mobile-only note in the control stack:
+  - `Note: use desktop version for advanced controls.`
+- hidden advanced controls, including:
+  - marker override buttons
+  - play/pause
+  - ZIP export
+  - several advanced export controls
+  - several advanced page/grid detection controls
+  - some crop/alignment controls
 
-2. Touch-first interaction cleanup
+The app is still desktop-first. Recommended next steps are:
+
+1. Touch-first interaction cleanup
    - remove hover-only dependencies for essential actions
-   - enlarge touch targets
+   - enlarge touch targets and polish the tab styling/spacing on real devices
    - treat desktop drag/export affordances in `drag-assets.js` as optional desktop-only behavior
    - provide tap-accessible alternatives for any preview/debug interactions that currently assume mouse hover or drag
 
-3. Performance safeguards
+2. Performance safeguards
    - optional preview downscaling on mobile
    - better warnings for very large sources / outputs
    - consider more aggressive caps or defaults for GIF/MP4 export on smaller devices
    - keep the low-res detection path fast, and avoid forcing full-size recomputation from purely UI-side changes
 
-4. UI simplification
+3. UI simplification
    - consider `Basic` vs `Advanced` control grouping
    - preserve the current module split so alternate mobile wiring can live mostly in `ui-controls.js`, `load-controller.js`, and CSS
    - avoid putting mobile-specific branching back into the core CV/export code unless absolutely necessary
@@ -523,7 +578,7 @@ was done partly to make this future work easier.
 ## Likely future work
 
 - actual filled-dot marker support
-- mobile-friendly layout and interaction model
+- further mobile polish and touch-oriented simplification
 - possible additional export formats such as Animated WebP or APNG
 - further `app.js` decomposition if the orchestration layer grows much more
 - adaptive thresholding for uneven lighting

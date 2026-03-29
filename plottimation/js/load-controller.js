@@ -14,6 +14,7 @@
  */
 export function setBusyState(dom, state, busy) {
   state.runtime.busy = !!busy;
+  document.body.classList.toggle("busy-loading", !!busy);
   dom.statusBusy.hidden = !busy;
   dom.rawBusy.hidden = !busy;
 }
@@ -115,6 +116,7 @@ export async function handleFile(file, files = null, { state, loadImageSource, a
  *   dom: import("./dom-state.js").dom,
  *   state: import("./dom-state.js").state,
  *   setStatus: (text:string) => void,
+ *   setActiveViewerTab?: (view:string) => void,
  *   collapseAllPanels: () => void,
  *   resetNonLayoutControls: () => void,
  *   revokeGifUrl: () => void,
@@ -136,6 +138,7 @@ export async function loadImageSource({
   dom,
   state,
   setStatus,
+  setActiveViewerTab,
   collapseAllPanels,
   resetNonLayoutControls,
   revokeGifUrl,
@@ -153,6 +156,11 @@ export async function loadImageSource({
   }
   setBusyState(dom, state, true);
   setStatus("Loading image…");
+  // On mobile, a new image load should bring the user back to the Raw Photo tab before the
+  // previews are cleared and redrawn.
+  if (state.runtime.mobileSingleViewerMode) {
+    setActiveViewerTab?.("raw");
+  }
   collapseAllPanels();
   resetNonLayoutControls();
   revokeGifUrl();

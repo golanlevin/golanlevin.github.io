@@ -104,6 +104,7 @@ export function initializeTooltips({ tooltipText, state, dom, applyTooltipState 
  *   syncOutputSizeFromHeightInput: () => void,
  *   syncPaperPresetUi: () => void,
  *   syncAlignmentMarkerUi: () => void,
+ *   setActiveViewerTab: (view:string) => void,
  *   updateSliderReadouts: () => void,
  *   scheduleProcess: () => void,
  *   revokeGifUrl: () => void,
@@ -141,6 +142,7 @@ export function attachUi({
   syncOutputSizeFromHeightInput,
   syncPaperPresetUi,
   syncAlignmentMarkerUi,
+  setActiveViewerTab,
   updateSliderReadouts,
   scheduleProcess,
   revokeGifUrl,
@@ -210,7 +212,15 @@ export function attachUi({
     loadSelectedDemo(filename);
     dom.loadDemoSelect.value = "";
   });
+  [dom.viewerTabRaw, dom.viewerTabRectified, dom.viewerTabMarkers, dom.viewerTabPreview].forEach((button) => {
+    button?.addEventListener("click", () => {
+      setActiveViewerTab(button.dataset.view || "preview");
+    });
+  });
   dom.rectifiedCanvas.addEventListener("click", () => {
+    // Mobile keeps Rectified Sheet in plain read-only mode for now; the convolution debug toggle
+    // remains desktop-only.
+    if (state.runtime.mobileSingleViewerMode) return;
     state.preview.showRectifiedDiagnostic = !state.preview.showRectifiedDiagnostic;
     if (state.preview.rectifiedCanvas) {
       renderRectifiedPreview(state.preview.rectifiedCanvas);
