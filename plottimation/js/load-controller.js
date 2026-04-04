@@ -4,6 +4,7 @@
  * This module handles busy-state spinners, object-URL ownership, file-type discrimination,
  * and the staged process of loading a new source image into the app.
  */
+import { t } from "./i18n.js";
 /**
  * Toggle the small busy spinners used during image loading and processing.
  *
@@ -122,6 +123,7 @@ export async function handleFile(file, files = null, { state, loadImageSource, a
  *   revokeGifUrl: () => void,
  *   clearAllPreviews: () => void,
  *   renderRawPreview: () => void,
+ *   syncRawPhotoFilenameDisplay?: () => void,
  *   loadCompanionSettingsText: (src:string, filename:string, settingsFile?:File | null) => Promise<string>,
  *   applyLoadedSettingsText: (settingsText:string) => void,
  *   invalidateAppearanceCache: () => void,
@@ -144,6 +146,7 @@ export async function loadImageSource({
   revokeGifUrl,
   clearAllPreviews,
   renderRawPreview,
+  syncRawPhotoFilenameDisplay,
   loadCompanionSettingsText,
   applyLoadedSettingsText,
   invalidateAppearanceCache,
@@ -155,7 +158,7 @@ export async function loadImageSource({
     state.source.ownedObjectUrl = src;
   }
   setBusyState(dom, state, true);
-  setStatus("Loading image…");
+  setStatus(t("status.loadingImage"));
   // On mobile, a new image load should bring the user back to the Raw Photo tab before the
   // previews are cleared and redrawn.
   if (state.runtime.mobileSingleViewerMode) {
@@ -166,9 +169,11 @@ export async function loadImageSource({
   revokeGifUrl();
   state.source.dragUrl = "";
   state.source.mimeType = "";
+  dom.rawPhotoName.dataset.fullFilename = filename || "";
   dom.rawPhotoName.textContent = filename || "";
   dom.rawPhotoNameWrap.hidden = !filename;
   dom.rawPhotoName.removeAttribute("href");
+  syncRawPhotoFilenameDisplay?.();
   clearAllPreviews();
   // The UI resets to defaults first, then an optional sibling settings file is layered on top.
   const settingsText = await loadCompanionSettingsText(src, filename, settingsFile);
@@ -183,16 +188,18 @@ export async function loadImageSource({
       state.source.dragUrl = src;
       dom.rawPhotoNameWrap.hidden = !state.source.filename;
       dom.rawPhotoName.href = new URL(src, window.location.href).href;
+      dom.rawPhotoName.dataset.fullFilename = state.source.filename;
+      syncRawPhotoFilenameDisplay?.();
       state.source.rawPageContour = null;
       drawImageToCanvas(image, state.source.canvas);
       renderRawPreview();
-      const loadedWhat = settingsText ? "Loaded image and settings." : "Loaded image.";
+      const loadedWhat = settingsText ? t("status.loadedImageAndSettings") : t("status.loadedImage");
       if (settingsText) {
         // Apply the saved settings before CV runs so detection/extraction starts from the restored state.
         applyLoadedSettingsText(settingsText);
       }
       invalidateAppearanceCache();
-      setStatus(`${loadedWhat}\nAnalyzing page…`);
+      setStatus(`${loadedWhat}\n${t("status.analyzingPage")}`);
       await waitForNextPaint();
       await processCurrentImage();
     } finally {
@@ -206,11 +213,12 @@ export async function loadImageSource({
     state.source.dragUrl = "";
     state.source.mimeType = "";
     state.source.filename = "";
+    dom.rawPhotoName.dataset.fullFilename = "";
     dom.rawPhotoName.textContent = "";
     dom.rawPhotoNameWrap.hidden = true;
     dom.rawPhotoName.removeAttribute("href");
     releaseOwnedSourceUrl(state);
-    setStatus("Failed to load the selected image.");
+    setStatus(t("status.failedToLoadImage"));
   };
   image.src = src;
 }

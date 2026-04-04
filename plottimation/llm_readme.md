@@ -19,15 +19,24 @@ It now has a first-pass mobile layout in addition to the desktop interface:
 
 ## Active sheet format
 
-The active CV pipeline assumes an all-cross registration system:
+The active CV pipeline supports three alignment-marker modes:
 
-- the frame grid is defined by a complete `(cols + 1) x (rows + 1)` lattice of small dark `+` markers
-- the outer four grid corners are also `+` markers
-- the coarse frame-grid bounds are found from the cross-kernel convolution response on the rectified page
+- `Crosses`
+  - the frame grid is refined from a complete `(cols + 1) x (rows + 1)` lattice of dark `+` markers
+  - coarse frame-grid bounds are found from the cross-kernel convolution response on the rectified page
+- `Dots`
+  - the same nominal marker lattice is used, but each marker is a small filled dark dot
+  - each ROI is Otsu-thresholded locally, the largest blob is chosen, and the marker center is the
+    centroid of that blob’s white pixels
+  - dot ROIs can self-recenter a few times toward an off-center blob while staying bounded near the
+    nominal ROI location
+- `Auto`
+  - estimates whether the sheet uses crosses or dots by measuring median blob circularity across the
+    nominal marker ROIs
+  - current threshold: `medianCircularity >= 0.3` resolves to `Dots`
 
-There is UI groundwork for filled-dot markers (`Alignment Marker Type`), but `Dots` is disabled and not yet supported in the active pipeline.
-
-Legacy circle-based code still exists in `js/pipeline.js` as `_old` helpers, but it is preserved only for reference and is not the current detector path.
+Legacy `_old` helpers still exist in `js/pipeline.js` for reference, but the active detector path is
+the cross/dot/auto system above.
 
 ## Main directories
 
@@ -62,9 +71,12 @@ can identify module boundaries more quickly.
   Main orchestrator. Owns:
   - startup
   - support probing
+  - locale bootstrap
   - config reading
+  - responsive desktop/mobile shell state
   - raw/rectified preview rendering
   - marker manual overrides
+  - lightweight page-boundary preview while dragging `Thresholding Offset`
   - lazy frame and appearance cache glue
   - coordination across the narrower controller modules
 
@@ -94,6 +106,7 @@ can identify module boundaries more quickly.
   - Status panel text
   - page-boundary warning state
   - `Page & Grid Detection` warning heading
+  - `Raw Photo` warning heading state
   - `Rectified Sheet` / `Convolution Debug View` heading text
 
 - `js/export-controller.js`
@@ -109,9 +122,17 @@ can identify module boundaries more quickly.
   Preview-only behavior:
   - heading text sync
   - play/pause button state
-  - frame ordering for reverse/ping-pong
+  - frame ordering for reverse / boustrophedon / ping-pong playback
   - RAF preview loop
   - current preview draw
+
+- `js/i18n.js`
+  Locale dictionaries + helpers:
+  - query-string locale override (`?lang=...`)
+  - browser-language auto-detection
+  - fallback to English for missing keys
+  - translation of `data-i18n*` markup
+  - localized tooltip lookup table
 
 Responsive viewer behavior currently lives in `js/app.js` + `js/ui-controls.js`:
 - desktop keeps all four large viewer panels visible
@@ -121,6 +142,8 @@ Responsive viewer behavior currently lives in `js/app.js` + `js/ui-controls.js`:
 - `Frame Alignment Markers` is currently read-only on mobile; override buttons are hidden there
 - mobile disables the Rectified Sheet convolution toggle
 - mobile marker tiles are scaled to fit width instead of requiring scrollbars
+- mobile control sections now use a horizontal tab strip (`Layout / Page / Markers / Filters / Crop / Export`)
+  instead of stacked accordions
 
 - `js/load-controller.js`
   Source loading:
@@ -170,6 +193,10 @@ Defined in `js/dom-state.js`.
   - `tooltipsEnabled`
   - `busy`
   - `markerEditingEnabled`
+  - `mobileSingleViewerMode`
+  - `activeViewerTab`
+  - `activeMobileControlTab`
+  - `markerBlobDebugVisible`
   - `outputWidthPx`
   - `outputHeightPx`
   - `outputSizeAuto`
@@ -185,6 +212,8 @@ Defined in `js/dom-state.js`.
   - `ownedObjectUrl`
   - `canvas`
   - `rawPageContour`
+  - `cvMat`
+  - `grayMat`
 
 - `state.geometry`
   - `alignmentInfo`
@@ -228,10 +257,18 @@ Steps:
    - `Offset Peak`, or
    - `Otsu`
    - `Triangle`
+   - `Adaptive`
 3. detect largest bright quad
 4. order corners
 
 The detected page quad is shown in the `Raw Photo` panel as a green outline.
+
+Notes:
+- `Adaptive` is not OpenCV’s stock `adaptiveThreshold(...)`. It estimates a slow illumination field
+  by heavily downsampling, blurring, then upsampling a grayscale copy, and compares the original
+  grayscale image against that pixelwise threshold field.
+- while dragging `Thresholding Offset`, the app now runs only this lighter threshold + largest-quad
+  pass and updates the `Raw Photo` overlay/warning state live
 
 ### 2. Page warps
 
@@ -258,6 +295,51 @@ Active method:
 3. convolve with the unnormalized 25x25 `crossKernel`
 4. clamp convolution to `[0,255]`
 5. perform 1D boundary sweeps from each side inside the `Search Inset Margin`
+
+### 4. Marker localization
+
+- `Crosses`
+  - each ROI is Otsu-thresholded locally
+  - center is estimated from weighted horizontal/vertical stroke profiles
+  - optional convolution-based cross localization still exists behind `Detect crosses with convolution`
+- `Dots`
+  - each ROI is Otsu-thresholded locally with inversion
+  - contours are traced, the largest blob is chosen, and the centroid is computed from blob pixels
+  - if the centroid is far from ROI center, the ROI recenters toward it and retries
+- `Auto`
+  - measures median blob circularity first, reports it in Status, then resolves to `Crosses` or `Dots`
+
+### 5. Frame extraction + preview
+
+- extraction uses the resolved marker lookup, including dot centroids and manual overrides
+- the `Rectified Sheet` panel now shows the extraction-space rectified canvas directly, so the green
+  animated frame quad can be drawn in the same coordinate system without remapping distortions
+- paused arrow-key stepping ignores reverse / boustrophedon / ping-pong ordering and instead inspects
+  the physical frame grid directly
+
+## Internationalization
+
+- locales currently implemented:
+  - `en`
+  - `fr`
+  - `es`
+  - `it`
+  - `ja`
+  - `zh`
+  - `zh-hant`
+  - `ko`
+  - `pt`
+  - `de`
+- locale selection order:
+  1. query-string override, e.g. `?lang=fr`
+  2. browser language (`navigator.languages` / `navigator.language`)
+  3. fallback to English
+- locale aliases currently handled:
+  - `zh-TW`, `zh-HK`, `zh-MO` -> `zh-hant`
+  - `pt-BR`, `pt-PT` -> `pt`
+- both static HTML strings and dynamic runtime strings now route through `js/i18n.js`
+- tooltip text is also localized
+- missing keys fall back to English rather than breaking the UI
 6. use `Boundary Threshold` + `Boundary Persistence` to detect first sustained rise
 
 There is no later peak-refinement step for the outer boundary.

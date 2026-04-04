@@ -4,6 +4,7 @@
  * This module performs page detection, page warping, coarse grid detection, marker localization,
  * and frame extraction using OpenCV.
  */
+import { t } from "./i18n.js";
 const IGNORE_PX = 8;
 const DOT_DIM_PCT_COLS = 0.03;
 const DOT_DIM_PCT_ROWS = 0.02;
@@ -106,6 +107,33 @@ export function buildCrossConvolutionCanvas(sourceCanvas, targetCanvas) {
 }
 
 /**
+ * Recompute only the page threshold and largest page quadrilateral for lightweight Raw-panel
+ * feedback while the user drags the threshold offset slider.
+ *
+ * @param {cv.Mat} grayImg
+ * @param {number} sourceWidth
+ * @param {number} sourceHeight
+ * @param {string} thresholdMethod
+ * @param {number} thresholdOffset
+ * @returns {{threshVal:number, pageQuadPoints:{x:number,y:number}[] | null}}
+ */
+export function previewPageBoundary(grayImg, sourceWidth, sourceHeight, thresholdMethod, thresholdOffset) {
+  const thresh = new cv.Mat();
+  try {
+    const threshVal = applyPaperThreshold(grayImg, thresh, thresholdMethod, thresholdOffset);
+    let pageQuadPoints = null;
+    try {
+      pageQuadPoints = findLargestQuad(thresh, sourceWidth * sourceHeight).points;
+    } catch {
+      pageQuadPoints = null;
+    }
+    return { threshVal, pageQuadPoints };
+  } finally {
+    thresh.delete();
+  }
+}
+
+/**
  * Convert a float convolution image into an 8-bit display/sweep image by clamping negative values to 0
  * and positive values to 255.
  *
@@ -154,8 +182,7 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
   try {
     // Segment the bright paper sheet from the darker surroundings.
     cv.cvtColor(visionSrc, grayImg, cv.COLOR_RGBA2GRAY);
-    const threshVal = estimatePaperThreshold(grayImg, config.thresholdMethod, config.thresholdOffset);
-    cv.threshold(grayImg, thresh, threshVal, 255, cv.THRESH_BINARY);
+    const threshVal = applyPaperThreshold(grayImg, thresh, config.thresholdMethod, config.thresholdOffset);
     throwIfAborted(requestId);
 
     // Detect the page quadrilateral in raw-photo coordinates.
@@ -198,7 +225,7 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
         );
     throwIfAborted(requestId);
 
-    // Resolve the cross lattice if enabled; otherwise keep the nominal grid and unrefined ROI views.
+    // Resolve the marker lattice if enabled; otherwise keep the nominal grid and unrefined ROI views.
     const alignmentInfo = config.useCrossAlignment
       ? buildCrossAlignmentData(
           rectifiedWarp.visionMat,
@@ -207,6 +234,7 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
           config.crossRoiScale,
           rectifiedWarp.gridBounds,
           {
+            markerType: config.alignmentMarkerType,
             includeCornerCrosses: rectifiedWarp.includeCornerCrosses,
             detectCrossesWithConvolution: config.detectCrossesWithConvolution,
           }
@@ -218,7 +246,10 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
           "disabled",
           rectifiedWarp.gridBounds,
           config.crossRoiScale,
-          { includeCornerCrosses: rectifiedWarp.includeCornerCrosses }
+          {
+            markerType: config.alignmentMarkerType,
+            includeCornerCrosses: rectifiedWarp.includeCornerCrosses,
+          }
         );
     // In the all-cross format, the coarse quad is only approximate; use the detected corner crosses
     // to tighten the working grid bounds before frame extraction.
@@ -381,6 +412,7 @@ function buildFrameGridRectification_fromCrosses(visionSrc, styledSrc, pageWarpH
  * - `offset-peak`: histogram peak plus offset
  * - `otsu`: Otsu automatic threshold plus offset
  * - `triangle`: Triangle automatic threshold plus offset
+ * - `adaptive`: heavily blurred local threshold field plus offset
  *
  * @param {cv.Mat} grayImg
  * @param {string} [method="offset-peak"]
@@ -419,6 +451,58 @@ function estimatePaperThreshold(grayImg, method = "offset-peak", offset = -20) {
 }
 
 /**
+ * Fill a binary page mask using either a global threshold or a slowly varying adaptive threshold.
+ *
+ * Adaptive mode estimates the illumination field at low resolution, blurs it heavily, upscales it
+ * back to full size, offsets it by the user threshold bias, then compares the full-resolution
+ * grayscale page against that per-pixel threshold image.
+ *
+ * @param {cv.Mat} grayImg
+ * @param {cv.Mat} dst
+ * @param {string} [method="offset-peak"]
+ * @param {number} [offset=-20]
+ * @returns {number}
+ */
+function applyPaperThreshold(grayImg, dst, method = "offset-peak", offset = -20) {
+  if (method !== "adaptive") {
+    const threshVal = estimatePaperThreshold(grayImg, method, offset);
+    cv.threshold(grayImg, dst, threshVal, 255, cv.THRESH_BINARY);
+    return threshVal;
+  }
+
+  const reduced = new cv.Mat();
+  const reducedBlurred = new cv.Mat();
+  const thresholdField = new cv.Mat();
+  const thresholdFieldShifted = new cv.Mat();
+  const minSide = 24;
+  const reducedWidth = Math.max(minSide, Math.round(grayImg.cols / 32));
+  const reducedHeight = Math.max(minSide, Math.round(grayImg.rows / 32));
+  const blurKernelWidth = Math.max(3, (Math.floor(reducedWidth / 6) * 2) + 1);
+  const blurKernelHeight = Math.max(3, (Math.floor(reducedHeight / 6) * 2) + 1);
+
+  try {
+    cv.resize(grayImg, reduced, new cv.Size(reducedWidth, reducedHeight), 0, 0, cv.INTER_AREA);
+    cv.GaussianBlur(
+      reduced,
+      reducedBlurred,
+      new cv.Size(blurKernelWidth, blurKernelHeight),
+      0,
+      0,
+      cv.BORDER_REPLICATE
+    );
+    cv.resize(reducedBlurred, thresholdField, new cv.Size(grayImg.cols, grayImg.rows), 0, 0, cv.INTER_LINEAR);
+    thresholdField.convertTo(thresholdFieldShifted, thresholdField.type(), 1, offset);
+    cv.compare(grayImg, thresholdFieldShifted, dst, cv.CMP_GT);
+    return cv.mean(thresholdFieldShifted)[0];
+  } finally {
+    reduced.delete();
+    reducedBlurred.delete();
+    thresholdField.delete();
+    thresholdFieldShifted.delete();
+  }
+}
+
+/**
  * Find the largest quadrilateral contour in a binary paper mask.
  *
  * @param {cv.Mat} binaryMat
@@ -451,6 +535,9 @@ function findLargestQuad(binaryMat, totalArea) {
     cv.approxPolyDP(largest, approx, 0.02 * peri, true);
     if (approx.rows !== 4) {
       throw new Error(`Expected 4 page corners, got ${approx.rows}.`);
+    }
+    if (!cv.isContourConvex(approx)) {
+      throw new Error("Expected a convex page quadrilateral.");
     }
 
     const points = [];
@@ -1326,10 +1413,12 @@ function findFirstDipFromEdge(profile, edge, options = {}) {
  * @returns {object}
  */
 function buildFallbackFrameExtractionData(rectifiedMat, cols, rows, reason = "fallback", gridBounds = null, detectedInfo = null, options = {}) {
+  const markerType = options.markerType || "crosses";
   const includeCornerCrosses = !!options.includeCornerCrosses;
+  const includeCornerMarkers = includeCornerCrosses || (markerType === "circles");
   const bounds = gridBounds || { left: 0, top: 0, width: rectifiedMat.cols, height: rectifiedMat.rows };
-  const expectedCrosses = getExpectedCrossLattice(bounds, cols, rows, includeCornerCrosses);
-  const anchorDots = includeCornerCrosses ? [] : getRectifiedCornerAnchors_old(bounds, cols, rows);
+  const expectedCrosses = getExpectedCrossLattice(bounds, cols, rows, includeCornerMarkers);
+  const anchorDots = includeCornerMarkers ? [] : getRectifiedCornerAnchors_old(bounds, cols, rows);
   const markerLookup = buildMarkerLookup(expectedCrosses, [], anchorDots, cols, rows);
   return {
     ok: false,
@@ -1365,18 +1454,27 @@ function buildFallbackFrameExtractionData(rectifiedMat, cols, rows, reason = "fa
  * @returns {object}
  */
 function buildUnrefinedCrossRegionInfo(rectifiedMat, cols, rows, reason = "disabled", gridBounds = null, crossRoiScale = 0.75, options = {}) {
+  const requestedMarkerType = options.markerType || "crosses";
   const includeCornerCrosses = !!options.includeCornerCrosses;
   const bounds = gridBounds || { left: 0, top: 0, width: rectifiedMat.cols, height: rectifiedMat.rows };
-  const expectedCrosses = getExpectedCrossLattice(bounds, cols, rows, includeCornerCrosses);
-  const anchorDots = includeCornerCrosses ? [] : getRectifiedCornerAnchors_old(bounds, cols, rows);
+  const markerTypeAnalysis = (requestedMarkerType === "auto")
+    ? classifyAlignmentMarkerType(rectifiedMat, cols, rows, crossRoiScale, bounds, includeCornerCrosses)
+    : null;
+  const markerType = markerTypeAnalysis?.resolvedMarkerType || requestedMarkerType;
+  const includeCornerMarkers = includeCornerCrosses || (markerType === "circles");
+  const expectedCrosses = getExpectedCrossLattice(bounds, cols, rows, includeCornerMarkers);
+  const anchorDots = includeCornerMarkers ? [] : getRectifiedCornerAnchors_old(bounds, cols, rows);
   const markerLookup = buildMarkerLookup(expectedCrosses, [], anchorDots, cols, rows);
   const crossRoiTiles = expectedCrosses.map((expected) =>
-    buildUnrefinedCrossRegionTile(rectifiedMat, expected, rectifiedMat.cols, rectifiedMat.rows, cols, rows, crossRoiScale)
+    buildUnrefinedCrossRegionTile(rectifiedMat, expected, rectifiedMat.cols, rectifiedMat.rows, cols, rows, crossRoiScale, markerType)
   );
   return {
     ok: false,
     reason,
     includeCornerCrosses,
+    requestedMarkerType,
+    resolvedMarkerType: markerType,
+    markerTypeMedianCircularity: markerTypeAnalysis?.medianCircularity ?? null,
     rectifiedWidth: rectifiedMat.cols,
     rectifiedHeight: rectifiedMat.rows,
     gridBounds: bounds,
@@ -1406,14 +1504,20 @@ function buildUnrefinedCrossRegionInfo(rectifiedMat, cols, rows, reason = "disab
  * @returns {object}
  */
 function buildCrossAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 0.75, gridBounds = null, options = {}) {
+  const requestedMarkerType = options.markerType || "crosses";
   const includeCornerCrosses = !!options.includeCornerCrosses;
   const detectWithConvolution = !!options.detectCrossesWithConvolution;
   const bounds = gridBounds || { left: 0, top: 0, width: rectifiedMat.cols, height: rectifiedMat.rows };
-  const expectedCrosses = getExpectedCrossLattice(bounds, cols, rows, includeCornerCrosses);
+  const markerTypeAnalysis = (requestedMarkerType === "auto")
+    ? classifyAlignmentMarkerType(rectifiedMat, cols, rows, crossRoiScale, bounds, includeCornerCrosses)
+    : null;
+  const markerType = markerTypeAnalysis?.resolvedMarkerType || requestedMarkerType;
+  const includeCornerMarkers = includeCornerCrosses || (markerType === "circles");
+  const expectedCrosses = getExpectedCrossLattice(bounds, cols, rows, includeCornerMarkers);
   if (expectedCrosses.length === 0) {
-    return buildFallbackFrameExtractionData(rectifiedMat, cols, rows, "no crosses expected", bounds, null, { includeCornerCrosses });
+    return buildFallbackFrameExtractionData(rectifiedMat, cols, rows, "no markers expected", bounds, null, { markerType, includeCornerCrosses });
   }
-  const anchorDots = includeCornerCrosses ? [] : getRectifiedCornerAnchors_old(bounds, cols, rows);
+  const anchorDots = includeCornerMarkers ? [] : getRectifiedCornerAnchors_old(bounds, cols, rows);
   const grayMat = toLightnessGray(rectifiedMat);
   const detectedCrosses = [];
   const rejectedCrosses = [];
@@ -1422,16 +1526,26 @@ function buildCrossAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 0.75,
   try {
     // Inspect each expected interior lattice point independently so weak detections can be rejected one by one.
     for (const expected of expectedCrosses) {
-      const detection = detectCrossAtExpectedPosition(
-        grayMat,
-        expected,
-        rectifiedMat.cols,
-        rectifiedMat.rows,
-        cols,
-        rows,
-        crossRoiScale,
-        { detectWithConvolution }
-      );
+      const detection = (markerType === "circles")
+        ? detectDotAtExpectedPosition(
+            grayMat,
+            expected,
+            rectifiedMat.cols,
+            rectifiedMat.rows,
+            cols,
+            rows,
+            crossRoiScale
+          )
+        : detectCrossAtExpectedPosition(
+            grayMat,
+            expected,
+            rectifiedMat.cols,
+            rectifiedMat.rows,
+            cols,
+            rows,
+            crossRoiScale,
+            { detectWithConvolution }
+          );
       crossRoiTiles.push(detection);
       if (detection.accepted) detectedCrosses.push(detection);
       else rejectedCrosses.push(detection);
@@ -1445,11 +1559,20 @@ function buildCrossAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 0.75,
     Math.ceil(expectedCrosses.length * MIN_CROSS_DETECTION_RATIO)
   );
   const ok = detectedCrosses.length >= minRequired;
-  const markerLookup = buildMarkerLookup(expectedCrosses, detectedCrosses, anchorDots, cols, rows);
+  const markerLookupDetections = (markerType === "circles")
+    ? crossRoiTiles.filter((tile) => tile.hasCentroid)
+    : detectedCrosses;
+  const markerLookup = buildMarkerLookup(expectedCrosses, markerLookupDetections, anchorDots, cols, rows);
   return {
     ok,
-    reason: ok ? "ok" : `too few confident detections (${detectedCrosses.length}/${expectedCrosses.length})`,
+    reason: ok ? "ok" : t("status.markerFallbackTooFewConfidentDetections", {
+      count: detectedCrosses.length,
+      expected: expectedCrosses.length,
+    }),
     includeCornerCrosses,
+    requestedMarkerType,
+    resolvedMarkerType: markerType,
+    markerTypeMedianCircularity: markerTypeAnalysis?.medianCircularity ?? null,
     rectifiedWidth: rectifiedMat.cols,
     rectifiedHeight: rectifiedMat.rows,
     gridBounds: bounds,
@@ -1503,6 +1626,118 @@ function getRectifiedCornerAnchors_old(bounds, cols, rows) {
     { kind: "dot", col: cols, row: rows, x: bounds.left + bounds.width, y: bounds.top + bounds.height, detectedX: bounds.left + bounds.width, detectedY: bounds.top + bounds.height, dx: 0, dy: 0, confidence: 10, accepted: true },
     { kind: "dot", col: 0, row: rows, x: bounds.left, y: bounds.top + bounds.height, detectedX: bounds.left, detectedY: bounds.top + bounds.height, dx: 0, dy: 0, confidence: 10, accepted: true },
   ];
+}
+
+/**
+ * Estimate whether marker ROIs contain filled dots or crosses by thresholding each nominal ROI,
+ * measuring the circularity of the largest blob, and taking the median across the grid.
+ *
+ * @param {cv.Mat} rectifiedMat
+ * @param {number} cols
+ * @param {number} rows
+ * @param {number} crossRoiScale
+ * @param {{left:number, top:number, width:number, height:number}} bounds
+ * @param {boolean} includeCornerCrosses
+ * @returns {{resolvedMarkerType:"crosses"|"circles", medianCircularity:number | null, sampleCount:number}}
+ */
+function classifyAlignmentMarkerType(rectifiedMat, cols, rows, crossRoiScale, bounds, includeCornerCrosses) {
+  const grayMat = toLightnessGray(rectifiedMat);
+  const circularities = [];
+  const expectedMarkers = getExpectedCrossLattice(bounds, cols, rows, includeCornerCrosses);
+
+  try {
+    for (const expected of expectedMarkers) {
+      const circularity = measureLargestBlobCircularityAtExpectedPosition(
+        grayMat,
+        expected,
+        rectifiedMat.cols,
+        rectifiedMat.rows,
+        cols,
+        rows,
+        crossRoiScale
+      );
+      if (Number.isFinite(circularity)) {
+        circularities.push(circularity);
+      }
+    }
+  } finally {
+    grayMat.delete();
+  }
+
+  const medianCircularity = computeMedian(circularities);
+  const resolvedMarkerType = (medianCircularity !== null && medianCircularity >= 0.3) ? "circles" : "crosses";
+  return {
+    resolvedMarkerType,
+    medianCircularity,
+    sampleCount: circularities.length,
+  };
+}
+
+/**
+ * Measure the circularity of the largest Otsu-thresholded blob inside one nominal marker ROI.
+ *
+ * @param {cv.Mat} grayMat
+ * @param {{col:number, row:number, x:number, y:number}} expected
+ * @param {number} sheetW
+ * @param {number} sheetH
+ * @param {number} cols
+ * @param {number} rows
+ * @param {number} [crossRoiScale=0.75]
+ * @returns {number | null}
+ */
+function measureLargestBlobCircularityAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, rows, crossRoiScale = 0.75) {
+  const cellW = sheetW / cols;
+  const cellH = sheetH / rows;
+  const roiHalf = Math.max(10, Math.round(Math.min(cellW, cellH) * 0.22 * crossRoiScale));
+  const side = Math.max(1, roiHalf * 2 + 1);
+  const roi = extractCenteredSquareRoi(grayMat, expected.x, expected.y, side);
+  const mask = new cv.Mat();
+  const contours = new cv.MatVector();
+  const hierarchy = new cv.Mat();
+
+  try {
+    cv.threshold(roi, mask, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
+    cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+    if (contours.size() === 0) return null;
+
+    let bestContour = null;
+    let bestArea = -Infinity;
+    for (let i = 0; i < contours.size(); i++) {
+      const contour = contours.get(i);
+      const area = cv.contourArea(contour);
+      if (area > bestArea) {
+        bestContour?.delete();
+        bestContour = contour;
+        bestArea = area;
+      } else {
+        contour.delete();
+      }
+    }
+    if (!bestContour || bestArea <= 0) return null;
+    const perimeter = cv.arcLength(bestContour, true);
+    bestContour.delete();
+    if (perimeter <= 0) return null;
+    return (4 * Math.PI * bestArea) / (perimeter * perimeter);
+  } finally {
+    roi.delete();
+    mask.delete();
+    contours.delete();
+    hierarchy.delete();
+  }
+}
+
+/**
+ * Compute the median of a numeric sample set.
+ *
+ * @param {number[]} values
+ * @returns {number | null}
+ */
+function computeMedian(values) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) return sorted[mid];
+  return (sorted[mid - 1] + sorted[mid]) * 0.5;
 }
 
 /**
@@ -1607,6 +1842,8 @@ function detectCrossAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, 
     return {
       ...expected,
       kind: "cross",
+      roiCenterX: expected.x,
+      roiCenterY: expected.y,
       detectedX,
       detectedY,
       dx,
@@ -1631,6 +1868,167 @@ function detectCrossAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, 
 }
 
 /**
+ * Detect one filled dot near its expected lattice position and centroid the largest thresholded blob.
+ *
+ * The centroid is computed from the white pixels of the blob mask itself, not from contour moments.
+ * To tolerate badly centered dots, the ROI may recenter itself a few times toward that centroid
+ * while staying bounded near the original nominal ROI center.
+ *
+ * @param {cv.Mat} grayMat
+ * @param {{col:number, row:number, x:number, y:number}} expected
+ * @param {number} sheetW
+ * @param {number} sheetH
+ * @param {number} cols
+ * @param {number} rows
+ * @param {number} [crossRoiScale=0.75]
+ * @returns {object}
+ */
+function detectDotAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, rows, crossRoiScale = 0.75) {
+  const cellW = sheetW / cols;
+  const cellH = sheetH / rows;
+  const roiHalf = Math.max(10, Math.round(Math.min(cellW, cellH) * 0.22 * crossRoiScale));
+  const side = Math.max(1, roiHalf * 2 + 1);
+  const mask = new cv.Mat();
+  const blobMask = new cv.Mat();
+  const contours = new cv.MatVector();
+  const hierarchy = new cv.Mat();
+  const roiCenterX = (side - 1) * 0.5;
+  const roiCenterY = (side - 1) * 0.5;
+  const maxShiftX = side * 0.5;
+  const maxShiftY = side * 0.5;
+  const maxIterations = 3;
+  let roi = null;
+  let currentCenterX = expected.x;
+  let currentCenterY = expected.y;
+  let finalLocalX = roiCenterX;
+  let finalLocalY = roiCenterY;
+  let finalCount = 0;
+  let finalDarkFrac = 0;
+  let hasCentroid = false;
+
+  try {
+    for (let iteration = 0; iteration < maxIterations; iteration++) {
+      roi?.delete();
+      roi = extractCenteredSquareRoi(grayMat, currentCenterX, currentCenterY, side);
+      mask.setTo(new cv.Scalar(0));
+      blobMask.setTo(new cv.Scalar(0));
+
+      cv.threshold(roi, mask, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
+      cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+      if (contours.size() === 0) {
+        break;
+      }
+
+      const contourEntries = [];
+      for (let i = 0; i < contours.size(); i++) {
+        const contour = contours.get(i);
+        contourEntries.push({ index: i, area: cv.contourArea(contour) });
+        contour.delete();
+      }
+      contourEntries.sort((a, b) => b.area - a.area);
+      const bestIndex = contourEntries[0].index;
+
+      blobMask.create(roi.rows, roi.cols, cv.CV_8UC1);
+      blobMask.setTo(new cv.Scalar(0));
+      cv.drawContours(blobMask, contours, bestIndex, new cv.Scalar(255), cv.FILLED);
+
+      let sumX = 0;
+      let sumY = 0;
+      let count = 0;
+      const blobData = blobMask.data;
+      for (let y = 0; y < roi.rows; y++) {
+        const rowOffset = y * roi.cols;
+        for (let x = 0; x < roi.cols; x++) {
+          if (blobData[rowOffset + x] === 255) {
+            sumX += x;
+            sumY += y;
+            count++;
+          }
+        }
+      }
+
+      if (count <= 0) {
+        break;
+      }
+
+      hasCentroid = true;
+      finalCount = count;
+      finalLocalX = sumX / count;
+      finalLocalY = sumY / count;
+      finalDarkFrac = count / Math.max(1, roi.cols * roi.rows);
+
+      const fracX = finalLocalX / Math.max(1, roi.cols - 1);
+      const fracY = finalLocalY / Math.max(1, roi.rows - 1);
+      // Retry with a shifted ROI when the blob is still noticeably off-center. This keeps dot mode
+      // usable even when the nominal lattice is slightly off or the ROI clips one side of the dot.
+      const needsRecentering =
+        fracX < 0.47 || fracX > 0.53 ||
+        fracY < 0.47 || fracY > 0.53;
+      if (!needsRecentering || iteration === (maxIterations - 1)) {
+        break;
+      }
+
+      const desiredShiftX = (finalLocalX - roiCenterX) * 0.75;
+      const desiredShiftY = (finalLocalY - roiCenterY) * 0.75;
+      const nextOffsetX = Math.max(-maxShiftX, Math.min(maxShiftX, (currentCenterX - expected.x) + desiredShiftX));
+      const nextOffsetY = Math.max(-maxShiftY, Math.min(maxShiftY, (currentCenterY - expected.y) + desiredShiftY));
+      const nextCenterX = expected.x + nextOffsetX;
+      const nextCenterY = expected.y + nextOffsetY;
+      const centerShift = Math.abs(nextCenterX - currentCenterX) + Math.abs(nextCenterY - currentCenterY);
+      currentCenterX = nextCenterX;
+      currentCenterY = nextCenterY;
+      if (centerShift < 0.01) {
+        break;
+      }
+    }
+    const localX = finalLocalX;
+    const localY = finalLocalY;
+    const detectedX = currentCenterX + (localX - roiCenterX);
+    const detectedY = currentCenterY + (localY - roiCenterY);
+    const dx = detectedX - expected.x;
+    const dy = detectedY - expected.y;
+    const darkFrac = finalDarkFrac;
+    // Dot mode now distinguishes between "has a usable centroid" and "counts as accepted" for the
+    // confidence summary. Extraction can use any valid centroid, while fallback counts only the
+    // stricter accepted subset.
+    const accepted =
+      hasCentroid &&
+      darkFrac >= 0.0005 &&
+      darkFrac <= 0.75;
+    const roiCanvas = roi ? buildCrossRoiCanvas(roi) : null;
+
+    return {
+      ...expected,
+      kind: "dot",
+      roiCenterX: currentCenterX,
+      roiCenterY: currentCenterY,
+      hasCentroid,
+      detectedX,
+      detectedY,
+      dx,
+      dy,
+      colContrast: NaN,
+      rowContrast: NaN,
+      darkFrac,
+      convolutionStrength: null,
+      confidence: darkFrac,
+      accepted,
+      localX,
+      localY,
+      canvas: roiCanvas || document.createElement("canvas"),
+      blobCanvas: buildCrossRoiCanvas(blobMask),
+    };
+  } finally {
+    roi?.delete();
+    mask.delete();
+    blobMask.delete();
+    contours.delete();
+    hierarchy.delete();
+  }
+}
+
+/**
  * Build a diagnostic tile for one nominal cross position without attempting refinement.
  *
  * @param {cv.Mat} grayMat
@@ -1642,7 +2040,7 @@ function detectCrossAtExpectedPosition(grayMat, expected, sheetW, sheetH, cols, 
  * @param {number} [crossRoiScale=0.75]
  * @returns {object}
  */
-function buildUnrefinedCrossRegionTile(grayMat, expected, sheetW, sheetH, cols, rows, crossRoiScale = 0.75) {
+function buildUnrefinedCrossRegionTile(grayMat, expected, sheetW, sheetH, cols, rows, crossRoiScale = 0.75, markerType = "crosses") {
   const cellW = sheetW / cols;
   const cellH = sheetH / rows;
   const roiHalf = Math.max(10, Math.round(Math.min(cellW, cellH) * 0.18 * crossRoiScale));
@@ -1654,6 +2052,9 @@ function buildUnrefinedCrossRegionTile(grayMat, expected, sheetW, sheetH, cols, 
     return {
       ...expected,
       kind: "unrefined",
+      markerType,
+      roiCenterX: expected.x,
+      roiCenterY: expected.y,
       detectedX: expected.x,
       detectedY: expected.y,
       dx: 0,
@@ -1929,22 +2330,37 @@ function buildStatusText({
   gridDetector,
 }) {
   const lines = [
-    "Raw photo: " + rawWidth + " × " + rawHeight,
-    "Paper threshold: " + threshVal + "/255",
-    "Largest contour area: " + (pageAreaPct * 100).toFixed(1) + "%",
-    "Detection warp: " + pageWarpWidth + " × " + pageWarpHeight,
-    "Extraction warp: " + highPageWarpWidth + " × " + highPageWarpHeight,
-    "Rectified sheet: " + rectifiedWidth + " × " + rectifiedHeight,
-    "Animation size: " + animationWidth + " × " + animationHeight,
-    "Frame source: " + sourceMode,
-    "Frames extracted: " + frameCount + "/" + expectedFrameCount,
+    t("status.rawPhoto", { width: rawWidth, height: rawHeight }),
+    t("status.paperThreshold", { value: Number(threshVal).toFixed(2) }),
+    t("status.largestContourArea", { value: (pageAreaPct * 100).toFixed(1) }),
+    t("status.detectionWarp", { width: pageWarpWidth, height: pageWarpHeight }),
+    t("status.extractionWarp", { width: highPageWarpWidth, height: highPageWarpHeight }),
+    t("status.rectifiedSheet", { width: rectifiedWidth, height: rectifiedHeight }),
+    t("status.animationSize", { width: animationWidth, height: animationHeight }),
+    t("status.frameSource", {
+      source: sourceMode === "rectified" ? t("status.sourceRectified") : t("status.sourceRawPhoto"),
+    }),
+    t("status.framesExtracted", { count: frameCount, expected: expectedFrameCount }),
   ];
 
   if (alignmentInfo) {
+    if (alignmentInfo.requestedMarkerType === "auto" && alignmentInfo.markerTypeMedianCircularity !== null) {
+      lines.push(
+        t("status.markerCircularity", {
+          value: alignmentInfo.markerTypeMedianCircularity.toFixed(3),
+          type: alignmentInfo.resolvedMarkerType === "circles"
+            ? t("status.markerTypeDots")
+            : t("status.markerTypeCrosses"),
+        })
+      );
+    }
     if (alignmentInfo.ok) {
-      lines.push("Cross alignment: " + alignmentInfo.detectedCount + "/" + alignmentInfo.expectedCount + " used");
+      lines.push(t("status.markerAlignment", {
+        count: alignmentInfo.detectedCount,
+        expected: alignmentInfo.expectedCount,
+      }));
     } else {
-      lines.push("Cross alignment fallback: " + alignmentInfo.reason);
+      lines.push(t("status.markerAlignmentFallback", { reason: alignmentInfo.reason }));
     }
   }
 

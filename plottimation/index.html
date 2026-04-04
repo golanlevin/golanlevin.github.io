@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Plottimation Web Tool</title>
+    <title data-i18n="app.documentTitle">Plottimation Web Tool</title>
     <link rel="stylesheet" href="style.css" />
     <script src="js/opencv.js"></script>
     <script src="js/gif.js"></script>
@@ -13,62 +13,64 @@
       <aside id="controlPanel" class="control-panel">
         <div class="panel-head">
           <div class="title-row">
-            <h1 id="appTitle">Plottimation Tool</h1>
+            <h1 id="appTitle" data-i18n="app.title">Plottimation Tool</h1>
           </div>
           <p id="appLedePrimary" class="lede">
-            Make an animated GIF from a photo of a frame-sheet.
+            <span data-i18n="app.ledePrimary">Make an animated GIF from a photo of a frame-sheet.</span>
           </p>
+          <p id="appLedeMobileNote" class="lede mobile-header-note" data-i18n="app.mobileNote">(Please use desktop version for advanced controls.)</p>
           <p id="appLedeSecondary" class="lede">
-            v1.06, 3/2026 • <a href="https://github.com/golanlevin/plottimation/blob/main/README.md" target="_blank" rel="noopener noreferrer">Documentation</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer">Demo Video</a>
+            <span data-i18n="app.version">v1.07, 3/2026</span> • <a href="https://github.com/golanlevin/plottimation/tree/main/plottimation_webtool/README.md" target="_blank" rel="noopener noreferrer" data-i18n="app.documentation">Documentation</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer" data-i18n="app.demoVideo">Demo Video</a>
           </p>
-          <p id="appLedeTertiary" class="lede">By @golanlevin • <a href="https://buymeacoffee.com/golanlevin" target="_blank" rel="noopener noreferrer">Buy me a coffee</a> :)</p>
+          <p id="appLedeTertiary" class="lede"><span data-i18n="app.bylinePrefix">By @golanlevin •</span> <a href="https://buymeacoffee.com/golanlevin" target="_blank" rel="noopener noreferrer" data-i18n="app.buyMeCoffee">Buy me a coffee</a> :)</p>
         </div>
 
         <section class="control-group">
           <div class="section-head">
-            <h2 id="photoHeading">Photo</h2>
+            <h2 id="photoHeading" data-i18n="photo.heading">Photo</h2>
             <div class="header-actions">
-              <select id="loadDemoSelect" class="header-select" aria-label="Load Demo">
-                <option value="">Load Demo</option>
+              <select id="loadDemoSelect" class="header-select" data-i18n-aria-label="aria.loadDemo" aria-label="Load Demo">
+                <option value="" data-i18n="photo.loadDemo">Load Demo</option>
               </select>
             </div>
           </div>
           <label id="dropZone" class="drop-zone" for="fileInput">
-            <span class="drop-lead desktop-only-inline">Drop a photo or scan here,</span>
-            <span class="drop-lead desktop-only-inline">or click to choose a file.</span>
-            <span class="drop-lead mobile-only-inline-block">Choose a photo to begin,</span>
-            <span class="drop-lead mobile-only-inline-block">or load a demo.</span>
-            <span class="drop-note">Ensure that frames are<br />separated by small crosses.</span>
+            <span class="drop-lead desktop-only-inline" data-i18n="photo.dropLeadDesktop1">Drop a photo or scan here,</span>
+            <span class="drop-lead desktop-only-inline" data-i18n="photo.dropLeadDesktop2">or click to choose a file.</span>
+            <span class="drop-lead mobile-only-inline-block" data-i18n="photo.dropLeadMobile1">Choose a photo to begin,</span>
+            <span class="drop-lead mobile-only-inline-block" data-i18n="photo.dropLeadMobile2">or load a demo.</span>
+            <span class="drop-note" data-i18n="photo.dropNote">Animation frames should be
+separated by small crosses or dots.</span>
           </label>
           <input id="fileInput" type="file" accept="image/*,.txt,text/plain" />
         </section>
 
-        <details id="layoutGroup" class="control-group collapsible">
-          <summary id="layoutSummary">Layout</summary>
+        <details id="layoutGroup" class="control-group collapsible" data-mobile-control="layout">
+          <summary id="layoutSummary"><span data-i18n="layout.summary">Layout</span></summary>
           <div id="frameGridFields" class="field-grid">
             <label>
-              <span>Frame Columns</span>
+              <span data-i18n="layout.frameCols">Frame Columns</span>
               <input id="frameCols" type="number" min="1" max="20" step="1" value="5" />
             </label>
             <label>
-              <span>Frame Rows</span>
+              <span data-i18n="layout.frameRows">Frame Rows</span>
               <input id="frameRows" type="number" min="1" max="20" step="1" value="4" />
             </label>
           </div>
           <div id="paperLayoutRow">
             <fieldset id="paperOrientationField" class="radio-group">
-              <legend>Paper Orientation</legend>
+              <legend data-i18n="layout.paperOrientation">Paper Orientation</legend>
               <label class="toggle">
                 <input id="paperOrientationLandscape" name="paperOrientation" type="radio" value="landscape" checked />
-                <span>Landscape</span>
+                <span data-i18n="layout.landscape">Landscape</span>
               </label>
               <label class="toggle">
                 <input id="paperOrientationPortrait" name="paperOrientation" type="radio" value="portrait" />
-                <span>Portrait</span>
+                <span data-i18n="layout.portrait">Portrait</span>
               </label>
             </fieldset>
             <label class="stack-label">
-              <span id="paperPresetLabel">Paper Size</span>
+                <span id="paperPresetLabel" data-i18n="layout.paperSize">Paper Size</span>
               <select id="paperPreset">
                 <option value="letter" selected>Letter (11×8.5 in)</option>
                 <option value="legal">Legal (14×8.5 in)</option>
@@ -87,240 +89,249 @@
           </div>
           <div id="customPaperFields" class="field-grid" hidden>
             <label>
-              <span>Sheet Width</span>
+              <span data-i18n="layout.sheetWidth">Sheet Width</span>
               <input id="paperWidth" type="number" min="1" step="0.1" value="11" />
             </label>
             <label>
-              <span>Sheet Height</span>
+              <span data-i18n="layout.sheetHeight">Sheet Height</span>
               <input id="paperHeight" type="number" min="1" step="0.1" value="8.5" />
             </label>
           </div>
         </details>
 
-        <details id="pageGridDetectionGroup" class="control-group collapsible">
-          <summary id="pageGridDetectionSummary">Page &amp; Grid Detection</summary>
+        <details id="pageGridDetectionGroup" class="control-group collapsible" data-mobile-control="page-grid">
+          <summary id="pageGridDetectionSummary"><span data-i18n="detection.summary">Page &amp; Grid Detection</span></summary>
           <label class="stack-label">
-            <span>Thresholding Method</span>
+            <span data-i18n="detection.thresholdMethod">Thresholding Method</span>
             <select id="thresholdMethod">
-              <option value="offset-peak" selected>Offset Peak</option>
-              <option value="otsu">Otsu</option>
-              <option value="triangle">Triangle</option>
+              <option value="offset-peak" selected data-i18n="detection.thresholdMethodOptions.offset-peak">Offset Peak</option>
+              <option value="otsu" data-i18n="detection.thresholdMethodOptions.otsu">Otsu</option>
+              <option value="triangle" data-i18n="detection.thresholdMethodOptions.triangle">Triangle</option>
+              <option value="adaptive" data-i18n="detection.thresholdMethodOptions.adaptive">Adaptive</option>
             </select>
           </label>
           <div class="slider-stack">
             <label>
-              <span>Thresholding Offset <output id="thresholdOffsetValue">-20</output></span>
+              <span><span data-i18n="detection.thresholdOffset">Thresholding Offset</span> <output id="thresholdOffsetValue">-20</output></span>
               <input id="thresholdOffset" type="range" min="-128" max="128" step="1" value="-20" />
             </label>
             <label id="paperMarginRow">
-              <span>Search Inset Margin <output id="paperMarginValue">80 px</output></span>
+              <span><span data-i18n="detection.paperMargin">Search Inset Margin</span> <output id="paperMarginValue">80 px</output></span>
               <input id="paperMargin" type="range" min="0" max="150" step="1" value="80" />
             </label>
             <label id="boundarySensitivityRow">
-              <span>Boundary Threshold <output id="boundarySensitivityValue">8.0</output></span>
+              <span><span data-i18n="detection.boundarySensitivity">Boundary Threshold</span> <output id="boundarySensitivityValue">8.0</output></span>
               <input id="boundarySensitivity" type="range" min="0" max="20" step="0.1" value="8.0" />
             </label>
             <label id="boundaryPersistenceRow">
-              <span>Boundary Persistence <output id="boundaryPersistenceValue">7</output></span>
+              <span><span data-i18n="detection.boundaryPersistence">Boundary Persistence</span> <output id="boundaryPersistenceValue">7</output></span>
               <input id="boundaryPersistence" type="range" min="1" max="15" step="1" value="7" />
             </label>
           </div>
         </details>
 
-        <details id="frameAlignmentGroup" class="control-group collapsible">
-          <summary id="frameAlignmentSummary">Automatic Frame Alignment</summary>
+        <details id="frameAlignmentGroup" class="control-group collapsible" data-mobile-control="alignment">
+          <summary id="frameAlignmentSummary"><span data-i18n="alignment.summary">Automatic Frame Alignment</span></summary>
           <fieldset id="alignmentMarkerTypeField" class="radio-group">
-            <legend>Alignment Marker Type:</legend>
+            <legend data-i18n="alignment.markerType">Alignment Marker Type:</legend>
             <label class="toggle">
-              <input id="alignmentMarkerTypeCrosses" name="alignmentMarkerType" type="radio" value="crosses" checked />
-              <span>Crosses</span>
+              <input id="alignmentMarkerTypeAuto" name="alignmentMarkerType" type="radio" value="auto" checked />
+              <span data-i18n="alignment.markerTypeOptions.auto">Auto</span>
             </label>
             <label class="toggle">
-              <input id="alignmentMarkerTypeCircles" name="alignmentMarkerType" type="radio" value="circles" disabled />
-              <span>Dots (not yet supported)</span>
+              <input id="alignmentMarkerTypeCrosses" name="alignmentMarkerType" type="radio" value="crosses" />
+              <span data-i18n="alignment.markerTypeOptions.crosses">Crosses</span>
+            </label>
+            <label class="toggle">
+              <input id="alignmentMarkerTypeCircles" name="alignmentMarkerType" type="radio" value="circles" />
+              <span data-i18n="alignment.markerTypeOptions.circles">Dots</span>
             </label>
           </fieldset>
           <div class="slider-stack">
             <label>
-              <span>Alignment Marker Region Size <output id="crossRoiScaleValue">-- px</output></span>
+              <span><span data-i18n="alignment.roiSize">Alignment Marker Region Size</span> <output id="crossRoiScaleValue">-- px</output></span>
               <input id="crossRoiScale" type="range" min="18" max="110" step="1" value="52" />
             </label>
           </div>
           <label id="useCrossAlignmentRow" class="toggle">
             <input id="useCrossAlignment" type="checkbox" checked />
-            <span>Do subpixel alignment using markers</span>
+            <span data-i18n="alignment.useMarkers">Do subpixel alignment using markers</span>
           </label>
           <label id="detectCrossesWithConvolutionRow" class="toggle">
             <input id="detectCrossesWithConvolution" type="checkbox" />
-            <span>Detect crosses with convolution</span>
+            <span data-i18n="alignment.detectCrossesWithConvolution">Detect crosses with convolution</span>
           </label>
         </details>
 
-        <details id="appearanceGroup" class="control-group collapsible">
+        <details id="appearanceGroup" class="control-group collapsible" data-mobile-control="appearance">
           <summary id="appearanceSummary">
-            <span>Appearance</span>
-            <button id="resetAppearanceButton" class="summary-button" type="button">Reset</button>
+            <span data-i18n="appearance.summary">Appearance</span>
+            <button id="resetAppearanceButton" class="summary-button" type="button" data-i18n="appearance.reset">Reset</button>
           </summary>
           <div id="appearanceSliderStack" class="slider-stack">
             <label>
-              <span>Brightness <output id="brightnessValue">+0</output></span>
+              <span><span data-i18n="appearance.brightness">Brightness</span> <output id="brightnessValue">+0</output></span>
               <input id="brightness" type="range" min="-100" max="100" step="1" value="0" />
             </label>
             <label>
-              <span>Contrast <output id="contrastValue">+0</output></span>
+              <span><span data-i18n="appearance.contrast">Contrast</span> <output id="contrastValue">+0</output></span>
               <input id="contrast" type="range" min="-100" max="100" step="1" value="0" />
             </label>
             <label>
-              <span>Vibrance <output id="vibranceValue">+0</output></span>
+              <span><span data-i18n="appearance.vibrance">Vibrance</span> <output id="vibranceValue">+0</output></span>
               <input id="vibrance" type="range" min="-100" max="100" step="1" value="0" />
             </label>
             <label>
-              <span>Color Temperature <output id="temperatureValue">+0</output></span>
+              <span><span data-i18n="appearance.temperature">Color Temperature</span> <output id="temperatureValue">+0</output></span>
               <input id="temperature" type="range" min="-100" max="100" step="1" value="0" />
             </label>
             <label id="unsharpAmountRow">
-              <span>Unsharp Mask Amount <output id="unsharpAmountValue">0.0</output></span>
+              <span><span data-i18n="appearance.unsharpAmount">Unsharp Mask Amount</span> <output id="unsharpAmountValue">0.0</output></span>
               <input id="unsharpAmount" type="range" min="0" max="500" step="1" value="0" />
             </label>
             <label id="unsharpRadiusRow">
-              <span>Unsharp Mask Radius <output id="unsharpRadiusValue">1.0</output></span>
+              <span><span data-i18n="appearance.unsharpRadius">Unsharp Mask Radius</span> <output id="unsharpRadiusValue">1.0</output></span>
               <input id="unsharpRadius" type="range" min="0.1" max="100" step="0.1" value="1.0" />
             </label>
           </div>
           <label class="toggle">
             <input id="invert" type="checkbox" />
-            <span>Invert</span>
+            <span data-i18n="appearance.invert">Invert</span>
           </label>
         </details>
 
-        <details id="cropGeometryGroup" class="control-group collapsible">
+        <details id="cropGeometryGroup" class="control-group collapsible" data-mobile-control="crop">
           <summary id="cropOutputSummary">
-            <span>Crop &amp; Geometry</span>
-            <button id="resetTrimButton" class="summary-button" type="button">Reset</button>
+            <span data-i18n="crop.summary">Crop &amp; Geometry</span>
+            <button id="resetTrimButton" class="summary-button" type="button" data-i18n="crop.reset">Reset</button>
           </summary>
           <div id="cropFieldGrid" class="field-grid">
             <label>
-              <span>Crop Left</span>
+              <span data-i18n="crop.left">Crop Left</span>
               <input id="cropLeft" type="number" min="0" step="1" value="0" />
             </label>
             <label>
-              <span>Crop Right</span>
+              <span data-i18n="crop.right">Crop Right</span>
               <input id="cropRight" type="number" min="0" step="1" value="0" />
             </label>
             <label>
-              <span>Crop Top</span>
+              <span data-i18n="crop.top">Crop Top</span>
               <input id="cropTop" type="number" min="0" step="1" value="0" />
             </label>
             <label>
-              <span>Crop Bottom</span>
+              <span data-i18n="crop.bottom">Crop Bottom</span>
               <input id="cropBottom" type="number" min="0" step="1" value="0" />
             </label>
           </div>
           <div class="stack-label crop-aspect-readout">
-            <span>Aspect Ratio <output id="cropAspectRatioValue">--</output></span>
+            <span><span data-i18n="crop.aspectRatio">Aspect Ratio</span> <output id="cropAspectRatioValue">--</output></span>
           </div>
           <label id="flipHorizontalRow" class="toggle">
             <input id="flipHorizontal" type="checkbox" />
-            <span>Flip Horizontal</span>
+            <span data-i18n="crop.flipHorizontal">Flip Horizontal</span>
           </label>
           <label id="flipVerticalRow" class="toggle">
             <input id="flipVertical" type="checkbox" />
-            <span>Flip Vertical</span>
+            <span data-i18n="crop.flipVertical">Flip Vertical</span>
           </label>
           <label class="toggle">
             <input id="rotate90Cw" type="checkbox" />
-            <span>Rotate 90° CW</span>
+            <span data-i18n="crop.rotate90Cw">Rotate 90° CW</span>
           </label>
         </details>
 
-        <details id="exportOptionsGroup" class="control-group collapsible">
+        <details id="exportOptionsGroup" class="control-group collapsible" data-mobile-control="export">
           <summary id="gifExportSummary">
-            <span>Export Options</span>
-            <button id="resetExportButton" class="summary-button" type="button">Reset</button>
+            <span data-i18n="export.summary">Export Options</span>
+            <button id="resetExportButton" class="summary-button" type="button" data-i18n="export.reset">Reset</button>
           </summary>
           <div class="field-grid">
             <label>
-              <span>Output Width</span>
+              <span data-i18n="export.outputWidth">Output Width</span>
               <input id="outputWidth" type="number" min="1" max="1999" step="1" value="" inputmode="numeric" />
             </label>
             <label>
-              <span>Output Height</span>
+              <span data-i18n="export.outputHeight">Output Height</span>
               <input id="outputHeight" type="number" min="1" max="1999" step="1" value="" inputmode="numeric" />
             </label>
           </div>
           <div class="field-grid">
             <label>
-              <span>Frame Rate</span>
+              <span data-i18n="export.frameRate">Frame Rate</span>
               <input id="fps" type="number" min="1" max="60" step="1" value="20" />
             </label>
             <label id="loopCountRow">
-              <span>Loops in Export</span>
+              <span data-i18n="export.loopCount">Loops in Export</span>
               <input id="loopCount" type="number" min="1" max="10" step="1" value="1" />
             </label>
           </div>
           <label id="reverseOrderRow" class="toggle">
             <input id="reverseOrder" type="checkbox" />
-            <span>Reverse Order</span>
+            <span data-i18n="export.reverseOrder">Reverse Order</span>
+          </label>
+          <label id="boustrophedonOrderRow" class="toggle">
+            <input id="boustrophedonOrder" type="checkbox" />
+            <span data-i18n="export.boustrophedonOrder">Boustrophedon Order</span>
           </label>
           <label id="pingPongRow" class="toggle">
             <input id="pingPong" type="checkbox" />
-            <span>Ping-Pong (doubles file size)</span>
+            <span data-i18n="export.pingPong">Ping-Pong (doubles file size)</span>
           </label>
           <div id="encodingQualityRow" class="slider-stack">
             <label>
-              <span>Encoding Quality <output id="gifQualityValue">75</output></span>
+              <span><span data-i18n="export.encodingQuality">Encoding Quality</span> <output id="gifQualityValue">75</output></span>
               <input id="gifQuality" type="range" min="1" max="100" step="1" value="75" />
             </label>
           </div>
           <label id="resamplingRow" class="stack-label">
-            <span>Resampling</span>
+            <span data-i18n="export.resampling">Resampling</span>
             <select id="gifResampling">
-              <option value="linear" selected>Linear</option>
-              <option value="cubic">Cubic</option>
+              <option value="linear" selected data-i18n="export.resamplingOptions.linear">Linear</option>
+              <option value="cubic" data-i18n="export.resamplingOptions.cubic">Cubic</option>
             </select>
           </label>
           <label id="gifDitherRow" class="stack-label">
-            <span>GIF Dithering</span>
+            <span data-i18n="export.gifDithering">GIF Dithering</span>
             <select id="gifDither">
-              <option value="off">Off</option>
-              <option value="FloydSteinberg">Standard (Floyd-Steinberg)</option>
-              <option value="FloydSteinberg-serpentine" selected>Smooth (Floyd-Steinberg Serpentine)</option>
-              <option value="Atkinson">Retro (Atkinson)</option>
+              <option value="off" data-i18n="export.ditheringOptions.off">Off</option>
+              <option value="FloydSteinberg" data-i18n="export.ditheringOptions.FloydSteinberg">Standard (Floyd-Steinberg)</option>
+              <option value="FloydSteinberg-serpentine" selected data-i18n="export.ditheringOptions.FloydSteinberg-serpentine">Smooth (Floyd-Steinberg Serpentine)</option>
+              <option value="Atkinson" data-i18n="export.ditheringOptions.Atkinson">Retro (Atkinson)</option>
             </select>
           </label>
           <label id="gifGlobalPaletteRow" class="toggle">
             <input id="gifGlobalPalette" type="checkbox" />
-            <span>Use Global Palette</span>
+            <span data-i18n="export.useGlobalPalette">Use Global Palette</span>
           </label>
           <div class="export-actions-stack">
-            <button id="saveSettingsButton" class="header-button" type="button" disabled>Save Settings file</button>
+            <button id="saveSettingsButton" class="header-button" type="button" disabled data-i18n="export.saveSettings">Save Settings file</button>
           </div>
         </details>
 
         <details id="statusGroup" class="control-group status-group independent-collapsible" open>
           <summary id="statusSummary">
             <div class="status-headline">
-              <h2 id="statusHeading">Status</h2>
+              <h2 id="statusHeading" data-i18n="panels.status">Status</h2>
               <span id="statusBusy" class="status-busy" hidden aria-hidden="true"></span>
             </div>
-            <button id="tooltipToggleButton" class="summary-button" type="button">Enable Tooltips</button>
+            <button id="tooltipToggleButton" class="summary-button" type="button" data-i18n="panels.enableTooltips">Enable Tooltips</button>
           </summary>
-          <pre id="statusText">Waiting for OpenCV…</pre>
+          <pre id="statusText" data-i18n="panels.waitingForOpenCv">Waiting for OpenCV…</pre>
         </details>
       </aside>
 
       <main id="workspace" class="workspace">
-        <nav class="viewer-tabs" aria-label="Viewer panels">
-          <button id="viewerTabRaw" class="viewer-tab is-active" type="button" data-view="raw" aria-pressed="true">Raw</button>
-          <button id="viewerTabRectified" class="viewer-tab" type="button" data-view="rectified" aria-pressed="false">Rectified</button>
-          <button id="viewerTabMarkers" class="viewer-tab" type="button" data-view="markers" aria-pressed="false">Markers</button>
-          <button id="viewerTabPreview" class="viewer-tab" type="button" data-view="preview" aria-pressed="false">Preview</button>
+        <nav class="viewer-tabs" data-i18n-aria-label="aria.viewerPanels" aria-label="Viewer panels">
+          <button id="viewerTabRaw" class="viewer-tab is-active" type="button" data-view="raw" aria-pressed="true" data-i18n="viewerTabs.raw">Raw</button>
+          <button id="viewerTabRectified" class="viewer-tab" type="button" data-view="rectified" aria-pressed="false" data-i18n="viewerTabs.rectified">Rectified</button>
+          <button id="viewerTabMarkers" class="viewer-tab" type="button" data-view="markers" aria-pressed="false" data-i18n="viewerTabs.markers">Markers</button>
+          <button id="viewerTabPreview" class="viewer-tab" type="button" data-view="preview" aria-pressed="false" data-i18n="viewerTabs.preview">Preview</button>
         </nav>
 
         <section id="rawViewerCard" class="viewer-card" data-view="raw">
           <header>
             <div class="status-headline">
-              <h2 id="rawPhotoHeading">1. Raw Photo <span id="rawPhotoNameWrap" class="header-note" hidden>(<a id="rawPhotoName" target="_blank" rel="noopener noreferrer"></a>)</span></h2>
+              <h2 id="rawPhotoHeading"><span id="rawPhotoHeadingText" data-i18n="panels.rawPhoto">1. Raw Photo</span> <span id="rawPhotoNameWrap" class="header-note" hidden>(<a id="rawPhotoName" target="_blank" rel="noopener noreferrer"></a>)</span><span id="rawPhotoWarning" class="header-note" hidden> ⚠️</span></h2>
               <span id="rawBusy" class="status-busy" hidden aria-hidden="true"></span>
             </div>
           </header>
@@ -331,7 +342,7 @@
 
         <section id="rectifiedViewerCard" class="viewer-card" data-view="rectified">
           <header>
-            <h2 id="rectifiedSheetHeading">2. Rectified Sheet</h2>
+            <h2 id="rectifiedSheetHeading" data-i18n="panels.rectifiedSheet">2. Rectified Sheet</h2>
           </header>
           <div class="viewer-stage">
             <canvas id="rectifiedCanvas"></canvas>
@@ -340,10 +351,11 @@
 
         <section id="markersViewerCard" class="viewer-card" data-view="markers">
           <header>
-            <h2 id="crossRegionsHeading">3. Frame Alignment Markers <span id="mobileMarkersReadOnlyNote" class="header-note mobile-only-inline">(read-only)</span></h2>
+            <h2 id="crossRegionsHeading"><span data-i18n="panels.frameAlignmentMarkers">3. Frame Alignment Markers</span> <span id="mobileMarkersReadOnlyNote" class="header-note mobile-only-inline" data-i18n="alignment.readOnly">(read-only)</span></h2>
             <div id="markerHeaderActions" class="header-actions">
-              <button id="toggleMarkerEditingButton" class="header-button" type="button" disabled>Enable Overrides</button>
-              <button id="clearMarkerEditsButton" class="header-button" type="button" hidden>Clear Edits</button>
+              <button id="toggleMarkerBlobViewButton" class="header-button" type="button" hidden data-i18n-title="tooltip.toggleMarkerBlobViewButton">🔁</button>
+              <button id="toggleMarkerEditingButton" class="header-button" type="button" disabled data-i18n="alignment.enableOverrides">Enable Overrides</button>
+              <button id="clearMarkerEditsButton" class="header-button" type="button" hidden data-i18n="alignment.clearEdits">Clear Edits</button>
             </div>
           </header>
           <div id="crossRoiViewport" class="cross-roi-viewport is-empty">
@@ -353,23 +365,30 @@
 
         <section id="previewViewerCard" class="viewer-card" data-view="preview">
           <header>
-            <h2 id="animationPreviewHeading">4. Preview</h2>
+            <h2 id="animationPreviewHeading" data-i18n="panels.preview">4. Preview</h2>
             <div class="header-actions">
-              <button id="previewPlayPauseButton" class="header-button icon-button" type="button" aria-label="Pause animation">⏸</button>
-              <button id="exportZipButton" class="header-button" type="button" disabled>Export ZIP</button>
-              <button id="exportMp4Button" class="header-button" type="button" hidden disabled>Export MP4</button>
-              <button id="exportButton" class="header-button" type="button" disabled>Export GIF</button>
+              <button id="previewPlayPauseButton" class="header-button icon-button" type="button" data-i18n-aria-label="aria.pauseAnimation">⏸</button>
+              <button id="exportZipButton" class="header-button" type="button" disabled data-i18n="export.exportZip">Export ZIP</button>
+              <button id="exportMp4Button" class="header-button" type="button" hidden disabled data-i18n="export.exportMp4">Export MP4</button>
+              <button id="exportButton" class="header-button" type="button" disabled data-i18n="export.exportGif">Export GIF</button>
             </div>
           </header>
           <div class="output-preview">
             <canvas id="gifPreviewCanvas"></canvas>
-            <img id="gifImage" alt="Exported GIF preview" class="hidden" hidden />
+            <img id="gifImage" data-i18n-alt="tooltip.gifImage" alt="Exported GIF preview" class="hidden" hidden />
           </div>
         </section>
       </main>
 
       <div id="mobileControlStack" class="mobile-control-stack">
-        <p id="mobileControlNote" class="mobile-control-note">Note: use desktop version for advanced controls.</p>
+        <div id="mobileControlTabs" class="mobile-control-tabs" role="tablist" data-i18n-aria-label="aria.mobileControls" aria-label="Mobile controls">
+          <button id="mobileControlTabLayout" class="mobile-control-tab" type="button" data-control-tab="layout" role="tab" aria-selected="true" data-i18n="mobileControlTabs.layout">Layout</button>
+          <button id="mobileControlTabPageGrid" class="mobile-control-tab" type="button" data-control-tab="page-grid" role="tab" aria-selected="false" data-i18n="mobileControlTabs.page">Page</button>
+          <button id="mobileControlTabAlignment" class="mobile-control-tab" type="button" data-control-tab="alignment" role="tab" aria-selected="false" data-i18n="mobileControlTabs.markers">Markers</button>
+          <button id="mobileControlTabAppearance" class="mobile-control-tab" type="button" data-control-tab="appearance" role="tab" aria-selected="false" data-i18n="mobileControlTabs.filters">Filters</button>
+          <button id="mobileControlTabCrop" class="mobile-control-tab" type="button" data-control-tab="crop" role="tab" aria-selected="false" data-i18n="mobileControlTabs.crop">Crop</button>
+          <button id="mobileControlTabExport" class="mobile-control-tab" type="button" data-control-tab="export" role="tab" aria-selected="false" data-i18n="mobileControlTabs.export">Export</button>
+        </div>
       </div>
     </div>
 

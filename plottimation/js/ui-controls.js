@@ -4,6 +4,7 @@
  * This module attaches button, slider, checkbox, keyboard, and tooltip behavior so the main app
  * can supply callbacks without carrying the full DOM-listener implementation inline.
  */
+import { t } from "./i18n.js";
 /**
  * Wire a small header reset button without toggling the parent details element.
  *
@@ -35,7 +36,7 @@ export function setTooltipsEnabled({ dom, state, enabled, previewTooltipText }) 
   state.runtime.tooltipsEnabled = enabled;
   for (const [element, text] of state.runtime.tooltipRegistry || []) {
     if (element === dom.exportMp4Button && !state.runtime.mp4ExportSupported) {
-      element.title = "Not supported by this browser";
+      element.title = t("panels.mp4Unsupported");
       continue;
     }
     if (enabled && String(text || "").trim()) {
@@ -46,9 +47,9 @@ export function setTooltipsEnabled({ dom, state, enabled, previewTooltipText }) 
   }
   dom.gifPreviewCanvas.title = previewTooltipText || "";
   if (!state.runtime.mp4ExportSupported) {
-    dom.exportMp4Button.title = "Not supported by this browser";
+    dom.exportMp4Button.title = t("panels.mp4Unsupported");
   }
-  dom.tooltipToggleButton.textContent = enabled ? "Disable Tooltips" : "Enable Tooltips";
+  dom.tooltipToggleButton.textContent = enabled ? t("panels.disableTooltips") : t("panels.enableTooltips");
 }
 
 /**
@@ -98,10 +99,12 @@ export function initializeTooltips({ tooltipText, state, dom, applyTooltipState 
  *   toggleTooltips: () => void,
  *   togglePreviewPaused: () => void,
  *   stepPausedPreviewFrame: (direction: number) => void,
+ *   toggleMarkerBlobView: () => void,
  *   toggleMarkerEditing: () => void,
  *   clearMarkerEdits: () => void,
  *   syncOutputSizeFromWidthInput: () => void,
  *   syncOutputSizeFromHeightInput: () => void,
+ *   previewPageBoundaryForThresholdOffset: () => void,
  *   syncPaperPresetUi: () => void,
  *   syncAlignmentMarkerUi: () => void,
  *   setActiveViewerTab: (view:string) => void,
@@ -136,10 +139,12 @@ export function attachUi({
   toggleTooltips,
   togglePreviewPaused,
   stepPausedPreviewFrame,
+  toggleMarkerBlobView,
   toggleMarkerEditing,
   clearMarkerEdits,
   syncOutputSizeFromWidthInput,
   syncOutputSizeFromHeightInput,
+  previewPageBoundaryForThresholdOffset,
   syncPaperPresetUi,
   syncAlignmentMarkerUi,
   setActiveViewerTab,
@@ -218,13 +223,8 @@ export function attachUi({
     });
   });
   dom.rectifiedCanvas.addEventListener("click", () => {
-    // Mobile keeps Rectified Sheet in plain read-only mode for now; the convolution debug toggle
-    // remains desktop-only.
-    if (state.runtime.mobileSingleViewerMode) return;
-    state.preview.showRectifiedDiagnostic = !state.preview.showRectifiedDiagnostic;
-    if (state.preview.rectifiedCanvas) {
-      renderRectifiedPreview(state.preview.rectifiedCanvas);
-    }
+    // Keep the convolution debug renderer available in code, but disable the direct canvas click
+    // affordance for switching into that view.
   });
 
   attachResetButton(dom.resetAppearanceButton, resetAppearanceControls);
@@ -236,6 +236,7 @@ export function attachUi({
     toggleTooltips();
   });
   dom.previewPlayPauseButton.addEventListener("click", togglePreviewPaused);
+  dom.toggleMarkerBlobViewButton?.addEventListener("click", toggleMarkerBlobView);
   dom.toggleMarkerEditingButton.addEventListener("click", toggleMarkerEditing);
   dom.clearMarkerEditsButton.addEventListener("click", clearMarkerEdits);
 
@@ -286,6 +287,7 @@ export function attachUi({
   });
 
   const alignmentMarkerTypeInputs = [
+    dom.alignmentMarkerTypeAuto,
     dom.alignmentMarkerTypeCrosses,
     dom.alignmentMarkerTypeCircles,
   ];
@@ -334,7 +336,6 @@ export function attachUi({
     dom.frameCols,
     dom.frameRows,
     dom.thresholdMethod,
-    dom.thresholdOffset,
     dom.paperMargin,
     dom.boundarySensitivity,
     dom.boundaryPersistence,
@@ -362,6 +363,18 @@ export function attachUi({
     scheduleProcess();
   });
 
+  dom.thresholdOffset.addEventListener("input", () => {
+    // While the slider is dragged, update only the readout plus the lightweight Raw Photo page-quad
+    // preview. The full pipeline still waits for the `change` event on release.
+    updateSliderReadouts();
+    previewPageBoundaryForThresholdOffset();
+  });
+  dom.thresholdOffset.addEventListener("change", () => {
+    revokeGifUrl();
+    updateSliderReadouts();
+    scheduleProcess();
+  });
+
   const lazyFrameInputs = [
     dom.gifResampling,
     dom.outputWidth,
@@ -379,6 +392,7 @@ export function attachUi({
     dom.gifDither,
     dom.gifGlobalPalette,
     dom.reverseOrder,
+    dom.boustrophedonOrder,
     dom.pingPong
   ];
   lazyFrameInputs.forEach((input) => {

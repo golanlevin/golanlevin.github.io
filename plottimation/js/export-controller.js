@@ -5,6 +5,7 @@
  * bits of export UI state that are tightly coupled to those flows.
  */
 import { createStoredZip } from "./zip-builder.js";
+import { t } from "./i18n.js";
 
 const MP4_MUXER_MODULE_URL = "./vendor/mp4-muxer.esm.js";
 let mp4MuxerModulePromise = null;
@@ -18,8 +19,8 @@ let mp4MuxerModulePromise = null;
  */
 export function updateExportButtonLabel(dom, progressPercent = null) {
   dom.exportButton.textContent = (typeof progressPercent === "number")
-    ? `Export GIF ...${progressPercent}%`
-    : "Export GIF";
+    ? t("export.exportGifProgress", { progress: progressPercent })
+    : t("export.exportGif");
 }
 
 /**
@@ -73,6 +74,39 @@ export function downloadBlobWithFilename(blob, filename) {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Prefer the native mobile share sheet when available, otherwise fall back to a direct download.
+ *
+ * Browsers may reject `navigator.share()` if file sharing is unsupported or if transient user
+ * activation has been lost during a long-running encode. In those cases, fall back to download so
+ * export still succeeds.
+ *
+ * @param {Blob} blob
+ * @param {string} filename
+ * @param {string} mimeType
+ * @param {boolean} preferShare
+ * @returns {Promise<"shared" | "downloaded" | "canceled">}
+ */
+async function shareFileOrDownload(blob, filename, mimeType, preferShare) {
+  if (preferShare && typeof File !== "undefined" && typeof navigator !== "undefined") {
+    try {
+      const file = new File([blob], filename, { type: mimeType });
+      if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] }) && typeof navigator.share === "function") {
+        await navigator.share({ files: [file], title: filename });
+        return "shared";
+      }
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return "canceled";
+      }
+      // Fall back to direct download below.
+    }
+  }
+
+  downloadBlobWithFilename(blob, filename);
+  return "downloaded";
 }
 
 /**
@@ -269,7 +303,7 @@ export async function exportGif(deps) {
   if (!orderedFrameCount) return;
   updateExportControlsAvailability(true);
   updateExportButtonLabel(dom, 0);
-  setStatus("Encoding GIF…");
+  setStatus(t("status.encodingGif"));
 
   const config = readConfig();
   const firstFrame = getAdjustedFrameCanvas(getExportOrderedFrameIndex(0));
@@ -311,15 +345,28 @@ export async function exportGif(deps) {
     dom.gifImage.hidden = false;
     dom.gifPreviewCanvas.parentElement?.classList.remove("is-empty");
     updateAnimationPreviewHeading();
-    downloadBlobWithFilename(blob, state.export.filename);
     updateExportControlsAvailability();
     updateExportButtonLabel(dom);
-    setStatus("GIF ready.\nFrame count: " + state.geometry.frameCount);
+    void (async () => {
+      const delivery = await shareFileOrDownload(
+        blob,
+        state.export.filename,
+        "image/gif",
+        !!state.runtime.mobileSingleViewerMode
+      );
+      if (delivery === "shared") {
+        setStatus(t("status.gifReadyShared"));
+      } else if (delivery === "canceled") {
+        setStatus(t("status.gifReadyCanceled"));
+      } else {
+        setStatus(t("status.gifReadyFrameCount", { count: state.geometry.frameCount }));
+      }
+    })();
   });
   gif.on("progress", (progress) => {
     const progressPercent = Math.round(progress * 100);
     updateExportButtonLabel(dom, progressPercent);
-    setStatus("Encoding GIF…\n" + progressPercent + "%");
+    setStatus(t("status.encodingGifProgress", { progress: progressPercent }));
   });
   gif.render();
 }
@@ -352,7 +399,7 @@ export async function exportMp4(deps) {
   const orderedFrameCount = getExportOrderedFrameCount();
   if (!orderedFrameCount) return;
   updateExportControlsAvailability(true);
-  setStatus("Encoding MP4…");
+  setStatus(t("status.encodingMp4"));
 
   const config = readConfig();
   const firstFrame = getAdjustedFrameCanvas(getExportOrderedFrameIndex(0));
@@ -414,7 +461,7 @@ export async function exportMp4(deps) {
       if (encoderError) {
         throw encoderError;
       }
-      setStatus(`Encoding MP4…\n${Math.round(((i + 1) / orderedFrameCount) * 100)}%`);
+      setStatus(t("status.encodingMp4Progress", { progress: Math.round(((i + 1) / orderedFrameCount) * 100) }));
     }
     await encoder.flush();
     if (encoderError) {
@@ -423,19 +470,28 @@ export async function exportMp4(deps) {
     encoder.close();
     muxer.finalize();
     const mp4Blob = new Blob([muxer.target.buffer], { type: "video/mp4" });
-    downloadBlobWithFilename(
-      mp4Blob,
-      makeMp4Filename(
-        state.source.filename,
-        config.exportOptions.encodingQuality,
-        mp4Size.width,
-        mp4Size.height
-      )
+    const filename = makeMp4Filename(
+      state.source.filename,
+      config.exportOptions.encodingQuality,
+      mp4Size.width,
+      mp4Size.height
     );
-    setStatus(`MP4 ready.\nFrame count: ${orderedFrameCount}`);
+    const delivery = await shareFileOrDownload(
+      mp4Blob,
+      filename,
+      "video/mp4",
+      !!state.runtime.mobileSingleViewerMode
+    );
+    if (delivery === "shared") {
+      setStatus(t("status.mp4ReadyShared"));
+    } else if (delivery === "canceled") {
+      setStatus(t("status.mp4ReadyCanceled"));
+    } else {
+      setStatus(t("status.mp4ReadyFrameCount", { count: orderedFrameCount }));
+    }
   } catch (error) {
     console.error(error);
-    setStatus(`MP4 export failed.\n(${error?.message || String(error)})`);
+    setStatus(t("status.mp4ExportFailed", { message: error?.message || String(error) }));
   } finally {
     updateExportControlsAvailability();
   }
@@ -474,7 +530,7 @@ export async function exportZip(deps) {
   const orderedFrameCount = getExportOrderedFrameCount();
   if (!orderedFrameCount) return;
   updateExportControlsAvailability(true);
-  setStatus("Preparing ZIP…");
+  setStatus(t("status.preparingZip"));
 
   try {
     const config = readConfig();
@@ -514,10 +570,10 @@ export async function exportZip(deps) {
         config.exportOptions.outputHeightPx
       )
     );
-    setStatus(`ZIP ready.\nFrame count: ${orderedFrameCount}`);
+    setStatus(t("status.zipReadyFrameCount", { count: orderedFrameCount }));
   } catch (error) {
     console.error(error);
-    setStatus(`ZIP export failed.\n(${error?.message || String(error)})`);
+    setStatus(t("status.zipExportFailed", { message: error?.message || String(error) }));
   } finally {
     updateExportControlsAvailability();
     updateExportButtonLabel();

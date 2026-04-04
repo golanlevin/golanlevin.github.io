@@ -26,7 +26,7 @@ export const SETTINGS_DEFAULTS = {
     paperMarginPx: 80,
     boundarySensitivity: 8.0,
     boundaryPersistencePx: 7,
-    alignmentMarkerType: "crosses",
+    alignmentMarkerType: "auto",
     crossRoiScalePct: 52,
     useCrossAlignment: true,
     detectCrossesWithConvolution: false,
@@ -54,6 +54,7 @@ export const SETTINGS_DEFAULTS = {
     fps: 20,
     loopCount: 1,
     reverseOrder: false,
+    boustrophedonOrder: false,
     pingPong: false,
     outputWidthPx: 0,
     quality: 75,
@@ -107,6 +108,7 @@ export function applyNonLayoutDefaults(dom) {
   dom.paperMargin.value = String(SETTINGS_DEFAULTS.detection.paperMarginPx);
   dom.boundarySensitivity.value = SETTINGS_DEFAULTS.detection.boundarySensitivity.toFixed(1);
   dom.boundaryPersistence.value = String(SETTINGS_DEFAULTS.detection.boundaryPersistencePx);
+  dom.alignmentMarkerTypeAuto.checked = SETTINGS_DEFAULTS.detection.alignmentMarkerType === "auto";
   dom.alignmentMarkerTypeCrosses.checked = SETTINGS_DEFAULTS.detection.alignmentMarkerType === "crosses";
   dom.alignmentMarkerTypeCircles.checked = SETTINGS_DEFAULTS.detection.alignmentMarkerType === "circles";
   dom.crossRoiScale.value = String(SETTINGS_DEFAULTS.detection.crossRoiScalePct);
@@ -119,6 +121,7 @@ export function applyNonLayoutDefaults(dom) {
   dom.fps.value = String(SETTINGS_DEFAULTS.gifExport.fps);
   dom.loopCount.value = String(SETTINGS_DEFAULTS.gifExport.loopCount);
   dom.reverseOrder.checked = SETTINGS_DEFAULTS.gifExport.reverseOrder;
+  dom.boustrophedonOrder.checked = SETTINGS_DEFAULTS.gifExport.boustrophedonOrder;
   dom.pingPong.checked = SETTINGS_DEFAULTS.gifExport.pingPong;
   dom.outputWidth.value = "";
   dom.outputHeight.value = "";

@@ -4,6 +4,7 @@
  * This module owns the Status text rendering plus the non-preview heading states that reflect
  * page-detection failures and Rectified Sheet diagnostic mode.
  */
+import { t } from "./i18n.js";
 
 /**
  * Keep the Rectified Sheet heading in sync with the currently displayed diagnostic mode.
@@ -14,12 +15,12 @@
  */
 export function updateRectifiedSheetHeading(dom, state) {
   dom.rectifiedSheetHeading.textContent = state.preview.showRectifiedDiagnostic
-    ? "2. Convolution Debug View"
-    : "2. Rectified Sheet";
+    ? t("panels.convolutionDebugView")
+    : t("panels.rectifiedSheet");
 }
 
 /**
- * Reflect page-boundary failure state in the Page & Grid Detection heading.
+ * Reflect page-boundary failure state in the Page & Grid Detection and Raw Photo headings.
  *
  * @param {import("./dom-state.js").dom} dom
  * @param {boolean} [showWarning=false]
@@ -27,8 +28,11 @@ export function updateRectifiedSheetHeading(dom, state) {
  */
 export function updatePageGridDetectionHeading(dom, showWarning = false) {
   dom.pageGridDetectionSummary.textContent = showWarning
-    ? "Page & Grid Detection ⚠️"
-    : "Page & Grid Detection";
+    ? t("detection.summaryWarning")
+    : t("detection.summary");
+  if (dom.rawPhotoWarning) {
+    dom.rawPhotoWarning.hidden = !showWarning;
+  }
 }
 
 /**
@@ -40,7 +44,9 @@ export function updatePageGridDetectionHeading(dom, showWarning = false) {
  */
 export function setStatus(dom, text) {
   dom.statusText.textContent = text;
-  const showWarning = String(text || "").startsWith("Unable to find page boundary.");
+  // Warning detection stays string-based so both the full pipeline and the lighter threshold-preview
+  // path can drive the same heading state without introducing another shared error enum.
+  const showWarning = String(text || "").startsWith(t("status.pageBoundaryFailure"));
   dom.statusText.classList.toggle("status-page-boundary-failure", showWarning);
   updatePageGridDetectionHeading(dom, showWarning);
 }

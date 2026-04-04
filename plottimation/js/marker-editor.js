@@ -32,15 +32,16 @@ function buildMarkerTileElement({
     wrapper.classList.add("manual-override");
   }
 
-  tile.canvas.classList.add("cross-roi-tile");
+  const sourceCanvas = (state.runtime.markerBlobDebugVisible && tile.blobCanvas) ? tile.blobCanvas : tile.canvas;
+  sourceCanvas.classList.add("cross-roi-tile");
   const overlay = document.createElement("canvas");
   overlay.className = "cross-roi-overlay";
-  overlay.width = tile.canvas.width;
-  overlay.height = tile.canvas.height;
-  overlay.style.width = `${tile.canvas.width}px`;
-  overlay.style.height = `${tile.canvas.height}px`;
+  overlay.width = sourceCanvas.width;
+  overlay.height = sourceCanvas.height;
+  overlay.style.width = `${sourceCanvas.width}px`;
+  overlay.style.height = `${sourceCanvas.height}px`;
   drawMarkerTileOverlay(overlay, tile, state, getMarkerKey);
-  wrapper.appendChild(tile.canvas);
+  wrapper.appendChild(sourceCanvas);
   wrapper.appendChild(overlay);
 
   if (tile.kind === "unrefined") {
@@ -133,9 +134,11 @@ function drawMarkerTileOverlay(overlay, tile, state, getMarkerKey, localOverride
  */
 function getMarkerTileCurrentLocalPoint(tile) {
   const center = (tile.canvas.width - 1) * 0.5;
+  const roiCenterX = Number.isFinite(tile.roiCenterX) ? tile.roiCenterX : tile.x;
+  const roiCenterY = Number.isFinite(tile.roiCenterY) ? tile.roiCenterY : tile.y;
   return {
-    x: center + (tile.detectedX - tile.x),
-    y: center + (tile.detectedY - tile.y),
+    x: center + (tile.detectedX - roiCenterX),
+    y: center + (tile.detectedY - roiCenterY),
   };
 }
 

@@ -60,91 +60,19 @@ import {
 } from "./preview-controller.js";
 import {
   runPipeline,
+  previewPageBoundary,
   estimateCrossRoiSidePx,
   buildCrossConvolutionCanvas,
   getCvInterpolationFlag,
   extractSingleFrameToCanvas,
 } from "./pipeline.js";
+import { applyTranslations, getTooltipText, t } from "./i18n.js";
 // Final output-size scaling can be done either with browser canvas drawImage() or with OpenCV.
 // Keep both code paths available for comparison while evaluating tiny-output quality.
 const bUseOpenCvOutputScaling = true;
 const MOBILE_VIEWER_BREAKPOINT_PX = 960;
 
-const TOOLTIP_TEXT = {
-  "#appTitle": "",
-  "#appLedePrimary": "",
-  "#appLedeSecondary": "",
-  "#photoHeading": "Loads a source photo or scan for processing. Pages must be in landscape orientation.",
-  "#loadDemoSelect": "Loads one of the bundled demo images listed in the demo manifest.",
-  "#dropZone": "Drop a photo or scan of a plotted frame-sheet here, or click to choose a file. Pages must be in landscape orientation.",
-  "#layoutSummary": "Sets the frame-grid dimensions and paper format assumptions.",
-  "#frameCols": "Number of animation frame columns in the plotted grid.",
-  "#frameRows": "Number of animation frame rows in the plotted grid.",
-  "#paperPreset": "Choose a paper preset, or Custom to enter your own dimensions.",
-  "#paperWidth": "Custom paper width (arbitrary units) when Paper Size is set to Custom.",
-  "#paperHeight": "Custom paper height (arbitrary units) when Paper Size is set to Custom.",
-  "#pageGridDetectionSummary": "Controls for finding the paper and locating the outer frame-grid region on the page.",
-  "#frameAlignmentSummary": "Controls for refining the frame-alignment markers inside the detected grid region.",
-  "#thresholdMethod": "Thresholding methods for finding the paper quadrilateral.",
-  "#thresholdOffset": "Nudges the paper threshold darker or lighter after thresholding.",
-  "#paperMargin": "Insets the coarse boundary search away from the page edge to avoid background bleed and warped borders.",
-  "#boundarySensitivity": "The threshold used to find the frame-grid.",
-  "#boundaryPersistence": "How many consecutive pixels must stay above the threshold before the frame-grid boundary is accepted.",
-  "#alignmentMarkerTypeField": "Choose whether frame alignment uses cross markers or filled-dot markers.",
-  "#alignmentMarkerTypeCrosses": "Use cross-shaped alignment markers when refining the frame grid.",
-  "#alignmentMarkerTypeCircles": "Use filled-dot alignment markers when refining the frame grid.",
-  "#crossRoiScale": "Sets the size of the square search regions used to localize each alignment marker.",
-  "#detectCrossesWithConvolution": "Use the cross-kernel convolution inside each ROI instead of the default profile-based localizer.",
-  "#useCrossAlignment": "Use detected alignment markers to refine frame extraction beyond a nominal equal-spaced grid.",
-  "#appearanceSummary": "Adjusts the look of the extracted animation frames.",
-  "#resetAppearanceButton": "Restores all appearance controls to their default values.",
-  "#brightness": "Adjusts perceptual lightness before contrast and vibrance are applied.",
-  "#contrast": "Applies a midpoint-preserving contrast curve to OKLab lightness.",
-  "#vibrance": "Boosts or reduces muted colors more than already-saturated colors.",
-  "#temperature": "Shifts the image white balance cooler or warmer using chromatic adaptation after the OKLab adjustments.",
-  "#unsharpRadius": "Sets the blur radius used by the unsharp mask sharpening stage.",
-  "#unsharpAmount": "Controls how strongly the blurred image is subtracted to sharpen edges.",
-  "#invert": "Inverts the animation frames like a photographic negative.",
-  "#gifResampling": "Selects the interpolation method used when extracting and unwarping frames.",
-  "#cropOutputSummary": "Crops the extracted animation frames and applies simple post-crop geometry transforms.",
-  "#resetTrimButton": "Restores all crop values to zero.",
-  "#cropLeft": "Crops pixels from the left side of the animation (before optional output scaling).",
-  "#cropRight": "Crops pixels from the right side of the animation (before optional output scaling).",
-  "#cropTop": "Crops pixels from the top of the animation (before optional output scaling).",
-  "#cropBottom": "Crops pixels from the bottom of the animation (before optional output scaling).",
-  "#flipHorizontal": "Flip the post-cropped animation frames left-to-right.",
-  "#flipVertical": "Flip the post-cropped animation frames top-to-bottom.",
-  "#rotate90Cw": "Rotate the post-cropped animation frames 90 degrees clockwise.",
-  "#gifExportSummary": "Controls that affect preview playback and exported output files.",
-  "#fps": "Playback speed of the preview animation and exported GIF in frames per second.",
-  "#loopCount": "Repeat the full ordered frame sequence this many times in the preview and exported files.",
-  "#outputWidth": "Sets the final output width in pixels after cropping and rotation; the height stays proportional.",
-  "#outputHeight": "Sets the final output height in pixels after cropping and rotation; the width stays proportional.",
-  "#gifQuality": "Shared encoding quality slider from 1 to 100. Higher values raise MP4 bitrate and map to better GIF encoder quality.",
-  "#gifDither": "Selects the dithering method used during GIF color quantization.",
-  "#gifGlobalPalette": "Use one shared palette for all GIF frames, instead of per-frame palettes.",
-  "#reverseOrder": "Reverse the playback and export order of the animation frames.",
-  "#pingPong": "Play and export the animation forward and backward without repeating the endpoints.",
-  "#statusHeading": "Processing and diagnostic status for the current image and settings.",
-  "#tooltipToggleButton": "Turn tooltips on or off throughout the interface.",
-  "#statusText": "Current pipeline status and other diagnostic information.",
-  "#rawPhotoHeading": "Preview of the original source image.",
-  "#rawCanvas": "Preview of the source photo. The detected paper contour is outlined in green.",
-  "#rectifiedSheetHeading": "Preview of the rectified page used for frame detection and extraction.",
-  "#rectifiedCanvas": "Preview of the rectified page; click to toggle the convolution diagnostic view.",
-  "#crossRegionsHeading": "Diagnostic tiles showing the regions used to localize each frame-alignment marker.",
-  "#crossRoiGrid": "Per-marker diagnostic regions used to inspect frame-alignment marker detection.",
-  "#toggleMarkerEditingButton": "Enable or disable manual editing of alignment markers in the diagnostic grid.",
-  "#clearMarkerEditsButton": "Remove all saved manual marker overrides for the current image.",
-  "#animationPreviewHeading": "Live animation preview using the current settings.",
-  "#previewPlayPauseButton": "Pause or resume the live animation preview.",
-  "#exportZipButton": "Download a ZIP archive containing the current animation frames as PNG files.",
-  "#exportMp4Button": "Render and download an H.264 MP4 movie when this browser supports in-browser MP4 export.",
-  "#exportButton": "Render and download the animated GIF using the current settings.",
-  "#saveSettingsButton": "Download the current settings as the same tab-separated settings.txt file included in the ZIP export.",
-  "#gifPreviewCanvas": "This is a live animation preview. Click 'Export GIF' to generate the GIF.",
-  "#gifImage": "Most recently exported GIF preview image.",
-};
+const TOOLTIP_TEXT = getTooltipText();
 
 init();
 
@@ -303,6 +231,7 @@ function updateRectifiedSheetHeading() {
 
 function updatePageGridDetectionHeading(showWarning = false) {
   syncPageGridDetectionHeading(dom, showWarning);
+  syncRawPhotoFilenameDisplay();
 }
 
 /**
@@ -333,9 +262,14 @@ function syncMarkerEditingUi() {
   const allowEditing = hasAlignmentInfo && !state.runtime.mobileSingleViewerMode;
   dom.toggleMarkerEditingButton.hidden = state.runtime.mobileSingleViewerMode;
   dom.toggleMarkerEditingButton.disabled = !allowEditing;
-  dom.toggleMarkerEditingButton.textContent = state.runtime.markerEditingEnabled ? "Disable Overrides" : "Enable Overrides";
+  dom.toggleMarkerEditingButton.textContent = state.runtime.markerEditingEnabled
+    ? t("alignment.disableOverrides")
+    : t("alignment.enableOverrides");
   dom.clearMarkerEditsButton.hidden = state.runtime.mobileSingleViewerMode || !hasEdits;
   dom.clearMarkerEditsButton.disabled = !hasEdits;
+  dom.toggleMarkerBlobViewButton.hidden = true;
+  dom.toggleMarkerBlobViewButton.disabled = true;
+  dom.toggleMarkerBlobViewButton.classList.remove("is-active");
 }
 
 /**
@@ -345,6 +279,58 @@ function syncMarkerEditingUi() {
  */
 function isMobileSingleViewerMode() {
   return window.innerWidth <= MOBILE_VIEWER_BREAKPOINT_PX;
+}
+
+/**
+ * Apply the currently selected mobile control tab to the reparented control groups.
+ *
+ * @returns {void}
+ */
+function syncMobileControlTabUi() {
+  const mobileMode = state.runtime.mobileSingleViewerMode;
+  const activeTab = state.runtime.activeMobileControlTab;
+  const tabButtons = [
+    dom.mobileControlTabLayout,
+    dom.mobileControlTabPageGrid,
+    dom.mobileControlTabAlignment,
+    dom.mobileControlTabAppearance,
+    dom.mobileControlTabCrop,
+    dom.mobileControlTabExport,
+  ];
+  tabButtons.forEach((button) => {
+    const isActive = mobileMode && button?.dataset.controlTab === activeTab;
+    button?.classList.toggle("is-active", !!isActive);
+    button?.setAttribute("aria-selected", String(!!isActive));
+  });
+
+  const controlGroups = [
+    dom.layoutGroup,
+    dom.pageGridDetectionGroup,
+    dom.frameAlignmentGroup,
+    dom.appearanceGroup,
+    dom.cropGeometryGroup,
+    dom.exportOptionsGroup,
+  ];
+  controlGroups.forEach((group) => {
+    if (!group) return;
+    const isActive = !mobileMode || group.dataset.mobileControl === activeTab;
+    if (mobileMode) {
+      group.open = isActive;
+    }
+    group.classList.toggle("mobile-control-active", isActive);
+  });
+}
+
+/**
+ * Switch the active mobile control tab.
+ *
+ * @param {string} tab
+ * @returns {void}
+ */
+function setActiveMobileControlTab(tab) {
+  const validTabs = new Set(["layout", "page-grid", "alignment", "appearance", "crop", "export"]);
+  state.runtime.activeMobileControlTab = validTabs.has(tab) ? tab : "layout";
+  syncMobileControlTabUi();
 }
 
 /**
@@ -374,8 +360,13 @@ function syncResponsiveViewerUi() {
   document.body.classList.toggle("mobile-rectified-active", mobileMode && state.runtime.activeViewerTab === "rectified");
   document.body.classList.toggle("mobile-markers-active", mobileMode && state.runtime.activeViewerTab === "markers");
   if (mobileMode) {
+    // Reparent the same desktop control groups into the mobile stack instead of maintaining a
+    // duplicate mobile-only form. This keeps settings state and reset behavior shared.
     collapsibleGroups.forEach((group) => {
       if (group && dom.mobileControlStack && group.parentElement !== dom.mobileControlStack) {
+        if (group.dataset.desktopOpen == null) {
+          group.dataset.desktopOpen = group.open ? "true" : "false";
+        }
         dom.mobileControlStack.appendChild(group);
       }
     });
@@ -385,11 +376,15 @@ function syncResponsiveViewerUi() {
     }
     if (dom.statusGroup) dom.statusGroup.open = true;
   } else {
+    // Restore the desktop sidebar ordering when leaving mobile mode.
     if (dom.statusGroup && dom.controlPanel?.lastElementChild !== dom.statusGroup) {
       dom.controlPanel?.appendChild(dom.statusGroup);
     }
     collapsibleGroups.forEach((group) => {
       if (group && dom.controlPanel && group.parentElement !== dom.controlPanel) {
+        if (group.dataset.desktopOpen != null) {
+          group.open = group.dataset.desktopOpen === "true";
+        }
         dom.controlPanel.insertBefore(group, dom.statusGroup);
       }
     });
@@ -429,6 +424,7 @@ function syncResponsiveViewerUi() {
   } else if (previousMode !== mobileMode) {
     syncMarkerEditingUi();
   }
+  syncMobileControlTabUi();
   syncMobileMarkerGridLayout();
 }
 
@@ -534,6 +530,23 @@ function getOrderedFrameIndex(previewIndex) {
 }
 
 /**
+ * Resolve the source-frame index currently shown in Preview.
+ *
+ * During paused arrow-key inspection, this deliberately ignores export/playback ordering so the
+ * user can examine the physical frame grid directly.
+ *
+ * @returns {number}
+ */
+function getCurrentDisplayedFrameSourceIndex() {
+  const frameCount = state.geometry.frameCount;
+  if (frameCount <= 0) return 0;
+  if (state.preview.paused && state.preview.inspectingRawFrame) {
+    return ((state.preview.frameIndex % frameCount) + frameCount) % frameCount;
+  }
+  return getOrderedFrameIndex(state.preview.frameIndex);
+}
+
+/**
  * Return the number of frames that should be emitted into exported files after loop repetition
  * is applied. The live preview intentionally ignores `Number of Loops`.
  *
@@ -566,9 +579,78 @@ function getExportOrderedFrameIndex(exportIndex) {
  */
 function drawCurrentGifPreview() {
   updateMobilePreviewAspectRatio();
-  drawPreviewFrame({ dom, state, getAdjustedFrameCanvas, readConfig });
+  drawPreviewFrame({ dom, state, getAdjustedFrameCanvas, getDisplayFrameIndex: getCurrentDisplayedFrameSourceIndex });
   if (state.preview.rectifiedCanvas) {
     renderRectifiedPreview(state.preview.rectifiedCanvas);
+  }
+}
+
+/**
+ * Release cached OpenCV source mats that are tied to the currently loaded raw image.
+ *
+ * The lightweight Thresholding Offset preview reuses these mats so slider drags do not keep
+ * re-reading the source canvas or redoing full-image grayscale conversion.
+ *
+ * @returns {void}
+ */
+function releaseSourceCvCaches() {
+  if (state.source.cvMat) {
+    state.source.cvMat.delete();
+    state.source.cvMat = null;
+  }
+  if (state.source.grayMat) {
+    state.source.grayMat.delete();
+    state.source.grayMat = null;
+  }
+}
+
+/**
+ * Ensure that the raw source image has cached OpenCV mats ready for lightweight page-boundary
+ * previewing while the threshold-offset slider is dragged.
+ *
+ * @returns {{cvMat: cv.Mat, grayMat: cv.Mat} | null}
+ */
+function ensureSourceCvCaches() {
+  if (!state.runtime.cvReady || !state.source.image) return null;
+  if (!state.source.cvMat) {
+    state.source.cvMat = cv.imread(state.source.canvas);
+  }
+  if (!state.source.grayMat) {
+    state.source.grayMat = new cv.Mat();
+    cv.cvtColor(state.source.cvMat, state.source.grayMat, cv.COLOR_RGBA2GRAY);
+  }
+  return {
+    cvMat: state.source.cvMat,
+    grayMat: state.source.grayMat,
+  };
+}
+
+/**
+ * Recompute just the page boundary and redraw the Raw panel while Thresholding Offset is dragged.
+ *
+ * This intentionally skips page warp, grid detection, marker alignment, and frame extraction.
+ *
+ * @returns {void}
+ */
+function previewPageBoundaryForThresholdOffset() {
+  if (!state.runtime.cvReady || !state.source.image || state.processing.active) return;
+  const config = readConfig();
+  try {
+    const cachedSource = ensureSourceCvCaches();
+    if (!cachedSource) return;
+    const preview = previewPageBoundary(
+      cachedSource.grayMat,
+      state.source.canvas.width,
+      state.source.canvas.height,
+      config.thresholdMethod,
+      config.thresholdOffset
+    );
+    state.source.rawPageContour = preview.pageQuadPoints;
+    updatePageGridDetectionHeading(!(Array.isArray(preview.pageQuadPoints) && preview.pageQuadPoints.length === 4));
+    renderRawPreview();
+  } catch (error) {
+    updatePageGridDetectionHeading(true);
+    console.error(error);
   }
 }
 
@@ -703,9 +785,11 @@ function clearDerivedPreviews() {
   state.geometry.frameCount = 0;
   state.geometry.manualMarkerOverrides.clear();
   state.runtime.markerEditingEnabled = false;
+  state.runtime.markerBlobDebugVisible = false;
   state.frames.base = [];
   state.frames.adjustedCache.clear();
   state.preview.frameIndex = 0;
+  state.preview.inspectingRawFrame = false;
   state.preview.showRectifiedDiagnostic = false;
   updateRectifiedSheetHeading();
 
@@ -738,6 +822,7 @@ function clearDerivedPreviews() {
  * @returns {void}
  */
 function clearAllPreviews() {
+  releaseSourceCvCaches();
   state.source.rawPageContour = null;
   state.preview.paused = false;
   updatePreviewPlayPauseButton();
@@ -759,7 +844,20 @@ function clearAllPreviews() {
  * @returns {void}
  */
 function init() {
+  applyTranslations(document);
   attachUi();
+  [
+    dom.mobileControlTabLayout,
+    dom.mobileControlTabPageGrid,
+    dom.mobileControlTabAlignment,
+    dom.mobileControlTabAppearance,
+    dom.mobileControlTabCrop,
+    dom.mobileControlTabExport,
+  ].forEach((button) => {
+    button?.addEventListener("click", () => {
+      setActiveMobileControlTab(button.dataset.controlTab || "layout");
+    });
+  });
   initAccordionPanels();
   initializeTooltips();
   dom.statusGroup?.addEventListener("toggle", () => {
@@ -789,7 +887,7 @@ function init() {
   } else if (typeof cv !== "undefined") {
     onOpenCvReady();
   } else {
-    setStatus("OpenCV.js did not load.");
+    setStatus(t("status.openCvNotLoaded"));
   }
 
   updateSliderReadouts();
@@ -823,12 +921,16 @@ function attachUi() {
       if (state.export.url) {
         revokeGifUrl();
         state.preview.paused = true;
+        state.preview.inspectingRawFrame = false;
         state.preview.lastTime = performance.now();
         updatePreviewPlayPauseButton();
         drawCurrentGifPreview();
         return;
       }
       state.preview.paused = !state.preview.paused;
+      if (!state.preview.paused) {
+        state.preview.inspectingRawFrame = false;
+      }
       state.preview.lastTime = performance.now();
       updatePreviewPlayPauseButton();
       drawCurrentGifPreview();
@@ -836,13 +938,17 @@ function attachUi() {
     stepPausedPreviewFrame: (direction) => {
       const frameCount = state.geometry.frameCount;
       if (!state.preview.paused || frameCount <= 0) return;
-      state.preview.frameIndex = (state.preview.frameIndex + direction + frameCount) % frameCount;
+      const currentSourceIndex = getCurrentDisplayedFrameSourceIndex();
+      state.preview.inspectingRawFrame = true;
+      state.preview.frameIndex = (currentSourceIndex + direction + frameCount) % frameCount;
       drawCurrentGifPreview();
     },
+    toggleMarkerBlobView,
     toggleMarkerEditing,
     clearMarkerEdits,
     syncOutputSizeFromWidthInput,
     syncOutputSizeFromHeightInput,
+    previewPageBoundaryForThresholdOffset,
     syncPaperPresetUi,
     syncAlignmentMarkerUi,
     setActiveViewerTab,
@@ -1033,6 +1139,7 @@ function resetExportControls() {
     (Number(dom.fps.value) || SETTINGS_DEFAULTS.gifExport.fps) === SETTINGS_DEFAULTS.gifExport.fps &&
     (Number(dom.loopCount.value) || SETTINGS_DEFAULTS.gifExport.loopCount) === SETTINGS_DEFAULTS.gifExport.loopCount &&
     !dom.reverseOrder.checked &&
+    !dom.boustrophedonOrder.checked &&
     !dom.pingPong.checked &&
     getEncodingQualityValue() === SETTINGS_DEFAULTS.gifExport.quality &&
     (dom.gifDither.value || SETTINGS_DEFAULTS.gifExport.dither) === SETTINGS_DEFAULTS.gifExport.dither &&
@@ -1044,6 +1151,7 @@ function resetExportControls() {
   dom.fps.value = String(SETTINGS_DEFAULTS.gifExport.fps);
   dom.loopCount.value = String(SETTINGS_DEFAULTS.gifExport.loopCount);
   dom.reverseOrder.checked = SETTINGS_DEFAULTS.gifExport.reverseOrder;
+  dom.boustrophedonOrder.checked = SETTINGS_DEFAULTS.gifExport.boustrophedonOrder;
   dom.pingPong.checked = SETTINGS_DEFAULTS.gifExport.pingPong;
   dom.outputWidth.value = "";
   dom.outputHeight.value = "";
@@ -1100,7 +1208,7 @@ function resetNonLayoutControls() {
 function onOpenCvReady() {
   state.runtime.cvReady = true;
   populateResamplingOptions();
-  setStatus("OpenCV.js ready.\nLoad frame-sheet image to begin.");
+  setStatus(t("status.openCvReady"));
 }
 
 /**
@@ -1144,15 +1252,15 @@ function populateResamplingOptions() {
   const previousValue = select.value || "linear";
   select.innerHTML = "";
   const options = [
-    { value: "area", label: "Strong Reduction (Area)" },
-    { value: "linear", label: "Balanced (Linear)" },
-    { value: "cubic", label: "Sharper (Cubic)" },
+    { value: "area", label: t("export.dynamicResamplingOptions.area") },
+    { value: "linear", label: t("export.dynamicResamplingOptions.linear") },
+    { value: "cubic", label: t("export.dynamicResamplingOptions.cubic") },
   ];
   if (typeof cv !== "undefined" && typeof cv.INTER_LANCZOS4 !== "undefined") {
-    options.push({ value: "lanczos", label: "Maximum Detail (Lanczos)" });
+    options.push({ value: "lanczos", label: t("export.dynamicResamplingOptions.lanczos") });
   }
   if (typeof cv !== "undefined" && typeof cv.INTER_NEAREST !== "undefined") {
-    options.push({ value: "nearest", label: "Pixelated (Nearest Neighbor)" });
+    options.push({ value: "nearest", label: t("export.dynamicResamplingOptions.nearest") });
   }
   for (const option of options) {
     const el = document.createElement("option");
@@ -1174,10 +1282,101 @@ function attachResizeHandler() {
     state.preview.resizeTimer = window.setTimeout(() => {
       syncResponsiveViewerUi();
       window.requestAnimationFrame(() => {
+        syncRawPhotoFilenameDisplay();
         rerenderPreviews();
       });
     }, 40);
   });
+}
+
+/**
+ * Truncate a filename with a middle ellipsis so the start and extension remain visible.
+ *
+ * @param {string} text
+ * @param {number} maxWidthPx
+ * @param {string} font
+ * @returns {string}
+ */
+function truncateMiddleTextToFit(text, maxWidthPx, font) {
+  if (!text || maxWidthPx <= 0) return text;
+  const canvas = truncateMiddleTextToFit.canvas || (truncateMiddleTextToFit.canvas = document.createElement("canvas"));
+  const ctx = canvas.getContext("2d");
+  ctx.font = font;
+  if (ctx.measureText(text).width <= maxWidthPx) return text;
+
+  const ellipsis = "…";
+  const extensionIndex = text.lastIndexOf(".");
+  const extensionLength = extensionIndex >= 0 ? (text.length - extensionIndex) : 0;
+  const suffixFloor = Math.max(
+    4,
+    extensionLength > 0 ? Math.min(text.length - 1, extensionLength + 2) : 4
+  );
+  let best = text;
+
+  for (let prefixLen = Math.min(text.length - suffixFloor - 1, 12); prefixLen >= 1; prefixLen--) {
+    for (let suffixLen = suffixFloor; suffixLen < text.length - prefixLen; suffixLen++) {
+      const suffixStart = text.length - suffixLen;
+      const safeSuffixStart = (extensionIndex >= 0 && suffixStart >= extensionIndex)
+        ? Math.max(0, extensionIndex - 2)
+        : suffixStart;
+      const candidate = `${text.slice(0, prefixLen)}${ellipsis}${text.slice(safeSuffixStart)}`;
+      if (ctx.measureText(candidate).width <= maxWidthPx) {
+        return candidate;
+      }
+      best = candidate;
+      if (suffixLen > 12) break;
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Decide whether the Raw Photo filename is long enough to warrant middle truncation.
+ *
+ * This keeps ordinary filenames unchanged even if the header layout has a little slack jitter,
+ * and only engages ellipsis for genuinely long names.
+ *
+ * @param {string} text
+ * @param {number} availableWidthPx
+ * @param {string} font
+ * @returns {boolean}
+ */
+function shouldEllipsizeRawFilename(text, availableWidthPx, font) {
+  if (!text) return false;
+  if (text.length <= 24) return false;
+  const canvas = shouldEllipsizeRawFilename.canvas || (shouldEllipsizeRawFilename.canvas = document.createElement("canvas"));
+  const ctx = canvas.getContext("2d");
+  ctx.font = font;
+  const measuredWidth = ctx.measureText(text).width;
+  return measuredWidth > Math.max(availableWidthPx, 0) + 24;
+}
+
+/**
+ * Fit the Raw Photo filename link into the header using a middle ellipsis when needed.
+ *
+ * @returns {void}
+ */
+function syncRawPhotoFilenameDisplay() {
+  if (!dom.rawPhotoName || !dom.rawPhotoNameWrap || dom.rawPhotoNameWrap.hidden) return;
+  const fullFilename = dom.rawPhotoName.dataset.fullFilename || state.source.filename || "";
+  if (!fullFilename) {
+    dom.rawPhotoName.textContent = "";
+    return;
+  }
+
+  const headingRowWidth = dom.rawPhotoHeading?.parentElement?.clientWidth || 0;
+  const titleWidth = dom.rawPhotoHeadingText?.getBoundingClientRect().width || 0;
+  const warningWidth = dom.rawPhotoWarning?.hidden ? 0 : (dom.rawPhotoWarning.getBoundingClientRect().width || 0);
+  const busyWidth = dom.rawBusy?.hidden ? 0 : (dom.rawBusy.getBoundingClientRect().width || 0);
+  const availableWrapWidth = Math.max(40, headingRowWidth - titleWidth - warningWidth - busyWidth - 20);
+  const availableLinkWidth = Math.max(32, availableWrapWidth - 12);
+  const computed = window.getComputedStyle(dom.rawPhotoName);
+  const font = computed.font || `${computed.fontSize} ${computed.fontFamily}`;
+  dom.rawPhotoName.textContent = shouldEllipsizeRawFilename(fullFilename, availableLinkWidth, font)
+    ? truncateMiddleTextToFit(fullFilename, availableLinkWidth, font)
+    : fullFilename;
+  dom.rawPhotoName.title = fullFilename;
 }
 
 /**
@@ -1213,6 +1412,7 @@ async function loadImageSource(src, filename = "", mimeType = "image/jpeg", sett
     revokeGifUrl,
     clearAllPreviews,
     renderRawPreview,
+    syncRawPhotoFilenameDisplay,
     loadCompanionSettingsText,
     applyLoadedSettingsText,
     invalidateAppearanceCache,
@@ -1261,7 +1461,7 @@ function scheduleProcess() {
  *   postCropGeometry:{flipHorizontal:boolean,flipVertical:boolean,rotate90Cw:boolean},
  *   filters:{brightness:number,contrast:number,vibrance:number,temperature:number,unsharpRadius:number,unsharpAmount:number,invert:boolean},
  *   fps:number,
- *   exportOptions:{encodingQuality:number,quality:number,mp4Quality:number,dither:string|false,resampling:string,globalPalette:boolean,outputWidthPx:number,outputHeightPx:number,outputScale:number,reverseOrder:boolean,pingPong:boolean,loopCount:number}
+ *   exportOptions:{encodingQuality:number,quality:number,mp4Quality:number,dither:string|false,resampling:string,globalPalette:boolean,outputWidthPx:number,outputHeightPx:number,outputScale:number,reverseOrder:boolean,boustrophedonOrder:boolean,pingPong:boolean,loopCount:number}
  * }}
  */
 function readConfig() {
@@ -1296,7 +1496,7 @@ function readConfig() {
     paperMarginPx: Math.max(0, Math.min(150, Math.round(Number(dom.paperMargin.value) || SETTINGS_DEFAULTS.detection.paperMarginPx))),
     boundarySensitivity: Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)),
     boundaryPersistencePx: Math.max(1, Math.min(15, Math.round(Number(dom.boundaryPersistence.value) || SETTINGS_DEFAULTS.detection.boundaryPersistencePx))),
-    alignmentMarkerType: dom.alignmentMarkerTypeCircles.checked ? "circles" : "crosses",
+    alignmentMarkerType: dom.alignmentMarkerTypeAuto.checked ? "auto" : (dom.alignmentMarkerTypeCircles.checked ? "circles" : "crosses"),
     crossRoiScalePct: Math.max(18, Math.min(110, Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct)),
     crossRoiScale: Math.max(0.18, Math.min(1.1, (Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct) / 100)),
     detectCrossesWithConvolution: dom.alignmentMarkerTypeCrosses.checked && dom.detectCrossesWithConvolution.checked,
@@ -1335,6 +1535,7 @@ function readConfig() {
       resampling: dom.gifResampling.value || "linear",
       globalPalette: dom.gifGlobalPalette.checked,
       reverseOrder: dom.reverseOrder.checked,
+      boustrophedonOrder: dom.boustrophedonOrder.checked,
       pingPong: dom.pingPong.checked,
     },
   };
@@ -1371,27 +1572,14 @@ function getPaperOrientation() {
  * @returns {string}
  */
 function formatPaperPresetLabel(presetKey) {
-  if (presetKey === "custom") return "Custom";
+  if (presetKey === "custom") return t("layout.presetNames.custom");
   const preset = PAPER_PRESETS[presetKey];
   if (!preset) return presetKey;
   const orientation = getPaperOrientation();
   const width = orientation === "portrait" ? preset.height : preset.width;
   const height = orientation === "portrait" ? preset.width : preset.height;
-  const units = preset.width > 100 ? "mm" : "in";
-  const baseLabelMap = {
-    letter: "Letter",
-    legal: "Legal",
-    tabloid: "Tabloid",
-    "12x9": "12×9",
-    "18x12": "18×12",
-    "24x18": "24×18",
-    "36x24": "36×24",
-    a4: "A4",
-    a3: "A3",
-    a2: "A2",
-    a1: "A1",
-  };
-  return `${baseLabelMap[presetKey] || presetKey} (${width}×${height} ${units})`;
+  const units = preset.width > 100 ? t("layout.units.mm") : t("layout.units.in");
+  return `${t(`layout.presetNames.${presetKey}`)} (${width}×${height} ${units})`;
 }
 
 /**
@@ -1405,7 +1593,7 @@ function syncPaperPresetUi() {
   const isCustom = presetKey === "custom";
   const preset = PAPER_PRESETS[presetKey];
   const orientation = getPaperOrientation();
-  dom.paperPresetLabel.textContent = "Paper Size";
+  dom.paperPresetLabel.textContent = t("layout.paperSize");
   Array.from(dom.paperPreset.options).forEach((option) => {
     option.textContent = formatPaperPresetLabel(option.value);
   });
@@ -1428,11 +1616,17 @@ function syncPaperPresetUi() {
  * @returns {void}
  */
 function syncAlignmentMarkerUi() {
-  const markerType = dom.alignmentMarkerTypeCircles.checked ? "circles" : "crosses";
-  const showCrossOnlyControls = markerType === "crosses";
+  const markerType = dom.alignmentMarkerTypeAuto.checked ? "auto" : (dom.alignmentMarkerTypeCircles.checked ? "circles" : "crosses");
+  const resolvedAutoType = state.geometry.alignmentInfo?.resolvedMarkerType || null;
+  const showCrossOnlyControls = markerType === "crosses" || (markerType === "auto" && resolvedAutoType === "crosses");
   dom.detectCrossesWithConvolutionRow.hidden = !showCrossOnlyControls;
-  if (!showCrossOnlyControls) {
+  if (markerType === "circles") {
     dom.detectCrossesWithConvolution.checked = false;
+  } else if (state.runtime.markerBlobDebugVisible) {
+    state.runtime.markerBlobDebugVisible = false;
+    if (state.geometry.alignmentInfo) {
+      renderCrossRoiGrid(state.geometry.alignmentInfo);
+    }
   }
 }
 
@@ -1446,7 +1640,7 @@ function syncMp4ExportUi() {
   dom.exportMp4Button.hidden = false;
   if (!supported) {
     dom.exportMp4Button.disabled = true;
-    dom.exportMp4Button.title = "Not supported by this browser";
+    dom.exportMp4Button.title = t("panels.mp4Unsupported");
   } else {
     dom.exportMp4Button.removeAttribute("title");
   }
@@ -1460,6 +1654,18 @@ function syncMp4ExportUi() {
 function toggleMarkerEditing() {
   if (!state.geometry.alignmentInfo) return;
   state.runtime.markerEditingEnabled = !state.runtime.markerEditingEnabled;
+  syncMarkerEditingUi();
+  renderCrossRoiGrid(state.geometry.alignmentInfo);
+}
+
+/**
+ * Toggle the marker tiles between grayscale ROIs and binarized dot-blob diagnostics.
+ *
+ * @returns {void}
+ */
+function toggleMarkerBlobView() {
+  if (!state.geometry.alignmentInfo?.crossRoiTiles?.some((tile) => tile.blobCanvas)) return;
+  state.runtime.markerBlobDebugVisible = !state.runtime.markerBlobDebugVisible;
   syncMarkerEditingUi();
   renderCrossRoiGrid(state.geometry.alignmentInfo);
 }
@@ -1525,16 +1731,16 @@ async function applySettingsFile(file) {
     invalidateFrameCaches();
     invalidateAppearanceCache();
     if (state.source.image) {
-      setStatus("Loaded settings file.\nRe-analyzing page…");
+      setStatus(`${t("status.loadedSettingsFile")}\n${t("status.reanalyzingPage")}`);
       await waitForNextPaint();
       state.processing.requestId += 1;
       await processCurrentImage(state.processing.requestId);
     } else {
-      setStatus("Loaded settings file.\nLoad an image to use them.");
+      setStatus(`${t("status.loadedSettingsFile")}\n${t("status.loadImageToUseSettings")}`);
     }
   } catch (error) {
     console.error(error);
-    setStatus(`Failed to load the selected settings file.\n(${error?.message || String(error)})`);
+    setStatus(t("status.failedToLoadSettings", { message: error?.message || String(error) }));
   } finally {
     if (!state.processing.active && !state.processing.pending) {
       setBusyState(false);
@@ -1776,7 +1982,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
   if (!state.runtime.cvReady) {
     setBusyState(false);
     setGeometryProcessingCursor(false);
-    setStatus("OpenCV is still loading.");
+    setStatus(t("status.openCvLoading"));
     return;
   }
   if (!state.source.image) return;
@@ -1806,6 +2012,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     if (state.geometry.manualMarkerOverrides.size > 0) {
       state.frames.base = new Array(result.frames.length);
     }
+    syncAlignmentMarkerUi();
     invalidateAppearanceCache();
     updateSliderReadouts();
     renderRawPreview();
@@ -1834,7 +2041,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
       }
       console.error(error);
       updateExportButtonLabel();
-      setStatus("Unable to find page boundary. Try adjusting the Thresholding Offset or other Page & Grid Detection settings.\n(" + (error?.message || String(error)) + ")");
+      setStatus(t("status.pageBoundaryFailure"));
     }
   } finally {
     updateExportControlsAvailability();
@@ -1876,7 +2083,7 @@ function throwIfProcessAborted(requestId) {
 function renderRectifiedPreview(rectifiedCanvas) {
   updateRectifiedSheetHeading();
   dom.rectifiedCanvas.parentElement?.classList.remove("is-empty");
-  const diagnosticSource = state.geometry.baseRectifiedPageCanvas || rectifiedCanvas;
+  const diagnosticSource = rectifiedCanvas;
   const displayCanvas = state.preview.showRectifiedDiagnostic
     ? getRectifiedConvolutionCanvas(diagnosticSource)
     : rectifiedCanvas;
@@ -1889,40 +2096,11 @@ function renderRectifiedPreview(rectifiedCanvas) {
   const offsetX = (targetCanvas.width - drawW) * 0.5;
   const offsetY = (targetCanvas.height - drawH) * 0.5;
   const ctx = targetCanvas.getContext("2d");
-  const margin = Math.max(0, Math.min(150, readConfig().paperMarginPx || 0));
 
   ctx.save();
-  // Blue inset marks the part of the page that is excluded from the coarse cross sweeps.
-  ctx.strokeStyle = "rgba(0, 0, 255, 0.5)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(
-    offsetX + margin * scale + 0.5,
-    offsetY + margin * scale + 0.5,
-    Math.max(0, drawW - (margin * 2 * scale) - 1),
-    Math.max(0, drawH - (margin * 2 * scale) - 1)
-  );
-
-  const quad = state.geometry.pagePreviewGridQuad;
-  if (!quad) {
-    ctx.restore();
-    return;
-  }
-
-  // Red quad marks the coarse frame-grid bounds detected from the convolution profiles.
-  ctx.strokeStyle = "rgba(255, 0, 0, 0.5)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(offsetX + quad.tl.x * scale, offsetY + quad.tl.y * scale);
-  ctx.lineTo(offsetX + quad.tr.x * scale, offsetY + quad.tr.y * scale);
-  ctx.lineTo(offsetX + quad.br.x * scale, offsetY + quad.br.y * scale);
-  ctx.lineTo(offsetX + quad.bl.x * scale, offsetY + quad.bl.y * scale);
-  ctx.closePath();
-  ctx.stroke();
-
-  const currentFrameQuad = getCurrentPreviewFrameQuadInPagePreview();
+  const currentFrameQuad = getCurrentPreviewFrameQuad();
   if (currentFrameQuad) {
-    // Green quad tracks the exact frame currently shown in Animation Preview, using the
-    // same refined/overridden marker positions that drive extraction.
+    // Draw the current frame directly in rectified-sheet pixel coordinates.
     ctx.strokeStyle = "rgb(0, 128, 0)";
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -1982,10 +2160,10 @@ function resolveFrameQuadForPreview(extractionInfo, col, row) {
 function getCurrentPreviewFrameQuad() {
   const alignmentInfo = state.geometry.alignmentInfo;
   if (!alignmentInfo || state.geometry.frameCount <= 0) return null;
-  const orderedIndex = getOrderedFrameIndex(state.preview.frameIndex);
+  const sourceIndex = getCurrentDisplayedFrameSourceIndex();
   const cols = alignmentInfo.cols;
-  const col = orderedIndex % cols;
-  const row = Math.floor(orderedIndex / cols);
+  const col = sourceIndex % cols;
+  const row = Math.floor(sourceIndex / cols);
   if (row < 0 || row >= alignmentInfo.rows) return null;
   return resolveFrameQuadForPreview(alignmentInfo, col, row);
 }
@@ -2002,12 +2180,20 @@ function mapRectifiedPointToPagePreview(point) {
   if (!alignmentInfo || !previewQuad || typeof cv === "undefined") {
     return { x: point.x, y: point.y };
   }
+  const tlMarker = alignmentInfo.markerLookup?.get(getMarkerKey(0, 0));
+  const trMarker = alignmentInfo.markerLookup?.get(getMarkerKey(alignmentInfo.cols, 0));
+  const brMarker = alignmentInfo.markerLookup?.get(getMarkerKey(alignmentInfo.cols, alignmentInfo.rows));
+  const blMarker = alignmentInfo.markerLookup?.get(getMarkerKey(0, alignmentInfo.rows));
   const bounds = alignmentInfo.gridBounds;
+  const srcTl = tlMarker ? { x: tlMarker.detectedX, y: tlMarker.detectedY } : { x: bounds.left, y: bounds.top };
+  const srcTr = trMarker ? { x: trMarker.detectedX, y: trMarker.detectedY } : { x: bounds.left + bounds.width, y: bounds.top };
+  const srcBr = brMarker ? { x: brMarker.detectedX, y: brMarker.detectedY } : { x: bounds.left + bounds.width, y: bounds.top + bounds.height };
+  const srcBl = blMarker ? { x: blMarker.detectedX, y: blMarker.detectedY } : { x: bounds.left, y: bounds.top + bounds.height };
   const srcCorners = cv.matFromArray(4, 1, cv.CV_32FC2, [
-    bounds.left, bounds.top,
-    bounds.left + bounds.width, bounds.top,
-    bounds.left + bounds.width, bounds.top + bounds.height,
-    bounds.left, bounds.top + bounds.height,
+    srcTl.x, srcTl.y,
+    srcTr.x, srcTr.y,
+    srcBr.x, srcBr.y,
+    srcBl.x, srcBl.y,
   ]);
   const dstCorners = cv.matFromArray(4, 1, cv.CV_32FC2, [
     previewQuad.tl.x, previewQuad.tl.y,
@@ -2137,8 +2323,8 @@ function invalidateFramesForMarker(markerCol, markerRow) {
  * @returns {void}
  */
 function refreshAppearanceOutputs() {
-  if (!state.geometry.baseRectifiedPageCanvas) return;
-  state.preview.rectifiedCanvas = state.geometry.baseRectifiedPageCanvas;
+  if (!state.geometry.baseRectifiedCanvas) return;
+  state.preview.rectifiedCanvas = state.geometry.baseRectifiedCanvas;
   state.preview.rectifiedDiagnosticSourceCanvas = null;
   state.preview.rectifiedDiagnosticDirty = true;
   primeRectifiedDragAsset(state.preview.rectifiedCanvas);
@@ -2348,8 +2534,8 @@ function renderRawPreview() {
   const offsetX = (targetCanvas.width - drawW) * 0.5;
   const offsetY = (targetCanvas.height - drawH) * 0.5;
   ctx.save();
-  ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(0, 255, 0, 0.8)";
+  ctx.lineWidth = 3;
   ctx.beginPath();
   for (let i = 0; i < state.source.rawPageContour.length; i++) {
     const pt = state.source.rawPageContour[i];
@@ -2392,8 +2578,10 @@ function renderCrossRoiGrid(alignmentInfo) {
  */
 function applyMarkerOverride(tile, local, finalize) {
   const center = (tile.canvas.width - 1) * 0.5;
-  const detectedX = tile.x + (local.x - center);
-  const detectedY = tile.y + (local.y - center);
+  const roiCenterX = Number.isFinite(tile.roiCenterX) ? tile.roiCenterX : tile.x;
+  const roiCenterY = Number.isFinite(tile.roiCenterY) ? tile.roiCenterY : tile.y;
+  const detectedX = roiCenterX + (local.x - center);
+  const detectedY = roiCenterY + (local.y - center);
   const key = getMarkerKey(tile.col, tile.row);
   state.geometry.manualMarkerOverrides.set(key, { x: detectedX, y: detectedY });
   if (state.geometry.alignmentInfo) {

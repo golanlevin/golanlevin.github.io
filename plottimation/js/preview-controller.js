@@ -5,6 +5,7 @@
  * RAF loop, and the drawing of the current preview frame into the Preview panel.
  */
 import { renderCanvasFit, resizeCanvasToBox } from "./canvas-view.js";
+import { t } from "./i18n.js";
 
 /**
  * Keep the Preview panel title in sync with whether it is showing the live canvas
@@ -15,7 +16,7 @@ import { renderCanvasFit, resizeCanvasToBox } from "./canvas-view.js";
  * @returns {void}
  */
 export function updateAnimationPreviewHeading(dom, state) {
-  dom.animationPreviewHeading.textContent = state.export.url ? "4. GIF Output" : "4. Preview";
+  dom.animationPreviewHeading.textContent = state.export.url ? t("panels.gifOutput") : t("panels.preview");
 }
 
 /**
@@ -30,7 +31,7 @@ export function updatePreviewPlayPauseButton(dom, state) {
   const paused = !!state.preview.paused;
   dom.previewPlayPauseButton.disabled = !hasFrames;
   dom.previewPlayPauseButton.textContent = paused ? "\u23f5" : "\u23f8";
-  dom.previewPlayPauseButton.setAttribute("aria-label", paused ? "Play animation" : "Pause animation");
+  dom.previewPlayPauseButton.setAttribute("aria-label", paused ? t("aria.playAnimation") : t("aria.pauseAnimation"));
 }
 
 /**
@@ -62,17 +63,25 @@ export function getOrderedFrameIndex(previewIndex, state, readConfig) {
   const frameCount = state.geometry.frameCount;
   if (frameCount <= 0) return 0;
   const exportOptions = readConfig().exportOptions;
+  const cols = Math.max(1, state.geometry.alignmentInfo?.cols || 1);
   const orderedFrameCount = getOrderedFrameCount(state, readConfig);
   const clamped = ((previewIndex % orderedFrameCount) + orderedFrameCount) % orderedFrameCount;
-  let sourceIndex = clamped;
+  let sequencePosition = clamped;
   if (exportOptions.pingPong && frameCount > 1) {
-    sourceIndex = (clamped < frameCount)
+    sequencePosition = (clamped < frameCount)
       ? clamped
       : ((frameCount - 2) - (clamped - frameCount));
   }
-  return exportOptions.reverseOrder
-    ? (frameCount - 1 - sourceIndex)
-    : sourceIndex;
+  const orderedPosition = exportOptions.reverseOrder
+    ? (frameCount - 1 - sequencePosition)
+    : sequencePosition;
+  if (!exportOptions.boustrophedonOrder) {
+    return orderedPosition;
+  }
+  const row = Math.floor(orderedPosition / cols);
+  const col = orderedPosition % cols;
+  const sourceCol = (row % 2 === 1) ? (cols - 1 - col) : col;
+  return (row * cols) + sourceCol;
 }
 
 /**
@@ -109,11 +118,11 @@ export function startGifPreviewLoop({ state, readConfig, drawCurrentGifPreview }
  *   dom: import("./dom-state.js").dom,
  *   state: import("./dom-state.js").state,
  *   getAdjustedFrameCanvas: (index:number) => HTMLCanvasElement | null,
- *   readConfig: () => ReturnType<import("./app.js")["readConfig"]>
+ *   getDisplayFrameIndex: () => number
  * }} deps
  * @returns {void}
  */
-export function drawCurrentGifPreview({ dom, state, getAdjustedFrameCanvas, readConfig }) {
+export function drawCurrentGifPreview({ dom, state, getAdjustedFrameCanvas, getDisplayFrameIndex }) {
   if (state.export.url) {
     // After export, this panel becomes a GIF viewer until some setting invalidates that GIF.
     dom.gifPreviewCanvas.hidden = true;
@@ -123,7 +132,7 @@ export function drawCurrentGifPreview({ dom, state, getAdjustedFrameCanvas, read
   }
   dom.gifPreviewCanvas.hidden = false;
   updateAnimationPreviewHeading(dom, state);
-  const frame = getAdjustedFrameCanvas(getOrderedFrameIndex(state.preview.frameIndex, state, readConfig));
+  const frame = getAdjustedFrameCanvas(getDisplayFrameIndex());
   if (!frame) {
     const ctx = dom.gifPreviewCanvas.getContext("2d");
     resizeCanvasToBox(dom.gifPreviewCanvas);

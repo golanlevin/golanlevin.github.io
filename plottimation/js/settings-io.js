@@ -122,9 +122,13 @@ export function applyLoadedSettingsText({
   setIfPresent("boundary_threshold", dom.boundarySensitivity);
   setIfPresent("boundary_persistence_px", dom.boundaryPersistence);
   const markerType = entries.get("alignment_marker_type");
-  if (markerType === "circles") {
+  if (markerType === "auto") {
+    dom.alignmentMarkerTypeAuto.checked = true;
+  } else if (markerType === "circles") {
     dom.alignmentMarkerTypeCircles.checked = true;
   } else if (markerType === "crosses") {
+    dom.alignmentMarkerTypeCrosses.checked = true;
+  } else {
     dom.alignmentMarkerTypeCrosses.checked = true;
   }
   setIfPresent("alignment_marker_region_scale_pct", dom.crossRoiScale);
@@ -147,6 +151,7 @@ export function applyLoadedSettingsText({
   setIfPresent("fps", dom.fps);
   setIfPresent("loop_count", dom.loopCount);
   setCheckedIfPresent("reverse_order", dom.reverseOrder);
+  setCheckedIfPresent("boustrophedon_order", dom.boustrophedonOrder);
   setCheckedIfPresent("ping_pong", dom.pingPong);
   if (entries.has("output_width")) {
     dom.outputWidth.value = String(entries.get("output_width"));
@@ -168,6 +173,8 @@ export function applyLoadedSettingsText({
   setIfPresent("resampling", dom.gifResampling);
   setCheckedIfPresent("use_global_palette", dom.gifGlobalPalette);
 
+  // Manual marker overrides are stored as their own sparse TSV rows so settings files can preserve
+  // only the edited markers instead of serializing the whole marker lattice.
   for (const [key, value] of entries.entries()) {
     const match = /^marker_override_(\d+)_(\d+)$/.exec(key);
     if (!match) continue;
@@ -237,6 +244,7 @@ export function buildSettingsTsv({
     ["fps", String(config.fps)],
     ["loop_count", String(config.exportOptions.loopCount)],
     ["reverse_order", String(config.exportOptions.reverseOrder)],
+    ["boustrophedon_order", String(config.exportOptions.boustrophedonOrder)],
     ["ping_pong", String(config.exportOptions.pingPong)],
     ["output_width", String(config.exportOptions.outputWidthPx)],
     ["output_height", String(config.exportOptions.outputHeightPx)],
