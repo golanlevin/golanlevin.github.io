@@ -24,9 +24,10 @@ A website by Golan Levin
 * [Experimental Capture](https://github.com/golanlevin/ExperimentalCapture/blob/master/README.md)
 
 
-### Software
+### Software Tools
 
-* [Zen's Signet Ring Band Generator](ring/index.html)
-* [Zen's Super-Ellipse Generator](ellipse/index.html)
+* [Plottimation](plottimation/index.html)
+* [Signet Ring Band Generator](ring/index.html)
+* [Super-Ellipse Generator](ellipse/index.html)
 
 

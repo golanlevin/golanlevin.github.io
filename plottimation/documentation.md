@@ -1,17 +1,20 @@
 # Plottimation Documentation
 
-Contents: 
+![plottimation_overview.jpg](doc/plottimation_overview.jpg)
+
+**Contents**: 
 
 * [Layout](#layout)
-* [Page & Grid Detection]()
+* [Page & Grid Detection](#page--grid-detection)
 * [Automatic Frame Alignment](#automatic-frame-alignment)
 * [Appearance](#appearance)
-* [Crop & Geometry]()
+* [Crop & Geometry](#crop--geometry)
 * [Export Options](#export-options)
 * [Preview Panel Header Buttons](#preview-panel-header-buttons)
 * [Status](#status)
 * [Viewer Panels](#viewer-panels)
 * [Sibling Settings Files](#sibling-settings-files)
+
 
 ---
 

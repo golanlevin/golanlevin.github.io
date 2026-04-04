@@ -2331,7 +2331,7 @@ function buildStatusText({
 }) {
   const lines = [
     t("status.rawPhoto", { width: rawWidth, height: rawHeight }),
-    t("status.paperThreshold", { value: Number(threshVal).toFixed(2) }),
+    t("status.paperThreshold", { value: Math.round(Number(threshVal)) }),
     t("status.largestContourArea", { value: (pageAreaPct * 100).toFixed(1) }),
     t("status.detectionWarp", { width: pageWarpWidth, height: pageWarpHeight }),
     t("status.extractionWarp", { width: highPageWarpWidth, height: highPageWarpHeight }),
