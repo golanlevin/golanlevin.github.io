@@ -25,5 +25,7 @@ Version 1.09 • By @GolanLevin, 2026.
 
 ## Plottimation GIF Gallery
 
-<img src="doc/plotti_demo_2.gif" height="200"> <img src="doc/plotti_demo_4.gif" height="200"> 
+GIF designs by Golan Levin, Julian Gachadoat, and others.
+
+<img src="doc/plotti_demo_2.gif" alt="By Golan Levin" height="200"> <img src="doc/plotti_demo_4.gif" alt="By Julian Gachadoat" height="200"> 
 
