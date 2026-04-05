@@ -5,7 +5,7 @@ Version 1.09 • By @GolanLevin, 2026.
 
 * [**Plottimation Tool Online Here**](https://golanlevin.github.io/plottimation/)
 * [**Quickstart Instructions**](#quickstart-instructions)
-* [p5.js Code]((https://editor.p5js.org/golan/sketches/_ZMbagYFc)) • [Design Templates](templates/README.md) • [Demo Video](https://www.youtube.com/watch?v=MOXB63DgItQ) • [Documentation](documentation.md) 
+* [p5.js Code](https://editor.p5js.org/golan/sketches/_ZMbagYFc) • [Design Templates](templates/README.md) • [Demo Video](https://www.youtube.com/watch?v=MOXB63DgItQ) • [Documentation](documentation.md) 
 • [Gallery](#plottimation-gif-gallery)
 
 ![plottimation_ui.png](doc/plottimation_spinnyrect.gif)
