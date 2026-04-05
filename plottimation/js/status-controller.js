@@ -27,9 +27,15 @@ export function updateRectifiedSheetHeading(dom, state) {
  * @returns {void}
  */
 export function updatePageGridDetectionHeading(dom, showWarning = false) {
-  dom.pageGridDetectionSummary.textContent = showWarning
-    ? t("detection.summaryWarning")
-    : t("detection.summary");
+  const summaryLabel = dom.pageGridDetectionSummary?.querySelector("[data-i18n='detection.summary']");
+  if (summaryLabel) {
+    summaryLabel.textContent = t("detection.summary");
+  } else {
+    dom.pageGridDetectionSummary.textContent = t("detection.summary");
+  }
+  if (dom.pageGridDetectionWarning) {
+    dom.pageGridDetectionWarning.hidden = !showWarning;
+  }
   if (dom.rawPhotoWarning) {
     dom.rawPhotoWarning.hidden = !showWarning;
   }
@@ -39,14 +45,13 @@ export function updatePageGridDetectionHeading(dom, showWarning = false) {
  * Update the Status panel text and any dependent warning state.
  *
  * @param {import("./dom-state.js").dom} dom
+ * @param {import("./dom-state.js").state} state
  * @param {string} text
  * @returns {void}
  */
-export function setStatus(dom, text) {
+export function setStatus(dom, state, text) {
   dom.statusText.textContent = text;
-  // Warning detection stays string-based so both the full pipeline and the lighter threshold-preview
-  // path can drive the same heading state without introducing another shared error enum.
-  const showWarning = String(text || "").startsWith(t("status.pageBoundaryFailure"));
+  const showWarning = Boolean(state.runtime.pageBoundaryWarningVisible);
   dom.statusText.classList.toggle("status-page-boundary-failure", showWarning);
   updatePageGridDetectionHeading(dom, showWarning);
 }

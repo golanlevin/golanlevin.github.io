@@ -11,7 +11,6 @@ const DOT_DIM_PCT_ROWS = 0.02;
 const GUTTER_PCT = 0.01;
 const MIN_CROSS_DETECTION_RATIO = 0.5;
 const MIN_CROSS_DETECTIONS_ABS = 4;
-const bUseCrossOnlyGridDetection = true;
 const PAGE_WARP_LOW_LONG_EDGE_PX = 1100;
 // High-resolution extraction should track the real source-image resolution instead of a fixed
 // paper-size number. The long edge of the extraction warp is capped at 90% of the source-image
@@ -205,24 +204,14 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
     pageWarpPreviewCanvas = matToCanvas(pageWarpHigh.styledMat);
     throwIfAborted(requestId);
 
-    // Keep both grid-finding pipelines available while the cross-only detector is being validated.
     const useRectifiedAsSource = config.useRectifiedAsSource;
-    rectifiedWarp = bUseCrossOnlyGridDetection
-      ? buildFrameGridRectification_fromCrosses(
-          visionSrc,
-          styledSrc,
-          pageWarpHigh,
-          config,
-          useRectifiedAsSource
-        )
-      : buildFrameGridRectification_old(
-          visionSrc,
-          styledSrc,
-          pageWarpLow,
-          pageWarpHigh,
-          config,
-          useRectifiedAsSource
-        );
+    rectifiedWarp = buildFrameGridRectification_fromCrosses(
+      visionSrc,
+      styledSrc,
+      pageWarpHigh,
+      config,
+      useRectifiedAsSource
+    );
     throwIfAborted(requestId);
 
     // Resolve the marker lattice if enabled; otherwise keep the nominal grid and unrefined ROI views.
@@ -285,7 +274,7 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
       animationWidth: frames[0]?.width || 0,
       animationHeight: frames[0]?.height || 0,
       sourceMode: useRectifiedAsSource ? "rectified" : "raw photo",
-      gridDetector: rectifiedWarp.includeCornerCrosses ? "cross-only" : "corner dots",
+      gridDetector: "cross-only",
     });
 
     return {
@@ -317,46 +306,6 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
     grayImg.delete();
     thresh.delete();
   }
-}
-
-/**
- * Legacy frame-grid detector based on the four circular corner markers.
- *
- * @param {cv.Mat} visionSrc
- * @param {cv.Mat} styledSrc
- * @param {{visionMat:cv.Mat, styledMat:cv.Mat}} pageWarpLow
- * @param {{visionMat:cv.Mat, styledMat:cv.Mat, inverseTransform:number[]}} pageWarpHigh
- * @param {object} config
- * @param {boolean} useRectifiedAsSource
- * @returns {{visionMat:cv.Mat, styledMat:cv.Mat, gridBounds:{left:number, top:number, width:number, height:number}, includeCornerCrosses:boolean}}
- */
-function buildFrameGridRectification_old(visionSrc, styledSrc, pageWarpLow, pageWarpHigh, config, useRectifiedAsSource) {
-  // Legacy path: find the corner circles in the low-res page warp, then scale them into the extraction warp.
-  const lightnessLow = toLightnessGray(pageWarpLow.visionMat);
-  const dotRectLow = findDotRect_old(lightnessLow);
-  lightnessLow.delete();
-  const dotRectHigh = scaleDotRect(dotRectLow, new cv.Size(pageWarpLow.visionMat.cols, pageWarpLow.visionMat.rows), new cv.Size(pageWarpHigh.visionMat.cols, pageWarpHigh.visionMat.rows));
-  const rectifiedSize = estimateRectifiedSize_old(dotRectHigh);
-  const detectionPadding = estimateDetectionPadding(
-    rectifiedSize.width,
-    rectifiedSize.height,
-    config.frameCols,
-    config.frameRows,
-    config.crossRoiScale
-  );
-  const finalDotRect = useRectifiedAsSource
-    ? dotRectHigh
-    : mapQuadThroughHomography(dotRectHigh, pageWarpHigh.inverseTransform);
-  const finalVisionSource = useRectifiedAsSource ? pageWarpHigh.visionMat : visionSrc;
-  const finalStyledSource = useRectifiedAsSource ? pageWarpHigh.styledMat : styledSrc;
-  const rectifiedWarp = rectifyByDots_old(
-    finalVisionSource,
-    finalStyledSource,
-    finalDotRect,
-    rectifiedSize,
-    detectionPadding
-  );
-  return { ...rectifiedWarp, includeCornerCrosses: false, previewGridQuad: dotRectHigh };
 }
 
 /**
@@ -881,63 +830,6 @@ function findFirstRiseFromEdge(profile, edge, options = {}) {
 }
 
 /**
- * Locate the four corner circles by finding edge dips followed by the required blank gutter.
- *
- * @param {cv.Mat} pageGrayMat
- * @returns {{tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}}}
- */
-function findDotRect_old(pageGrayMat) {
-  const cols = columnSums(pageGrayMat);
-  const rows = rowSums(pageGrayMat);
-  // The plot format guarantees a blank gutter outside each corner circle, so we search for a dip then verify the blank run beyond it.
-  const leftDip = findFirstDipFromEdge(cols, "left", {
-    insetPx: IGNORE_PX,
-    depthFrac: DOT_DIM_PCT_COLS,
-    gutterLenFrac: GUTTER_PCT,
-    gutterTolFrac: 0.01,
-  });
-  const rightDip = findFirstDipFromEdge(cols, "right", {
-    insetPx: IGNORE_PX,
-    depthFrac: DOT_DIM_PCT_COLS,
-    gutterLenFrac: GUTTER_PCT,
-    gutterTolFrac: 0.01,
-  });
-  const topDip = findFirstDipFromEdge(rows, "top", {
-    insetPx: IGNORE_PX,
-    depthFrac: DOT_DIM_PCT_ROWS,
-    gutterLenFrac: GUTTER_PCT,
-    gutterTolFrac: 0.01,
-  });
-  const bottomDip = findFirstDipFromEdge(rows, "bottom", {
-    insetPx: IGNORE_PX,
-    depthFrac: DOT_DIM_PCT_ROWS,
-    gutterLenFrac: GUTTER_PCT,
-    gutterTolFrac: 0.01,
-  });
-
-  return {
-    tl: refineDotCentroid(pageGrayMat, leftDip.center, topDip.center, leftDip.width, topDip.width, 3.5),
-    tr: refineDotCentroid(pageGrayMat, rightDip.center, topDip.center, rightDip.width, topDip.width, 3.5),
-    br: refineDotCentroid(pageGrayMat, rightDip.center, bottomDip.center, rightDip.width, bottomDip.width, 3.5),
-    bl: refineDotCentroid(pageGrayMat, leftDip.center, bottomDip.center, leftDip.width, bottomDip.width, 3.5),
-  };
-}
-
-/**
- * Estimate the dot-aligned rectified sheet size from the measured corner-dot spacing.
- *
- * @param {{tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}}} dotRect
- * @returns {cv.Size}
- */
-function estimateRectifiedSize_old(dotRect) {
-  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  return new cv.Size(
-    Math.round((dist(dotRect.tl, dotRect.tr) + dist(dotRect.bl, dotRect.br)) * 0.5),
-    Math.round((dist(dotRect.tl, dotRect.bl) + dist(dotRect.tr, dotRect.br)) * 0.5)
-  );
-}
-
-/**
  * Estimate the rectified grid size from a generic quadrilateral.
  *
  * @param {{tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}}} quad
@@ -967,20 +859,6 @@ function estimateDetectionPadding(rectifiedWidth, rectifiedHeight, cols, rows, c
   const cellH = rectifiedHeight / rows;
   const roiHalf = Math.max(10, Math.round(Math.min(cellW, cellH) * 0.18 * crossRoiScale));
   return roiHalf + 4;
-}
-
-/**
- * Rectify the page from the four corner circles into sheet coordinates.
- *
- * @param {cv.Mat} pageVision
- * @param {cv.Mat} pageStyled
- * @param {{tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}}} dotRect
- * @param {cv.Size} size
- * @param {number} [padding=0]
- * @returns {{visionMat:cv.Mat, styledMat:cv.Mat, gridBounds:{left:number, top:number, width:number, height:number}}}
- */
-function rectifyByDots_old(pageVision, pageStyled, dotRect, size, padding = 0) {
-  return rectifyByQuad(pageVision, pageStyled, dotRect, size, padding);
 }
 
 /**

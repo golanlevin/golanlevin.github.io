@@ -161,6 +161,17 @@ export function attachUi({
   exportZip,
   saveSettingsFile,
 }) {
+  const shouldSkipMarkerTypeReprocess = () => {
+    const requestedMarkerType = dom.alignmentMarkerType.value || "crosses";
+    const lastAlignmentInfo = state.geometry.alignmentInfo;
+    if (!lastAlignmentInfo) return false;
+    return (
+      requestedMarkerType !== "auto" &&
+      lastAlignmentInfo.requestedMarkerType === "auto" &&
+      lastAlignmentInfo.resolvedMarkerType === requestedMarkerType
+    );
+  };
+
   makeCanvasDraggable(dom.rawCanvas, () => {
     if (state.source.dragUrl && state.source.filename) {
       return {
@@ -286,23 +297,18 @@ export function attachUi({
     });
   });
 
-  const alignmentMarkerTypeInputs = [
-    dom.alignmentMarkerTypeAuto,
-    dom.alignmentMarkerTypeCrosses,
-    dom.alignmentMarkerTypeCircles,
-  ];
-  alignmentMarkerTypeInputs.forEach((input) => {
-    input.addEventListener("input", () => {
-      syncAlignmentMarkerUi();
-      revokeGifUrl();
-      updateSliderReadouts();
-      scheduleProcess();
-    });
-    input.addEventListener("change", () => {
-      syncAlignmentMarkerUi();
-      revokeGifUrl();
-      scheduleProcess();
-    });
+  dom.alignmentMarkerType.addEventListener("input", () => {
+    syncAlignmentMarkerUi();
+    if (shouldSkipMarkerTypeReprocess()) return;
+    revokeGifUrl();
+    updateSliderReadouts();
+    scheduleProcess();
+  });
+  dom.alignmentMarkerType.addEventListener("change", () => {
+    syncAlignmentMarkerUi();
+    if (shouldSkipMarkerTypeReprocess()) return;
+    revokeGifUrl();
+    scheduleProcess();
   });
 
   const appearanceInputs = [

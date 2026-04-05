@@ -20,7 +20,7 @@
           </p>
           <p id="appLedeMobileNote" class="lede mobile-header-note" data-i18n="app.mobileNote">(Please use desktop version for advanced controls.)</p>
           <p id="appLedeSecondary" class="lede">
-            <span data-i18n="app.version">v1.08, 4/2026</span> • <a href="https://github.com/golanlevin/plottimation/tree/main/plottimation_webtool/README.md" target="_blank" rel="noopener noreferrer" data-i18n="app.documentation">Documentation</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer" data-i18n="app.demoVideo">Demo Video</a>
+            <span data-app-version>v1.08</span> • <a href="https://github.com/golanlevin/plottimation/tree/main/plottimation_webtool/README.md" target="_blank" rel="noopener noreferrer" data-i18n="app.documentation">Instructions</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer" data-i18n="app.demoVideo">Demo Video</a> • <a href="templates/index.html" target="_blank" rel="noopener noreferrer" data-i18n="app.templates">Templates</a>
           </p>
           <p id="appLedeTertiary" class="lede"><span data-i18n="app.bylinePrefix">By @golanlevin •</span> <a href="https://buymeacoffee.com/golanlevin" target="_blank" rel="noopener noreferrer" data-i18n="app.buyMeCoffee">Buy me a coffee</a> :)</p>
         </div>
@@ -41,6 +41,7 @@
             <span class="drop-lead mobile-only-inline-block" data-i18n="photo.dropLeadMobile2">or load a demo.</span>
             <span class="drop-note" data-i18n="photo.dropNote">Animation frames should be
 separated by small crosses or dots.</span>
+            <span class="drop-note" data-i18n="app.aboutPrivacy">All media are processed locally.</span>
           </label>
           <input id="fileInput" type="file" accept="image/*,.txt,text/plain" />
         </section>
@@ -69,8 +70,8 @@ separated by small crosses or dots.</span>
                 <span data-i18n="layout.portrait">Portrait</span>
               </label>
             </fieldset>
-            <label class="stack-label">
-                <span id="paperPresetLabel" data-i18n="layout.paperSize">Paper Size</span>
+            <label id="paperPresetRow" class="stack-label">
+              <span id="paperPresetLabel" data-i18n="layout.paperSize">Paper Size</span>
               <select id="paperPreset">
                 <option value="letter" selected>Letter (11×8.5 in)</option>
                 <option value="legal">Legal (14×8.5 in)</option>
@@ -100,8 +101,8 @@ separated by small crosses or dots.</span>
         </details>
 
         <details id="pageGridDetectionGroup" class="control-group collapsible" data-mobile-control="page-grid">
-          <summary id="pageGridDetectionSummary"><span data-i18n="detection.summary">Page &amp; Grid Detection</span></summary>
-          <label class="stack-label">
+          <summary id="pageGridDetectionSummary"><span data-i18n="detection.summary">Page &amp; Grid Detection</span><span id="pageGridDetectionWarning" class="header-note summary-warning" hidden>⚠️</span></summary>
+          <label id="thresholdMethodRow" class="stack-label">
             <span data-i18n="detection.thresholdMethod">Thresholding Method</span>
             <select id="thresholdMethod">
               <option value="offset-peak" selected data-i18n="detection.thresholdMethodOptions.offset-peak">Offset Peak</option>
@@ -132,21 +133,14 @@ separated by small crosses or dots.</span>
 
         <details id="frameAlignmentGroup" class="control-group collapsible" data-mobile-control="alignment">
           <summary id="frameAlignmentSummary"><span data-i18n="alignment.summary">Automatic Frame Alignment</span></summary>
-          <fieldset id="alignmentMarkerTypeField" class="radio-group">
-            <legend data-i18n="alignment.markerType">Alignment Marker Type:</legend>
-            <label class="toggle">
-              <input id="alignmentMarkerTypeAuto" name="alignmentMarkerType" type="radio" value="auto" checked />
-              <span data-i18n="alignment.markerTypeOptions.auto">Auto</span>
-            </label>
-            <label class="toggle">
-              <input id="alignmentMarkerTypeCrosses" name="alignmentMarkerType" type="radio" value="crosses" />
-              <span data-i18n="alignment.markerTypeOptions.crosses">Crosses</span>
-            </label>
-            <label class="toggle">
-              <input id="alignmentMarkerTypeCircles" name="alignmentMarkerType" type="radio" value="circles" />
-              <span data-i18n="alignment.markerTypeOptions.circles">Dots</span>
-            </label>
-          </fieldset>
+          <label id="alignmentMarkerTypeField" class="stack-label">
+            <span data-i18n="alignment.markerType">Alignment Marker Type:</span>
+            <select id="alignmentMarkerType">
+              <option value="auto" selected data-i18n="alignment.markerTypeOptions.auto">Auto</option>
+              <option value="crosses" data-i18n="alignment.markerTypeOptions.crosses">Crosses</option>
+              <option value="circles" data-i18n="alignment.markerTypeOptions.circles">Dots</option>
+            </select>
+          </label>
           <div class="slider-stack">
             <label>
               <span><span data-i18n="alignment.roiSize">Alignment Marker Region Size</span> <output id="crossRoiScaleValue">-- px</output></span>

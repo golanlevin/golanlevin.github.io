@@ -107,7 +107,7 @@ can identify module boundaries more quickly.
   - page-boundary warning state
   - `Page & Grid Detection` warning heading
   - `Raw Photo` warning heading state
-  - `Rectified Sheet` / `Convolution Debug View` heading text
+  - `Rectified Sheet` heading text
 
 - `js/export-controller.js`
   Export helpers:
@@ -144,6 +144,11 @@ Responsive viewer behavior currently lives in `js/app.js` + `js/ui-controls.js`:
 - mobile marker tiles are scaled to fit width instead of requiring scrollbars
 - mobile control sections now use a horizontal tab strip (`Layout / Page / Markers / Filters / Crop / Export`)
   instead of stacked accordions
+
+Debug/maintenance note:
+- the old convolution debug view code is still present but currently unreachable in normal UI flow
+- the dot-blob debug toggle code is also still present, but its button is permanently hidden
+- both are candidates for future deletion if those diagnostics are not being brought back
 
 - `js/load-controller.js`
   Source loading:
@@ -337,6 +342,13 @@ Active method:
 - locale aliases currently handled:
   - `zh-TW`, `zh-HK`, `zh-MO` -> `zh-hant`
   - `pt-BR`, `pt-PT` -> `pt`
+- practical query-string examples:
+  - Simplified Chinese: `?lang=zh`
+  - Traditional Chinese: `?lang=zh-hant`
+  - Japanese: `?lang=ja`
+  - Korean: `?lang=ko`
+  - Portuguese: `?lang=pt`
+  - German: `?lang=de`
 - both static HTML strings and dynamic runtime strings now route through `js/i18n.js`
 - tooltip text is also localized
 - missing keys fall back to English rather than breaking the UI
@@ -396,12 +408,10 @@ Order of per-frame processing:
 
 ## Rectified Sheet panel behavior
 
-The `Rectified Sheet` panel shows the full rectified page, not just the cropped grid.
+The `Rectified Sheet` panel now shows the extraction-space rectified sheet directly.
 
 Overlays:
 
-- blue inset rectangle for `Search Inset Margin`
-- red quadrilateral for coarse detected frame-grid bounds
 - dark green quadrilateral for the currently previewed frame
 
 The current-frame quad:
@@ -410,17 +420,14 @@ The current-frame quad:
 - stays fixed when preview is paused
 - updates live while marker overrides are being dragged
 
-Clicking the panel toggles between:
-
-- normal rectified page view
-- cross-kernel convolution diagnostic view
-
-The convolution diagnostic canvas is cached so playback does not force repeated expensive recomputation.
-
 On mobile:
 
 - the Rectified Sheet tab auto-sizes to the current sheet aspect ratio
 - tapping does not toggle the convolution diagnostic view
+
+Maintenance note:
+- `Convolution Debug View` still exists in code as a stale retained diagnostic path, but there is
+  currently no normal UI interaction that enables it
 
 ## Preview behavior
 
@@ -657,10 +664,7 @@ The refactor into:
 
 was done partly to make this future work easier.
 
-## Likely future work
+## Likely future work (To do)
 
-- actual filled-dot marker support
-- further mobile polish and touch-oriented simplification
-- possible additional export formats such as Animated WebP or APNG
-- further `app.js` decomposition if the orchestration layer grows much more
-- adaptive thresholding for uneven lighting
+- Handle removal of blue-pencil guides
+- Handle light-on-dark source images

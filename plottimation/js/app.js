@@ -71,6 +71,7 @@ import { applyTranslations, getTooltipText, t } from "./i18n.js";
 // Keep both code paths available for comparison while evaluating tiny-output quality.
 const bUseOpenCvOutputScaling = true;
 const MOBILE_VIEWER_BREAKPOINT_PX = 960;
+const LIVE_THRESHOLD_PREVIEW_MAX_LONG_EDGE_PX = 512;
 
 const TOOLTIP_TEXT = getTooltipText();
 
@@ -230,6 +231,7 @@ function updateRectifiedSheetHeading() {
 }
 
 function updatePageGridDetectionHeading(showWarning = false) {
+  state.runtime.pageBoundaryWarningVisible = showWarning;
   syncPageGridDetectionHeading(dom, showWarning);
   syncRawPhotoFilenameDisplay();
 }
@@ -602,13 +604,18 @@ function releaseSourceCvCaches() {
     state.source.grayMat.delete();
     state.source.grayMat = null;
   }
+  if (state.source.previewGrayMat) {
+    state.source.previewGrayMat.delete();
+    state.source.previewGrayMat = null;
+  }
+  state.source.previewScale = 1;
 }
 
 /**
  * Ensure that the raw source image has cached OpenCV mats ready for lightweight page-boundary
  * previewing while the threshold-offset slider is dragged.
  *
- * @returns {{cvMat: cv.Mat, grayMat: cv.Mat} | null}
+ * @returns {{cvMat: cv.Mat, grayMat: cv.Mat, previewGrayMat: cv.Mat, previewScale: number} | null}
  */
 function ensureSourceCvCaches() {
   if (!state.runtime.cvReady || !state.source.image) return null;
@@ -619,9 +626,36 @@ function ensureSourceCvCaches() {
     state.source.grayMat = new cv.Mat();
     cv.cvtColor(state.source.cvMat, state.source.grayMat, cv.COLOR_RGBA2GRAY);
   }
+  if (!state.source.previewGrayMat) {
+    const sourceWidth = state.source.canvas.width;
+    const sourceHeight = state.source.canvas.height;
+    const sourceLongEdge = Math.max(sourceWidth, sourceHeight);
+    const previewScale =
+      sourceLongEdge > LIVE_THRESHOLD_PREVIEW_MAX_LONG_EDGE_PX
+        ? LIVE_THRESHOLD_PREVIEW_MAX_LONG_EDGE_PX / sourceLongEdge
+        : 1;
+    state.source.previewScale = previewScale;
+    if (previewScale < 1) {
+      const previewWidth = Math.max(1, Math.round(sourceWidth * previewScale));
+      const previewHeight = Math.max(1, Math.round(sourceHeight * previewScale));
+      state.source.previewGrayMat = new cv.Mat();
+      cv.resize(
+        state.source.grayMat,
+        state.source.previewGrayMat,
+        new cv.Size(previewWidth, previewHeight),
+        0,
+        0,
+        cv.INTER_AREA
+      );
+    } else {
+      state.source.previewGrayMat = state.source.grayMat.clone();
+    }
+  }
   return {
     cvMat: state.source.cvMat,
     grayMat: state.source.grayMat,
+    previewGrayMat: state.source.previewGrayMat,
+    previewScale: state.source.previewScale,
   };
 }
 
@@ -638,17 +672,29 @@ function previewPageBoundaryForThresholdOffset() {
   try {
     const cachedSource = ensureSourceCvCaches();
     if (!cachedSource) return;
+    const previewWidth = cachedSource.previewGrayMat.cols;
+    const previewHeight = cachedSource.previewGrayMat.rows;
     const preview = previewPageBoundary(
-      cachedSource.grayMat,
-      state.source.canvas.width,
-      state.source.canvas.height,
+      cachedSource.previewGrayMat,
+      previewWidth,
+      previewHeight,
       config.thresholdMethod,
       config.thresholdOffset
     );
-    state.source.rawPageContour = preview.pageQuadPoints;
-    updatePageGridDetectionHeading(!(Array.isArray(preview.pageQuadPoints) && preview.pageQuadPoints.length === 4));
+    state.source.rawPageContour = Array.isArray(preview.pageQuadPoints)
+      ? preview.pageQuadPoints.map((point) => ({
+          x: point.x / cachedSource.previewScale,
+          y: point.y / cachedSource.previewScale,
+        }))
+      : preview.pageQuadPoints;
+    const hasPageQuad = Array.isArray(preview.pageQuadPoints) && preview.pageQuadPoints.length === 4;
+    if (!hasPageQuad) {
+      clearDerivedOutputsForDetectionFailure();
+    }
+    updatePageGridDetectionHeading(!hasPageQuad);
     renderRawPreview();
   } catch (error) {
+    clearDerivedOutputsForDetectionFailure();
     updatePageGridDetectionHeading(true);
     console.error(error);
   }
@@ -836,6 +882,56 @@ function clearAllPreviews() {
 }
 
 /**
+ * Blank all downstream panels after page-detection failure while keeping the source image and any
+ * saved manual marker overrides available for a later successful reprocess.
+ *
+ * This prevents Rectified Sheet, Frame Alignment Markers, and Preview from showing stale
+ * last-known-good results when the current settings no longer produce a valid page boundary.
+ *
+ * @returns {void}
+ */
+function clearDerivedOutputsForDetectionFailure() {
+  state.preview.rectifiedCanvas = null;
+  state.preview.rectifiedDiagnosticSourceCanvas = null;
+  state.preview.rectifiedDiagnosticDirty = true;
+  releaseRectifiedDragUrl();
+  state.preview.rectifiedDragBuildId += 1;
+  state.geometry.baseRectifiedCanvas = null;
+  state.geometry.baseRectifiedPageCanvas = null;
+  state.geometry.pagePreviewGridQuad = null;
+  state.geometry.alignmentInfo = null;
+  state.geometry.frameCount = 0;
+  state.runtime.markerEditingEnabled = false;
+  state.runtime.markerBlobDebugVisible = false;
+  state.frames.base = [];
+  state.frames.adjustedCache.clear();
+  state.preview.frameIndex = 0;
+  state.preview.inspectingRawFrame = false;
+  state.preview.showRectifiedDiagnostic = false;
+  updateRectifiedSheetHeading();
+
+  const rectifiedCtx = dom.rectifiedCanvas.getContext("2d");
+  resizeCanvasToBox(dom.rectifiedCanvas);
+  rectifiedCtx.clearRect(0, 0, dom.rectifiedCanvas.width, dom.rectifiedCanvas.height);
+  dom.rectifiedCanvas.parentElement?.classList.add("is-empty");
+
+  const previewCtx = dom.gifPreviewCanvas.getContext("2d");
+  resizeCanvasToBox(dom.gifPreviewCanvas);
+  previewCtx.clearRect(0, 0, dom.gifPreviewCanvas.width, dom.gifPreviewCanvas.height);
+  dom.gifPreviewCanvas.parentElement?.classList.add("is-empty");
+
+  dom.crossRoiGrid.innerHTML = "";
+  dom.crossRoiGrid.classList.add("is-empty");
+  dom.crossRoiViewport?.classList.add("is-empty");
+  syncMobileMarkerGridLayout();
+  updateExportControlsAvailability(true);
+  syncMarkerEditingUi();
+  updatePreviewPlayPauseButton();
+  updateAnimationPreviewHeading();
+  updateExportButtonLabel();
+}
+
+/**
  * Bootstrap the application once the module is loaded.
  *
  * This wires both the desktop layout and the narrower-screen mobile layout. The responsive
@@ -881,6 +977,7 @@ function init() {
   updateExportButtonLabel();
   updatePreviewPlayPauseButton();
   updateExportControlsAvailability();
+  state.runtime.pageBoundaryWarningVisible = false;
 
   if (typeof cv !== "undefined" && cv.onRuntimeInitialized) {
     cv.onRuntimeInitialized = onOpenCvReady;
@@ -1496,10 +1593,10 @@ function readConfig() {
     paperMarginPx: Math.max(0, Math.min(150, Math.round(Number(dom.paperMargin.value) || SETTINGS_DEFAULTS.detection.paperMarginPx))),
     boundarySensitivity: Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)),
     boundaryPersistencePx: Math.max(1, Math.min(15, Math.round(Number(dom.boundaryPersistence.value) || SETTINGS_DEFAULTS.detection.boundaryPersistencePx))),
-    alignmentMarkerType: dom.alignmentMarkerTypeAuto.checked ? "auto" : (dom.alignmentMarkerTypeCircles.checked ? "circles" : "crosses"),
+    alignmentMarkerType: dom.alignmentMarkerType.value || "crosses",
     crossRoiScalePct: Math.max(18, Math.min(110, Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct)),
     crossRoiScale: Math.max(0.18, Math.min(1.1, (Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct) / 100)),
-    detectCrossesWithConvolution: dom.alignmentMarkerTypeCrosses.checked && dom.detectCrossesWithConvolution.checked,
+    detectCrossesWithConvolution: (dom.alignmentMarkerType.value === "crosses") && dom.detectCrossesWithConvolution.checked,
     useCrossAlignment: dom.useCrossAlignment.checked,
     useRectifiedAsSource: false,
     crop: {
@@ -1616,7 +1713,7 @@ function syncPaperPresetUi() {
  * @returns {void}
  */
 function syncAlignmentMarkerUi() {
-  const markerType = dom.alignmentMarkerTypeAuto.checked ? "auto" : (dom.alignmentMarkerTypeCircles.checked ? "circles" : "crosses");
+  const markerType = dom.alignmentMarkerType.value || "crosses";
   const resolvedAutoType = state.geometry.alignmentInfo?.resolvedMarkerType || null;
   const showCrossOnlyControls = markerType === "crosses" || (markerType === "auto" && resolvedAutoType === "crosses");
   dom.detectCrossesWithConvolutionRow.hidden = !showCrossOnlyControls;
@@ -2030,15 +2127,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
         state.source.rawPageContour = error.partialResult.pageQuadPoints;
         renderRawPreview();
       }
-      if (error?.partialResult?.rectifiedCanvas) {
-        state.geometry.baseRectifiedPageCanvas = error.partialResult.rectifiedCanvas;
-        state.geometry.pagePreviewGridQuad = null;
-        state.preview.rectifiedCanvas = error.partialResult.rectifiedCanvas;
-        state.preview.rectifiedDiagnosticSourceCanvas = null;
-        state.preview.rectifiedDiagnosticDirty = true;
-        primeRectifiedDragAsset(state.preview.rectifiedCanvas);
-        renderRectifiedPreview(error.partialResult.rectifiedCanvas);
-      }
+      clearDerivedOutputsForDetectionFailure();
       console.error(error);
       updateExportButtonLabel();
       setStatus(t("status.pageBoundaryFailure"));
@@ -2728,9 +2817,17 @@ function saveSettingsFile() {
 /**
  * Update the status panel text.
  *
+ * Localized page-boundary failures should surface immediately even if the user had collapsed
+ * Status, but only once an image is actually loaded.
+ *
  * @param {string} text
  * @returns {void}
  */
 function setStatus(text) {
-  syncStatusText(dom, text);
+  syncStatusText(dom, state, text);
+  const hasLoadedImage = Boolean(state.source.filename || state.source.canvas);
+  const showWarning = Boolean(state.runtime.pageBoundaryWarningVisible);
+  if (hasLoadedImage && showWarning && dom.statusGroup) {
+    dom.statusGroup.open = true;
+  }
 }

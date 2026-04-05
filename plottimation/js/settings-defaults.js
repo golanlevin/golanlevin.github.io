@@ -108,9 +108,7 @@ export function applyNonLayoutDefaults(dom) {
   dom.paperMargin.value = String(SETTINGS_DEFAULTS.detection.paperMarginPx);
   dom.boundarySensitivity.value = SETTINGS_DEFAULTS.detection.boundarySensitivity.toFixed(1);
   dom.boundaryPersistence.value = String(SETTINGS_DEFAULTS.detection.boundaryPersistencePx);
-  dom.alignmentMarkerTypeAuto.checked = SETTINGS_DEFAULTS.detection.alignmentMarkerType === "auto";
-  dom.alignmentMarkerTypeCrosses.checked = SETTINGS_DEFAULTS.detection.alignmentMarkerType === "crosses";
-  dom.alignmentMarkerTypeCircles.checked = SETTINGS_DEFAULTS.detection.alignmentMarkerType === "circles";
+  dom.alignmentMarkerType.value = SETTINGS_DEFAULTS.detection.alignmentMarkerType;
   dom.crossRoiScale.value = String(SETTINGS_DEFAULTS.detection.crossRoiScalePct);
   dom.useCrossAlignment.checked = SETTINGS_DEFAULTS.detection.useCrossAlignment;
   dom.detectCrossesWithConvolution.checked = SETTINGS_DEFAULTS.detection.detectCrossesWithConvolution;

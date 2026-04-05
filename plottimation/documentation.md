@@ -14,6 +14,7 @@
 * [Status](#status)
 * [Viewer Panels](#viewer-panels)
 * [Sibling Settings Files](#sibling-settings-files)
+* [Language Selection](#language-selection)
 
 
 ---
@@ -255,6 +256,39 @@ Typical messages include:
 - failure details
 
 It also surfaces page-detection failures and other diagnostic information.
+
+---
+
+## Language Selection
+
+The app supports automatic localization.
+
+- By default, it uses the language preferences reported by your browser.
+- If the browser prefers a supported language, the interface will switch automatically.
+- If no supported language is detected, the app falls back to English.
+
+You can also force a specific language with the page URL:
+
+- `?lang=en` for English
+- `?lang=fr` for French
+- `?lang=es` for Spanish
+- `?lang=it` for Italian
+- `?lang=ja` for Japanese
+- `?lang=zh` for Simplified Chinese
+- `?lang=zh-hant` for Traditional Chinese
+- `?lang=ko` for Korean
+- `?lang=pt` for Portuguese
+- `?lang=de` for German
+- `?lang=pl` for Polish
+- `?lang=nb` for Norwegian Bokmal
+- `?lang=uk` for Ukrainian
+
+The `?lang=` query parameter overrides browser-language detection.
+
+Examples:
+
+- `.../plottimation_webtool/?lang=en`
+- `.../plottimation_webtool/?lang=fr`
 
 ---
 

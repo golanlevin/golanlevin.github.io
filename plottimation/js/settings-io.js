@@ -122,15 +122,10 @@ export function applyLoadedSettingsText({
   setIfPresent("boundary_threshold", dom.boundarySensitivity);
   setIfPresent("boundary_persistence_px", dom.boundaryPersistence);
   const markerType = entries.get("alignment_marker_type");
-  if (markerType === "auto") {
-    dom.alignmentMarkerTypeAuto.checked = true;
-  } else if (markerType === "circles") {
-    dom.alignmentMarkerTypeCircles.checked = true;
-  } else if (markerType === "crosses") {
-    dom.alignmentMarkerTypeCrosses.checked = true;
-  } else {
-    dom.alignmentMarkerTypeCrosses.checked = true;
-  }
+  dom.alignmentMarkerType.value =
+    markerType === "auto" || markerType === "circles" || markerType === "crosses"
+      ? markerType
+      : settingsDefaults.alignmentMarkerType;
   setIfPresent("alignment_marker_region_scale_pct", dom.crossRoiScale);
   setCheckedIfPresent("detect_crosses_with_convolution", dom.detectCrossesWithConvolution);
   setCheckedIfPresent("use_cross_alignment", dom.useCrossAlignment);

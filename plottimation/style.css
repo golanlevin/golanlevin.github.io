@@ -130,11 +130,16 @@ select {
 }
 
 .drop-note {
+  display: block;
   margin-top: 4px;
   font-size: 0.82rem;
   line-height: 1.05;
   color: var(--muted);
   white-space: pre-line;
+}
+
+.drop-note + .drop-note {
+  margin-top: 0;
 }
 
 .mobile-control-help {
@@ -189,6 +194,13 @@ select {
   font-size: 0.8em;
   line-height: 1;
   vertical-align: baseline;
+}
+
+.summary-warning {
+  font-size: 0.8em;
+  line-height: 1;
+  vertical-align: baseline;
+  margin-left: 0.15em;
 }
 
 html[lang]:not([lang="en"]) #statusText {
@@ -300,6 +312,57 @@ html[lang]:not([lang="en"]) #statusText {
   position: relative;
   top: 2px;
   margin-bottom: -2px;
+}
+
+#paperPresetRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+#paperPresetRow > span {
+  position: static;
+  margin: 0;
+  white-space: nowrap;
+}
+
+#paperPresetRow select {
+  width: min(100%, 196px);
+}
+
+#thresholdMethodRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+#thresholdMethodRow > span {
+  position: static;
+  margin: 0;
+  white-space: nowrap;
+}
+
+#thresholdMethodRow select {
+  width: min(100%, 196px);
+}
+
+#alignmentMarkerTypeField {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+#alignmentMarkerTypeField > span {
+  position: static;
+  margin: 0;
+  white-space: nowrap;
+}
+
+#alignmentMarkerTypeField select {
+  width: min(100%, 196px);
 }
 
 .crop-aspect-readout > span {
@@ -1004,6 +1067,54 @@ body.has-loaded-image .output-preview.is-empty,
   #paperLayoutRow .radio-group,
   #paperLayoutRow .stack-label {
     margin: 0;
+  }
+
+  #paperPresetRow {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 7px;
+  }
+
+  #paperPresetRow > span {
+    position: relative;
+    top: 2px;
+    margin-bottom: -2px;
+  }
+
+  #paperPresetRow select {
+    width: 100%;
+  }
+
+  #thresholdMethodRow {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 7px;
+  }
+
+  #thresholdMethodRow > span {
+    position: relative;
+    top: 2px;
+    margin-bottom: -2px;
+  }
+
+  #thresholdMethodRow select {
+    width: 100%;
+  }
+
+  #alignmentMarkerTypeField {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 7px;
+  }
+
+  #alignmentMarkerTypeField > span {
+    position: relative;
+    top: 2px;
+    margin-bottom: -2px;
+  }
+
+  #alignmentMarkerTypeField select {
+    width: 100%;
   }
 
   #appearanceSliderStack {
