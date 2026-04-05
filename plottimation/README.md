@@ -12,7 +12,7 @@ Version 1.09 • By @GolanLevin, 2026.
 
 ## Quickstart Instructions
 
-1. **Create** a "frame sheet" of your animation. Your sheet should contain a grid of frames separated by small crosses `+` or filled circular dots `●`, and it should have no markings in the margins.
+1. **Create** a "frame sheet" of your animation. Your sheet should contain a grid of frames separated by small crosses `+` or filled circular dots `●`, and it should have no markings in the margins. [Here's a p5.js sketch](https://editor.p5js.org/golan/sketches/_ZMbagYFc) you can get started with.
 2. **Photograph** or scan your frame sheet. It's ok to use a casual photo — but your sheet should be completely surrounded by a uniform dark background, as shown in [this example](demo/1_dmawer_crosses.jpg).
 3. **Open** the [**Plottimation Tool**](https://golanlevin.github.io/plottimation/) in a browser, from [here](https://golanlevin.github.io/plottimation).
 4. **Load** the image of your frame sheet into the Plottimation Tool. You can do this by dragging your image file onto the Tool's load target (where it says "Drop a photo or scan here"), or by clicking the target to load a file. As an alternative, you can click `Load Demo` instead.
