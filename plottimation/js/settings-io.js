@@ -121,12 +121,23 @@ export function applyLoadedSettingsText({
   setIfPresent("search_inset_margin_px", dom.paperMargin);
   setIfPresent("boundary_threshold", dom.boundarySensitivity);
   setIfPresent("boundary_persistence_px", dom.boundaryPersistence);
+  const pipeline = entries.get("alignment_pipeline");
   const markerType = entries.get("alignment_marker_type");
+  const useMarkerlessPipeline =
+    pipeline === "markerless" ||
+    (pipeline !== "markers" && markerType === "none");
+  dom.alignmentPipelineMarkerless.checked = useMarkerlessPipeline;
+  dom.alignmentPipelineMarkers.checked = !useMarkerlessPipeline;
   dom.alignmentMarkerType.value =
     markerType === "auto" || markerType === "circles" || markerType === "crosses"
       ? markerType
       : settingsDefaults.alignmentMarkerType;
   setIfPresent("alignment_marker_region_scale_pct", dom.crossRoiScale);
+  setIfPresent("stabilization_strength", dom.stabilizationStrength);
+  setIfPresent("stabilization_lambda", dom.stabilizationLambda);
+  setIfPresent("markerless_phase_x", dom.markerlessPhaseX);
+  setIfPresent("markerless_phase_y", dom.markerlessPhaseY);
+  setIfPresent("vertical_drift_compensation", dom.verticalDriftCompensation);
   setCheckedIfPresent("detect_crosses_with_convolution", dom.detectCrossesWithConvolution);
   setCheckedIfPresent("use_cross_alignment", dom.useCrossAlignment);
   setIfPresent("crop_left", dom.cropLeft);
@@ -218,8 +229,14 @@ export function buildSettingsTsv({
     ["search_inset_margin_px", String(config.paperMarginPx)],
     ["boundary_threshold", String(config.boundarySensitivity)],
     ["boundary_persistence_px", String(config.boundaryPersistencePx)],
+    ["alignment_pipeline", String(config.alignmentPipeline)],
     ["alignment_marker_type", config.alignmentMarkerType],
     ["alignment_marker_region_scale_pct", String(config.crossRoiScalePct)],
+    ["stabilization_strength", String(config.stabilizationStrength)],
+    ["stabilization_lambda", String(config.stabilizationLambda)],
+    ["markerless_phase_x", String(config.markerlessPhaseX)],
+    ["markerless_phase_y", String(config.markerlessPhaseY)],
+    ["vertical_drift_compensation", String(config.verticalDriftCompensation)],
     ["detect_crosses_with_convolution", String(config.detectCrossesWithConvolution)],
     ["use_cross_alignment", String(config.useCrossAlignment)],
     ["crop_left", String(config.crop.left)],

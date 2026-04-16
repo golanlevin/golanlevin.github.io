@@ -12,6 +12,10 @@ const GUTTER_PCT = 0.01;
 const MIN_CROSS_DETECTION_RATIO = 0.5;
 const MIN_CROSS_DETECTIONS_ABS = 4;
 const PAGE_WARP_LOW_LONG_EDGE_PX = 1100;
+const MARKERLESS_WORKING_LONG_EDGE_PX = 720;
+const MARKERLESS_AUTOCORR_SEARCH_FRAC = 0.25;
+const MARKERLESS_MIN_PITCH_PX = 12;
+const MARKERLESS_PADDING_FRAC = 0.35;
 // High-resolution extraction should track the real source-image resolution instead of a fixed
 // paper-size number. The long edge of the extraction warp is capped at 90% of the source-image
 // diagonal so extraction preserves more detail while still preventing pathological warp sizes.
@@ -205,29 +209,43 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
     throwIfAborted(requestId);
 
     const useRectifiedAsSource = config.useRectifiedAsSource;
-    rectifiedWarp = buildFrameGridRectification_fromCrosses(
-      visionSrc,
-      styledSrc,
-      pageWarpHigh,
-      config,
-      useRectifiedAsSource
-    );
+    const useMarkerlessAlignment = config.alignmentPipeline === "markerless";
+    rectifiedWarp = useMarkerlessAlignment
+      ? buildFrameGridRectification_withoutMarkers(pageWarpHigh)
+      : buildFrameGridRectification_fromCrosses(
+          visionSrc,
+          styledSrc,
+          pageWarpHigh,
+          config,
+          useRectifiedAsSource
+        );
     throwIfAborted(requestId);
 
     // Resolve the marker lattice if enabled; otherwise keep the nominal grid and unrefined ROI views.
     const alignmentInfo = config.useCrossAlignment
-      ? buildCrossAlignmentData(
-          rectifiedWarp.visionMat,
-          config.frameCols,
-          config.frameRows,
-          config.crossRoiScale,
-          rectifiedWarp.gridBounds,
-          {
-            markerType: config.alignmentMarkerType,
-            includeCornerCrosses: rectifiedWarp.includeCornerCrosses,
-            detectCrossesWithConvolution: config.detectCrossesWithConvolution,
-          }
-        )
+      ? (
+        useMarkerlessAlignment
+          ? buildMarkerlessAlignmentData(
+              rectifiedWarp.visionMat,
+              config.frameCols,
+              config.frameRows,
+              config.crossRoiScale,
+              rectifiedWarp.gridBounds,
+              config.paperMarginPx,
+            )
+          : buildCrossAlignmentData(
+              rectifiedWarp.visionMat,
+              config.frameCols,
+              config.frameRows,
+              config.crossRoiScale,
+              rectifiedWarp.gridBounds,
+              {
+                markerType: config.alignmentMarkerType,
+                includeCornerCrosses: rectifiedWarp.includeCornerCrosses,
+                detectCrossesWithConvolution: config.detectCrossesWithConvolution,
+              }
+            )
+      )
       : buildUnrefinedCrossRegionInfo(
           rectifiedWarp.visionMat,
           config.frameCols,
@@ -273,7 +291,6 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
       rectifiedHeight: rectifiedWarp.styledMat.rows,
       animationWidth: frames[0]?.width || 0,
       animationHeight: frames[0]?.height || 0,
-      sourceMode: useRectifiedAsSource ? "rectified" : "raw photo",
       gridDetector: "cross-only",
     });
 
@@ -352,6 +369,25 @@ function buildFrameGridRectification_fromCrosses(visionSrc, styledSrc, pageWarpH
     detectionPadding
   );
   return { ...rectifiedWarp, includeCornerCrosses: true, previewGridQuad: coarseGridQuadHigh };
+}
+
+/**
+ * Markerless mode skips the coarse cross-boundary detector and treats the full rectified page as
+ * the working sheet. A later autocorrelation pass fits the interior lattice directly.
+ *
+ * @param {{visionMat:cv.Mat, styledMat:cv.Mat}} pageWarpHigh
+ * @returns {{visionMat:cv.Mat, styledMat:cv.Mat, gridBounds:{left:number, top:number, width:number, height:number}, includeCornerCrosses:boolean, previewGridQuad:null}}
+ */
+function buildFrameGridRectification_withoutMarkers(pageWarpHigh) {
+  const visionMat = pageWarpHigh.visionMat.clone();
+  const styledMat = pageWarpHigh.styledMat.clone();
+  return {
+    visionMat,
+    styledMat,
+    gridBounds: { left: 0, top: 0, width: visionMat.cols, height: visionMat.rows },
+    includeCornerCrosses: true,
+    previewGridQuad: null,
+  };
 }
 
 /**
@@ -709,7 +745,7 @@ function findFrameGridQuadFromCrosses(pageMat, cols, rows, options = {}) {
   let roi = null;
 
   try {
-    const insetPx = Math.max(0, Math.min(150, options.paperMarginPx ?? 80));
+    const insetPx = Math.max(0, Math.min(256, options.paperMarginPx ?? 80));
     const roiWidth = Math.max(1, gray.cols - insetPx * 2);
     const roiHeight = Math.max(1, gray.rows - insetPx * 2);
     // Ignore a tunable paper margin so page-edge clutter does not pollute the boundary sweeps.
@@ -951,9 +987,10 @@ function sliceRectifiedToCanvases(rectifiedMat, extractionInfo, crop, interpolat
  * @param {number} row
  * @param {{left:number,right:number,top:number,bottom:number}} crop
  * @param {number} interpolation
+ * @param {{x:number,y:number}} [sourceOffset={x:0,y:0}]
  * @returns {HTMLCanvasElement}
  */
-export function extractSingleFrameToCanvas(rectifiedMat, extractionInfo, col, row, crop, interpolation) {
+export function extractSingleFrameToCanvas(rectifiedMat, extractionInfo, col, row, crop, interpolation, sourceOffset = { x: 0, y: 0 }) {
   const gridBounds = extractionInfo.gridBounds;
   const cellWidth = gridBounds.width / extractionInfo.cols;
   const cellHeight = gridBounds.height / extractionInfo.rows;
@@ -971,11 +1008,13 @@ export function extractSingleFrameToCanvas(rectifiedMat, extractionInfo, col, ro
   const srcTR = bilerpQuad(quad, u1, v0);
   const srcBR = bilerpQuad(quad, u1, v1);
   const srcBL = bilerpQuad(quad, u0, v1);
+  const offsetX = Number(sourceOffset?.x) || 0;
+  const offsetY = Number(sourceOffset?.y) || 0;
   const srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
-    srcTL.x, srcTL.y,
-    srcTR.x, srcTR.y,
-    srcBR.x, srcBR.y,
-    srcBL.x, srcBL.y,
+    srcTL.x + offsetX, srcTL.y + offsetY,
+    srcTR.x + offsetX, srcTR.y + offsetY,
+    srcBR.x + offsetX, srcBR.y + offsetY,
+    srcBL.x + offsetX, srcBL.y + offsetY,
   ]);
   const dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
     0, 0,
@@ -1467,6 +1506,446 @@ function buildCrossAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 0.75,
     crossRoiTiles,
     crossRoiTileMap: new Map(crossRoiTiles.map((tile) => [getMarkerKey(tile.col, tile.row), tile])),
   };
+}
+
+/**
+ * Estimate a straight frame grid without registration marks.
+ *
+ * The grid pitch is inferred from seeded horizontal/vertical autocorrelation on a reduced blurred
+ * sheet image. Grid phase is then chosen from low-energy gutter profiles so the inferred
+ * intersections can be displayed and edited through the same marker UI used by marked sheets.
+ *
+ * @param {cv.Mat} rectifiedMat
+ * @param {number} cols
+ * @param {number} rows
+ * @param {number} [crossRoiScale=0.75]
+ * @param {{left:number, top:number, width:number, height:number} | null} [gridBounds=null]
+ * @returns {object}
+ */
+function buildMarkerlessAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 0.75, gridBounds = null, paperMarginPx = 0) {
+  const bounds = gridBounds || { left: 0, top: 0, width: rectifiedMat.cols, height: rectifiedMat.rows };
+  const grayMat = toLightnessGray(rectifiedMat);
+  const boundedGray = extractBoundsRoi(grayMat, bounds);
+
+  try {
+    const estimate = estimateMarkerlessGrid(boundedGray, cols, rows, paperMarginPx);
+    if (!estimate) {
+      return buildUnrefinedCrossRegionInfo(
+        rectifiedMat,
+        cols,
+        rows,
+        t("status.markerlessEstimationFailed"),
+        bounds,
+        crossRoiScale,
+        { markerType: "crosses", includeCornerCrosses: true }
+      );
+    }
+
+    const xPositions = estimate.xPositions.map((x) => bounds.left + x);
+    const yPositions = estimate.yPositions.map((y) => bounds.top + y);
+    const markerLookup = new Map();
+    const crossRoiTiles = [];
+    const expectedCrosses = [];
+
+    for (let row = 0; row <= rows; row++) {
+      for (let col = 0; col <= cols; col++) {
+        const x = xPositions[col];
+        const y = yPositions[row];
+        expectedCrosses.push({ col, row, x, y });
+        const marker = {
+          kind: "markerless",
+          col,
+          row,
+          x,
+          y,
+          roiCenterX: x,
+          roiCenterY: y,
+          detectedX: x,
+          detectedY: y,
+          dx: 0,
+          dy: 0,
+          confidence: 1,
+          accepted: true,
+        };
+        markerLookup.set(getMarkerKey(col, row), marker);
+        const tile = buildUnrefinedCrossRegionTile(
+          rectifiedMat,
+          { col, row, x, y },
+          rectifiedMat.cols,
+          rectifiedMat.rows,
+          cols,
+          rows,
+          crossRoiScale,
+          "crosses"
+        );
+        tile.kind = "markerless";
+        tile.accepted = true;
+        tile.confidence = 1;
+        tile.detectedX = x;
+        tile.detectedY = y;
+        tile.roiCenterX = x;
+        tile.roiCenterY = y;
+        crossRoiTiles.push(tile);
+      }
+    }
+
+    const inferredBounds = {
+      left: xPositions[0],
+      top: yPositions[0],
+      width: xPositions[xPositions.length - 1] - xPositions[0],
+      height: yPositions[yPositions.length - 1] - yPositions[0],
+    };
+
+    return {
+      ok: true,
+      reason: "ok",
+      includeCornerCrosses: true,
+      requestedMarkerType: "markerless",
+      resolvedMarkerType: "markerless",
+      markerTypeMedianCircularity: null,
+      rectifiedWidth: rectifiedMat.cols,
+      rectifiedHeight: rectifiedMat.rows,
+      gridBounds: inferredBounds,
+      cols,
+      rows,
+      expectedCount: expectedCrosses.length,
+      detectedCount: expectedCrosses.length,
+      expectedCrosses,
+      anchorDots: [],
+      detectedCrosses: [...markerLookup.values()],
+      rejectedCrosses: [],
+      markerLookup,
+      frameDebugQuads: buildFrameDebugQuads(markerLookup, cols, rows, inferredBounds),
+      crossRoiTiles,
+      crossRoiTileMap: new Map(crossRoiTiles.map((tile) => [getMarkerKey(tile.col, tile.row), tile])),
+      markerlessEstimate: {
+        pitchX: estimate.pitchX,
+        pitchY: estimate.pitchY,
+        startX: estimate.startX,
+        startY: estimate.startY,
+      },
+    };
+  } finally {
+    boundedGray.delete();
+    grayMat.delete();
+  }
+}
+
+/**
+ * Estimate a straight grid from seeded autocorrelation and multi-signal gutter scoring.
+ *
+ * @param {cv.Mat} grayMat
+ * @param {number} cols
+ * @param {number} rows
+ * @returns {{pitchX:number, pitchY:number, startX:number, startY:number, xPositions:number[], yPositions:number[]} | null}
+ */
+function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0) {
+  const working = new cv.Mat();
+  const blurred = new cv.Mat();
+  const insetRoi = new cv.Mat();
+  const padded = new cv.Mat();
+  const longEdge = Math.max(grayMat.cols, grayMat.rows);
+  const scale = longEdge > MARKERLESS_WORKING_LONG_EDGE_PX ? (MARKERLESS_WORKING_LONG_EDGE_PX / longEdge) : 1;
+  const workingWidth = Math.max(32, Math.round(grayMat.cols * scale));
+  const workingHeight = Math.max(32, Math.round(grayMat.rows * scale));
+
+  try {
+    cv.resize(grayMat, working, new cv.Size(workingWidth, workingHeight), 0, 0, cv.INTER_AREA);
+    const blurKernel = Math.max(3, ((Math.floor(Math.max(working.cols, working.rows) / 90) * 2) + 1));
+    cv.GaussianBlur(working, blurred, new cv.Size(blurKernel, blurKernel), 0, 0, cv.BORDER_REPLICATE);
+
+    const insetSmall = Math.max(0, Math.round(Math.max(0, paperMarginPx) * scale));
+    const insetWidth = Math.max(1, blurred.cols - (insetSmall * 2));
+    const insetHeight = Math.max(1, blurred.rows - (insetSmall * 2));
+    const useInsetForPitch =
+      insetWidth >= MARKERLESS_MIN_PITCH_PX * Math.max(1, cols) &&
+      insetHeight >= MARKERLESS_MIN_PITCH_PX * Math.max(1, rows);
+    const pitchSource = useInsetForPitch
+      ? blurred.roi(new cv.Rect(insetSmall, insetSmall, insetWidth, insetHeight)).clone()
+      : blurred.clone();
+    insetRoi.create(pitchSource.rows, pitchSource.cols, pitchSource.type());
+    pitchSource.copyTo(insetRoi);
+    pitchSource.delete();
+
+    const nominalPitchX = Math.max(MARKERLESS_MIN_PITCH_PX, insetRoi.cols / Math.max(1, cols));
+    const nominalPitchY = Math.max(MARKERLESS_MIN_PITCH_PX, insetRoi.rows / Math.max(1, rows));
+    const padXSmall = Math.max(1, Math.round(nominalPitchX * MARKERLESS_PADDING_FRAC));
+    const padYSmall = Math.max(1, Math.round(nominalPitchY * MARKERLESS_PADDING_FRAC));
+    cv.copyMakeBorder(
+      insetRoi,
+      padded,
+      padYSmall,
+      padYSmall,
+      padXSmall,
+      padXSmall,
+      cv.BORDER_REPLICATE
+    );
+
+    const pitchXSmall = estimateAutocorrelationPitch(padded, "x", nominalPitchX);
+    const pitchYSmall = estimateAutocorrelationPitch(padded, "y", nominalPitchY);
+    const xProfile = computeMarkerlessGutterProfile(padded, "x");
+    const yProfile = computeMarkerlessGutterProfile(padded, "y");
+    const startXSmall = estimateGridPhase(xProfile, pitchXSmall, cols);
+    const startYSmall = estimateGridPhase(yProfile, pitchYSmall, rows);
+
+    const scaleX = grayMat.cols / blurred.cols;
+    const scaleY = grayMat.rows / blurred.rows;
+    const pitchX = pitchXSmall * scaleX;
+    const pitchY = pitchYSmall * scaleY;
+    const insetOffsetX = useInsetForPitch ? (insetSmall * scaleX) : 0;
+    const insetOffsetY = useInsetForPitch ? (insetSmall * scaleY) : 0;
+    const startX = ((startXSmall - padXSmall) * scaleX) + insetOffsetX;
+    const startY = ((startYSmall - padYSmall) * scaleY) + insetOffsetY;
+    const xPositions = buildGridPositions(startX, pitchX, cols);
+    const yPositions = buildGridPositions(startY, pitchY, rows);
+    if (!xPositions || !yPositions) return null;
+    return { pitchX, pitchY, startX, startY, xPositions, yPositions };
+  } finally {
+    working.delete();
+    blurred.delete();
+    insetRoi.delete();
+    padded.delete();
+  }
+}
+
+/**
+ * Extract a clipped grayscale ROI from floating-point bounds.
+ *
+ * @param {cv.Mat} grayMat
+ * @param {{left:number, top:number, width:number, height:number}} bounds
+ * @returns {cv.Mat}
+ */
+function extractBoundsRoi(grayMat, bounds) {
+  const left = Math.max(0, Math.min(grayMat.cols - 1, Math.round(bounds.left)));
+  const top = Math.max(0, Math.min(grayMat.rows - 1, Math.round(bounds.top)));
+  const width = Math.max(1, Math.min(grayMat.cols - left, Math.round(bounds.width)));
+  const height = Math.max(1, Math.min(grayMat.rows - top, Math.round(bounds.height)));
+  return grayMat.roi(new cv.Rect(left, top, width, height)).clone();
+}
+
+/**
+ * Estimate the cell pitch along one axis by maximizing seeded autocorrelation.
+ *
+ * @param {cv.Mat} grayMat
+ * @param {"x"|"y"} axis
+ * @param {number} nominalPitch
+ * @returns {number}
+ */
+function estimateAutocorrelationPitch(grayMat, axis, nominalPitch) {
+  const data = grayMat.data;
+  const width = grayMat.cols;
+  const height = grayMat.rows;
+  const maxLagAllowed = Math.max(1, (axis === "x" ? width : height) - 1);
+  const pitchMin = Math.min(
+    maxLagAllowed,
+    Math.max(MARKERLESS_MIN_PITCH_PX, Math.round(nominalPitch * (1 - MARKERLESS_AUTOCORR_SEARCH_FRAC)))
+  );
+  const pitchMax = Math.min(
+    maxLagAllowed,
+    Math.max(pitchMin + 1, Math.round(nominalPitch * (1 + MARKERLESS_AUTOCORR_SEARCH_FRAC)))
+  );
+  const sampleStrideX = Math.max(1, Math.floor(width / 180));
+  const sampleStrideY = Math.max(1, Math.floor(height / 180));
+  let meanDarkness = 0;
+  let meanCount = 0;
+
+  for (let y = 0; y < height; y += sampleStrideY) {
+    const rowOffset = y * width;
+    for (let x = 0; x < width; x += sampleStrideX) {
+      meanDarkness += 255 - data[rowOffset + x];
+      meanCount++;
+    }
+  }
+  meanDarkness /= Math.max(1, meanCount);
+
+  let bestPitch = Math.round(nominalPitch);
+  let bestScore = -Infinity;
+  for (let lag = pitchMin; lag <= pitchMax; lag++) {
+    let acc = 0;
+    let count = 0;
+    if (axis === "x") {
+      for (let y = 0; y < height; y += sampleStrideY) {
+        const rowOffset = y * width;
+        for (let x = 0; x < width - lag; x += sampleStrideX) {
+          const a = (255 - data[rowOffset + x]) - meanDarkness;
+          const b = (255 - data[rowOffset + x + lag]) - meanDarkness;
+          acc += a * b;
+          count++;
+        }
+      }
+    } else {
+      for (let y = 0; y < height - lag; y += sampleStrideY) {
+        const rowOffsetA = y * width;
+        const rowOffsetB = (y + lag) * width;
+        for (let x = 0; x < width; x += sampleStrideX) {
+          const a = (255 - data[rowOffsetA + x]) - meanDarkness;
+          const b = (255 - data[rowOffsetB + x]) - meanDarkness;
+          acc += a * b;
+          count++;
+        }
+      }
+    }
+    const score = acc / Math.max(1, count);
+    if (score > bestScore) {
+      bestScore = score;
+      bestPitch = lag;
+    }
+  }
+  return bestPitch;
+}
+
+/**
+ * Build a 1D gutter-likelihood profile by combining darkness, edge energy, and variance.
+ *
+ * @param {cv.Mat} grayMat
+ * @param {"x"|"y"} axis
+ * @returns {Float64Array}
+ */
+function computeMarkerlessGutterProfile(grayMat, axis) {
+  const data = grayMat.data;
+  const width = grayMat.cols;
+  const height = grayMat.rows;
+  const length = axis === "x" ? width : height;
+  const darkness = new Float64Array(length);
+  const variance = new Float64Array(length);
+  const edge = new Float64Array(length);
+
+  if (axis === "x") {
+    for (let x = 0; x < width; x++) {
+      let sum = 0;
+      let sumSq = 0;
+      let edgeSum = 0;
+      for (let y = 0; y < height; y++) {
+        const rowOffset = y * width;
+        const value = 255 - data[rowOffset + x];
+        sum += value;
+        sumSq += value * value;
+        const leftValue = data[rowOffset + Math.max(0, x - 1)];
+        const rightValue = data[rowOffset + Math.min(width - 1, x + 1)];
+        edgeSum += Math.abs(rightValue - leftValue);
+      }
+      darkness[x] = sum / Math.max(1, height);
+      variance[x] = Math.max(0, (sumSq / Math.max(1, height)) - darkness[x] * darkness[x]);
+      edge[x] = edgeSum / Math.max(1, height);
+    }
+  } else {
+    for (let y = 0; y < height; y++) {
+      let sum = 0;
+      let sumSq = 0;
+      let edgeSum = 0;
+      const rowOffset = y * width;
+      const rowOffsetUp = Math.max(0, y - 1) * width;
+      const rowOffsetDown = Math.min(height - 1, y + 1) * width;
+      for (let x = 0; x < width; x++) {
+        const value = 255 - data[rowOffset + x];
+        sum += value;
+        sumSq += value * value;
+        edgeSum += Math.abs(data[rowOffsetDown + x] - data[rowOffsetUp + x]);
+      }
+      darkness[y] = sum / Math.max(1, width);
+      variance[y] = Math.max(0, (sumSq / Math.max(1, width)) - darkness[y] * darkness[y]);
+      edge[y] = edgeSum / Math.max(1, width);
+    }
+  }
+
+  const darknessNorm = normalizeProfile(darkness);
+  const varianceNorm = normalizeProfile(variance);
+  const edgeNorm = normalizeProfile(edge);
+  const gutter = new Float64Array(length);
+  for (let i = 0; i < length; i++) {
+    gutter[i] = (1 - darknessNorm[i]) + (1 - varianceNorm[i]) + (1 - edgeNorm[i]);
+  }
+  return smooth1D(gutter, 7);
+}
+
+/**
+ * Normalize a 1D numeric profile into the 0..1 range.
+ *
+ * @param {ArrayLike<number>} profile
+ * @returns {Float64Array}
+ */
+function normalizeProfile(profile) {
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = 0; i < profile.length; i++) {
+    min = Math.min(min, profile[i]);
+    max = Math.max(max, profile[i]);
+  }
+  const range = Math.max(1e-6, max - min);
+  const out = new Float64Array(profile.length);
+  for (let i = 0; i < profile.length; i++) {
+    out[i] = (profile[i] - min) / range;
+  }
+  return out;
+}
+
+/**
+ * Estimate the starting boundary position for a periodic grid by sampling the gutter profile at
+ * each candidate series of boundary locations near the nominal centered layout.
+ *
+ * @param {Float64Array} profile
+ * @param {number} pitch
+ * @param {number} cellCount
+ * @returns {number}
+ */
+function estimateGridPhase(profile, pitch, cellCount) {
+  const maxIndex = profile.length - 1;
+  const fitPitch = Math.min(pitch, maxIndex / Math.max(1, cellCount));
+  const nominalStart = Math.max(0, (maxIndex - fitPitch * cellCount) * 0.5);
+  const radius = Math.max(2, Math.round(fitPitch * 0.5));
+  const minStart = Math.max(0, Math.floor(nominalStart - radius));
+  const maxStart = Math.min(maxIndex, Math.ceil(nominalStart + radius));
+  let bestStart = nominalStart;
+  let bestScore = -Infinity;
+
+  for (let start = minStart; start <= maxStart; start++) {
+    const end = start + fitPitch * cellCount;
+    if (end > maxIndex) continue;
+    let score = 0;
+    for (let i = 0; i <= cellCount; i++) {
+      score += sampleProfile(profile, start + fitPitch * i);
+    }
+    score /= Math.max(1, cellCount + 1);
+    score -= Math.abs(start - nominalStart) / Math.max(1, fitPitch * 4);
+    if (score > bestScore) {
+      bestScore = score;
+      bestStart = start;
+    }
+  }
+  return bestStart;
+}
+
+/**
+ * Sample a 1D profile at a floating-point index with linear interpolation.
+ *
+ * @param {ArrayLike<number>} profile
+ * @param {number} position
+ * @returns {number}
+ */
+function sampleProfile(profile, position) {
+  const clamped = Math.max(0, Math.min(profile.length - 1, position));
+  const left = Math.floor(clamped);
+  const right = Math.min(profile.length - 1, left + 1);
+  const frac = clamped - left;
+  return profile[left] * (1 - frac) + profile[right] * frac;
+}
+
+/**
+ * Build one ordered list of grid-boundary positions from the chosen start and pitch.
+ *
+ * @param {number} start
+ * @param {number} pitch
+ * @param {number} cellCount
+ * @returns {number[] | null}
+ */
+function buildGridPositions(start, pitch, cellCount) {
+  const fitPitch = Math.max(1, pitch);
+  const positions = [];
+  for (let i = 0; i <= cellCount; i++) {
+    const position = start + fitPitch * i;
+    positions.push(position);
+  }
+  return positions;
 }
 
 /**
@@ -2204,7 +2683,6 @@ function buildStatusText({
   rectifiedHeight,
   animationWidth,
   animationHeight,
-  sourceMode,
   gridDetector,
 }) {
   const lines = [
@@ -2215,13 +2693,18 @@ function buildStatusText({
     t("status.extractionWarp", { width: highPageWarpWidth, height: highPageWarpHeight }),
     t("status.rectifiedSheet", { width: rectifiedWidth, height: rectifiedHeight }),
     t("status.animationSize", { width: animationWidth, height: animationHeight }),
-    t("status.frameSource", {
-      source: sourceMode === "rectified" ? t("status.sourceRectified") : t("status.sourceRawPhoto"),
-    }),
     t("status.framesExtracted", { count: frameCount, expected: expectedFrameCount }),
   ];
 
   if (alignmentInfo) {
+    if (alignmentInfo.requestedMarkerType === "markerless" && alignmentInfo.markerlessEstimate) {
+      lines.push(
+        t("status.markerlessGridPitch", {
+          pitchX: alignmentInfo.markerlessEstimate.pitchX.toFixed(1),
+          pitchY: alignmentInfo.markerlessEstimate.pitchY.toFixed(1),
+        })
+      );
+    }
     if (alignmentInfo.requestedMarkerType === "auto" && alignmentInfo.markerTypeMedianCircularity !== null) {
       lines.push(
         t("status.markerCircularity", {

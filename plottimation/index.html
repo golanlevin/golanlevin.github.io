@@ -3,6 +3,20 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Free web tool for animators to create looping GIFs and MP4s from photos of frame sheets, contact sheets, and sprite sheets." />
+    <meta name="keywords" content="animation, animator, gif, mp4, frame sheet, frame-sheet, frame sheets, frame-sheets, contact sheet, contact sheets, sprite sheet, sprite sheets, animation grid, hand-drawn animation, drawn animation, plotter art, risograph, riso animation, riso, pen plotter, plottimation, web tool" />
+    <meta name="author" content="Golan Levin" />
+    <meta name="theme-color" content="#f9f9fa" />
+    <meta name="robots" content="index, follow" />
+    <meta property="og:title" content="Plottimation Tool" />
+    <meta property="og:description" content="Free web tool for animators to create looping GIFs and MP4s from photos of frame sheets, contact sheets, and sprite sheets." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="doc/plottimation_overview.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Plottimation Tool" />
+    <meta name="twitter:description" content="Free web tool for animators to create looping GIFs and MP4s from photos of frame sheets, contact sheets, and sprite sheets." />
+    <meta name="twitter:image" content="doc/plottimation_overview.jpg" />
+    <link rel="canonical" href="https://golanlevin.github.io/plottimation/" />
     <title data-i18n="app.documentTitle">Plottimation Web Tool</title>
     <link rel="stylesheet" href="style.css" />
     <script src="js/opencv.js"></script>
@@ -20,7 +34,7 @@
           </p>
           <p id="appLedeMobileNote" class="lede mobile-header-note" data-i18n="app.mobileNote">(Please use desktop version for advanced controls.)</p>
           <p id="appLedeSecondary" class="lede">
-            <span data-app-version>v1.09</span> • <a href="https://github.com/golanlevin/plottimation/tree/main/README.md" target="_blank" rel="noopener noreferrer" data-i18n="app.documentation">Instructions</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer" data-i18n="app.demoVideo">Demo Video</a> • <a href="templates/index.html" target="_blank" rel="noopener noreferrer" data-i18n="app.templates">Templates</a>
+            <span data-app-version>v1.10</span> • <a href="https://github.com/golanlevin/plottimation/tree/main/README.md" target="_blank" rel="noopener noreferrer" data-i18n="app.documentation">Instructions</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer" data-i18n="app.demoVideo">Demo Video</a> • <a href="templates/index.html" target="_blank" rel="noopener noreferrer" data-i18n="app.templates">Templates</a>
           </p>
           <p id="appLedeTertiary" class="lede"><span data-i18n="app.bylinePrefix">By @golanlevin •</span> <a href="https://buymeacoffee.com/golanlevin" target="_blank" rel="noopener noreferrer" data-i18n="app.buyMeCoffee">Buy me a coffee</a> :)</p>
         </div>
@@ -39,11 +53,25 @@
             <span class="drop-lead desktop-only-inline" data-i18n="photo.dropLeadDesktop2">or click to choose a file.</span>
             <span class="drop-lead mobile-only-inline-block" data-i18n="photo.dropLeadMobile1">Choose a photo to begin,</span>
             <span class="drop-lead mobile-only-inline-block" data-i18n="photo.dropLeadMobile2">or load a demo.</span>
-            <span class="drop-note" data-i18n="photo.dropNote">Animation frames should be
-separated by small crosses or dots.</span>
             <span class="drop-note" data-i18n="app.aboutPrivacy">All media are processed locally.</span>
+            <span id="dropGuidanceNote" class="drop-note" data-i18n="photo.dropNote">Animation frames should be
+separated by small crosses or dots.</span>
           </label>
           <input id="fileInput" type="file" accept="image/*,.txt,text/plain" />
+        </section>
+
+        <section id="alignmentPipelineGroup" class="control-group">
+          <fieldset id="alignmentPipelineField" class="radio-group">
+            <legend data-i18n="alignment.pipeline">Alignment Pipeline</legend>
+            <label class="toggle">
+              <input id="alignmentPipelineMarkerless" name="alignmentPipeline" type="radio" value="markerless" />
+              <span data-i18n="alignment.pipelineOptions.markerless">Markerless (gutters, frames)</span>
+            </label>
+            <label class="toggle">
+              <input id="alignmentPipelineMarkers" name="alignmentPipeline" type="radio" value="markers" checked />
+              <span data-i18n="alignment.pipelineOptions.markers">Markers (crosses, dots)</span>
+            </label>
+          </fieldset>
         </section>
 
         <details id="layoutGroup" class="control-group collapsible" data-mobile-control="layout">
@@ -118,7 +146,7 @@ separated by small crosses or dots.</span>
             </label>
             <label id="paperMarginRow">
               <span><span data-i18n="detection.paperMargin">Search Inset Margin</span> <output id="paperMarginValue">80 px</output></span>
-              <input id="paperMargin" type="range" min="0" max="150" step="1" value="80" />
+              <input id="paperMargin" type="range" min="0" max="256" step="1" value="80" />
             </label>
             <label id="boundarySensitivityRow">
               <span><span data-i18n="detection.boundarySensitivity">Boundary Threshold</span> <output id="boundarySensitivityValue">8.0</output></span>
@@ -134,17 +162,41 @@ separated by small crosses or dots.</span>
         <details id="frameAlignmentGroup" class="control-group collapsible" data-mobile-control="alignment">
           <summary id="frameAlignmentSummary"><span data-i18n="alignment.summary">Automatic Frame Alignment</span></summary>
           <label id="alignmentMarkerTypeField" class="stack-label">
-            <span data-i18n="alignment.markerType">Alignment Marker Type:</span>
+            <span data-i18n="alignment.markerType">Alignment Marker Type</span>
             <select id="alignmentMarkerType">
               <option value="auto" selected data-i18n="alignment.markerTypeOptions.auto">Auto</option>
               <option value="crosses" data-i18n="alignment.markerTypeOptions.crosses">Crosses</option>
               <option value="circles" data-i18n="alignment.markerTypeOptions.circles">Dots</option>
             </select>
           </label>
-          <div class="slider-stack">
-            <label>
-              <span><span data-i18n="alignment.roiSize">Alignment Marker Region Size</span> <output id="crossRoiScaleValue">-- px</output></span>
+          <div id="alignmentSliderStack" class="slider-stack">
+            <label id="crossRoiScaleRow">
+              <span><span id="crossRoiScaleLabel" data-i18n="alignment.roiSize">Alignment Marker Region Size</span> <output id="crossRoiScaleValue">-- px</output></span>
               <input id="crossRoiScale" type="range" min="18" max="110" step="1" value="52" />
+            </label>
+            <label id="stabilizationStrengthRow" hidden>
+              <span><span data-i18n="alignment.stabilizationStrength">Stabilization Strength</span> <output id="stabilizationStrengthValue">0%</output></span>
+              <input id="stabilizationStrength" type="range" min="0" max="100" step="1" value="0" />
+            </label>
+            <label id="stabilizationLambdaRow" hidden>
+              <span><span data-i18n="alignment.stabilizationLambda">Lambda</span> <output id="stabilizationLambdaValue">0.010</output></span>
+              <input id="stabilizationLambda" type="range" min="0.001" max="0.1" step="0.001" value="0.010" />
+            </label>
+            <label id="emphasizePeripheryRow" class="toggle" hidden style="display:none;">
+              <input id="emphasizePeriphery" type="checkbox" checked />
+              <span>Emphasize periphery</span>
+            </label>
+            <label id="markerlessPhaseXRow" hidden>
+              <span><span data-i18n="alignment.markerlessPhaseX">Horizontal Phase</span> <output id="markerlessPhaseXValue">+0.000</output></span>
+              <input id="markerlessPhaseX" type="range" min="-0.4" max="0.4" step="0.005" value="0" />
+            </label>
+            <label id="markerlessPhaseYRow" hidden>
+              <span><span data-i18n="alignment.markerlessPhaseY">Vertical Phase</span> <output id="markerlessPhaseYValue">+0.000</output></span>
+              <input id="markerlessPhaseY" type="range" min="-0.4" max="0.4" step="0.005" value="0" />
+            </label>
+            <label id="verticalDriftCompensationRow" hidden>
+              <span><span>Vertical Drift Compensation</span> <output id="verticalDriftCompensationValue">+0.0%</output></span>
+              <input id="verticalDriftCompensation" type="range" min="-0.05" max="0.05" step="0.001" value="0" />
             </label>
           </div>
           <label id="useCrossAlignmentRow" class="toggle">
@@ -345,7 +397,7 @@ separated by small crosses or dots.</span>
 
         <section id="markersViewerCard" class="viewer-card" data-view="markers">
           <header>
-            <h2 id="crossRegionsHeading"><span data-i18n="panels.frameAlignmentMarkers">3. Frame Alignment Markers</span> <span id="mobileMarkersReadOnlyNote" class="header-note mobile-only-inline" data-i18n="alignment.readOnly">(read-only)</span></h2>
+            <h2 id="crossRegionsHeading"><span data-panel-heading data-i18n="panels.frameAlignmentMarkers">3. Frame Alignment Markers</span> <span id="mobileMarkersReadOnlyNote" class="header-note mobile-only-inline" data-i18n="alignment.readOnly">(read-only)</span></h2>
             <div id="markerHeaderActions" class="header-actions">
               <button id="toggleMarkerBlobViewButton" class="header-button" type="button" hidden data-i18n-title="tooltip.toggleMarkerBlobViewButton">🔁</button>
               <button id="toggleMarkerEditingButton" class="header-button" type="button" disabled data-i18n="alignment.enableOverrides">Enable Overrides</button>

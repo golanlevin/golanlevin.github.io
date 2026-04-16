@@ -72,6 +72,7 @@ import { applyTranslations, getTooltipText, t } from "./i18n.js";
 const bUseOpenCvOutputScaling = true;
 const MOBILE_VIEWER_BREAKPOINT_PX = 960;
 const LIVE_THRESHOLD_PREVIEW_MAX_LONG_EDGE_PX = 512;
+const FRAME_MATCH_WEIGHT_CACHE = new Map();
 
 const TOOLTIP_TEXT = getTooltipText();
 
@@ -588,6 +589,93 @@ function drawCurrentGifPreview() {
 }
 
 /**
+ * Clear the markerless paper-backdrop CSS variable so fallback styling applies again.
+ *
+ * @returns {void}
+ */
+function clearMarkerlessPaperBackdropColor() {
+  document.body.style.removeProperty("--markerless-paper-backdrop");
+}
+
+/**
+ * Estimate the rectified sheet's paper color from a thin border sample and use a slightly darker
+ * version of that color behind Markerless Frame Corners / Preview panels.
+ *
+ * Sampled pixels:
+ * - top two rows
+ * - bottom two rows
+ * - left two columns
+ * - right two columns
+ *
+ * @param {HTMLCanvasElement | null} canvas
+ * @returns {void}
+ */
+function updateMarkerlessPaperBackdropColor(canvas) {
+  if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
+    clearMarkerlessPaperBackdropColor();
+    return;
+  }
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) {
+    clearMarkerlessPaperBackdropColor();
+    return;
+  }
+  const width = canvas.width;
+  const height = canvas.height;
+  const bandRows = Math.min(2, height);
+  const bandCols = Math.min(2, width);
+  let rSum = 0;
+  let gSum = 0;
+  let bSum = 0;
+  let count = 0;
+
+  const accumulateRowBand = (yStart, rows) => {
+    if (rows <= 0) return;
+    const data = ctx.getImageData(0, yStart, width, rows).data;
+    for (let i = 0; i < data.length; i += 4) {
+      rSum += data[i];
+      gSum += data[i + 1];
+      bSum += data[i + 2];
+      count++;
+    }
+  };
+  const accumulateColBand = (xStart, cols, yStart, rows) => {
+    if (cols <= 0 || rows <= 0) return;
+    const data = ctx.getImageData(xStart, yStart, cols, rows).data;
+    for (let i = 0; i < data.length; i += 4) {
+      rSum += data[i];
+      gSum += data[i + 1];
+      bSum += data[i + 2];
+      count++;
+    }
+  };
+
+  accumulateRowBand(0, bandRows);
+  if (height > bandRows) {
+    accumulateRowBand(Math.max(0, height - bandRows), bandRows);
+  }
+
+  const middleY = bandRows;
+  const middleRows = Math.max(0, height - (bandRows * 2));
+  if (middleRows > 0) {
+    accumulateColBand(0, bandCols, middleY, middleRows);
+    if (width > bandCols) {
+      accumulateColBand(Math.max(0, width - bandCols), bandCols, middleY, middleRows);
+    }
+  }
+
+  if (count <= 0) {
+    clearMarkerlessPaperBackdropColor();
+    return;
+  }
+
+  const avgR = Math.max(0, Math.min(255, Math.round(rSum / count) - 20));
+  const avgG = Math.max(0, Math.min(255, Math.round(gSum / count) - 20));
+  const avgB = Math.max(0, Math.min(255, Math.round(bSum / count) - 20));
+  document.body.style.setProperty("--markerless-paper-backdrop", `rgb(${avgR}, ${avgG}, ${avgB})`);
+}
+
+/**
  * Release cached OpenCV source mats that are tied to the currently loaded raw image.
  *
  * The lightweight Thresholding Offset preview reuses these mats so slider drags do not keep
@@ -819,6 +907,7 @@ function makeLivePreviewDragCue() {
  * @returns {void}
  */
 function clearDerivedPreviews() {
+  releaseRectifiedCvCache();
   state.preview.rectifiedCanvas = null;
   state.preview.rectifiedDiagnosticSourceCanvas = null;
   state.preview.rectifiedDiagnosticDirty = true;
@@ -833,6 +922,9 @@ function clearDerivedPreviews() {
   state.runtime.markerEditingEnabled = false;
   state.runtime.markerBlobDebugVisible = false;
   state.frames.base = [];
+  state.frames.stabilizedCache.clear();
+  state.frames.stabilizationPairwise = null;
+  state.frames.stabilizationOffsets = null;
   state.frames.adjustedCache.clear();
   state.preview.frameIndex = 0;
   state.preview.inspectingRawFrame = false;
@@ -891,6 +983,7 @@ function clearAllPreviews() {
  * @returns {void}
  */
 function clearDerivedOutputsForDetectionFailure() {
+  releaseRectifiedCvCache();
   state.preview.rectifiedCanvas = null;
   state.preview.rectifiedDiagnosticSourceCanvas = null;
   state.preview.rectifiedDiagnosticDirty = true;
@@ -904,6 +997,9 @@ function clearDerivedOutputsForDetectionFailure() {
   state.runtime.markerEditingEnabled = false;
   state.runtime.markerBlobDebugVisible = false;
   state.frames.base = [];
+  state.frames.stabilizedCache.clear();
+  state.frames.stabilizationPairwise = null;
+  state.frames.stabilizationOffsets = null;
   state.frames.adjustedCache.clear();
   state.preview.frameIndex = 0;
   state.preview.inspectingRawFrame = false;
@@ -1053,7 +1149,18 @@ function attachUi() {
     scheduleProcess,
     revokeGifUrl,
     invalidateAppearanceCache,
+    invalidateStabilizationCache,
+    invalidateStabilizedOutputCaches,
+    invalidateStabilizationOffsetsCache,
+    invalidateCurrentPreviewFrameCaches,
+    invalidateCurrentPreviewStabilizationCaches,
     scheduleAppearancePreviewUpdate,
+    scheduleStabilizationPreviewUpdate,
+    scheduleMarkerlessPhasePreviewUpdate,
+    beginStabilizationStrengthScrub,
+    endStabilizationStrengthScrub,
+    beginMarkerlessPhaseScrub,
+    endMarkerlessPhaseScrub,
     cancelInFlightProcessing,
     invalidateFrameCaches,
     drawCurrentGifPreview,
@@ -1112,6 +1219,7 @@ async function initializeMp4Support() {
  */
 function applyManualMarkerOverrides(alignmentInfo) {
   if (!alignmentInfo) return;
+  if (readConfig().alignmentPipeline === "markerless") return;
   for (const [key, override] of state.geometry.manualMarkerOverrides.entries()) {
     const marker = alignmentInfo.markerLookup.get(key);
     const tile = alignmentInfo.crossRoiTileMap?.get(key);
@@ -1340,6 +1448,129 @@ function scheduleAppearancePreviewUpdate(includeRectified = false) {
 }
 
 /**
+ * Coalesce markerless phase-slider preview updates into one animation-frame redraw.
+ *
+ * @returns {void}
+ */
+function scheduleMarkerlessPhasePreviewUpdate() {
+  if (state.preview.markerlessPhasePreviewRaf) return;
+  state.preview.markerlessPhasePreviewRaf = requestAnimationFrame(() => {
+    state.preview.markerlessPhasePreviewRaf = 0;
+    renderCrossRoiGrid(state.geometry.alignmentInfo);
+    drawCurrentGifPreview();
+  });
+}
+
+/**
+ * Coalesce stabilization-strength preview updates into one animation-frame redraw.
+ *
+ * @returns {void}
+ */
+function scheduleStabilizationPreviewUpdate() {
+  if (state.preview.stabilizationPreviewRaf) return;
+  state.preview.stabilizationPreviewRaf = requestAnimationFrame(() => {
+    state.preview.stabilizationPreviewRaf = 0;
+    if (!state.preview.markerOverrideScrubbing) {
+      renderCrossRoiGrid(state.geometry.alignmentInfo);
+    }
+    drawCurrentGifPreview();
+  });
+}
+
+/**
+ * Pause Preview playback while the stabilization-strength slider is actively scrubbed.
+ *
+ * @returns {void}
+ */
+function beginStabilizationStrengthScrub() {
+  if (state.preview.stabilizationStrengthScrubbing) return;
+  state.preview.stabilizationStrengthScrubbing = true;
+  if (state.preview.paused) {
+    state.preview.stabilizationStrengthResumePlayback = false;
+    return;
+  }
+  state.preview.stabilizationStrengthResumePlayback = true;
+  state.preview.paused = true;
+  updatePreviewPlayPauseButton();
+}
+
+/**
+ * Restore Preview playback after stabilization-strength scrubbing if the scrub initiated the pause.
+ *
+ * @returns {void}
+ */
+function endStabilizationStrengthScrub() {
+  if (!state.preview.stabilizationStrengthScrubbing) return;
+  state.preview.stabilizationStrengthScrubbing = false;
+  if (!state.preview.stabilizationStrengthResumePlayback) return;
+  state.preview.stabilizationStrengthResumePlayback = false;
+  state.preview.paused = false;
+  updatePreviewPlayPauseButton();
+}
+
+/**
+ * Pause Preview playback while a markerless corner override is actively scrubbed.
+ *
+ * @returns {void}
+ */
+function beginMarkerOverrideScrub() {
+  if (state.preview.markerOverrideScrubbing) return;
+  state.preview.markerOverrideScrubbing = true;
+  if (state.preview.paused) {
+    state.preview.markerOverrideResumePlayback = false;
+    return;
+  }
+  state.preview.markerOverrideResumePlayback = true;
+  state.preview.paused = true;
+  updatePreviewPlayPauseButton();
+}
+
+/**
+ * Restore Preview playback after a markerless corner override scrub if the scrub initiated pause.
+ *
+ * @returns {void}
+ */
+function endMarkerOverrideScrub() {
+  if (!state.preview.markerOverrideScrubbing) return;
+  state.preview.markerOverrideScrubbing = false;
+  if (!state.preview.markerOverrideResumePlayback) return;
+  state.preview.markerOverrideResumePlayback = false;
+  state.preview.paused = false;
+  updatePreviewPlayPauseButton();
+}
+
+/**
+ * Pause Preview playback while a markerless phase slider is actively scrubbed.
+ *
+ * @returns {void}
+ */
+function beginMarkerlessPhaseScrub() {
+  if (state.preview.markerlessPhaseScrubbing) return;
+  state.preview.markerlessPhaseScrubbing = true;
+  if (state.preview.paused) {
+    state.preview.markerlessPhaseResumePlayback = false;
+    return;
+  }
+  state.preview.markerlessPhaseResumePlayback = true;
+  state.preview.paused = true;
+  updatePreviewPlayPauseButton();
+}
+
+/**
+ * Restore Preview playback after a markerless phase scrub if the scrub initiated the pause.
+ *
+ * @returns {void}
+ */
+function endMarkerlessPhaseScrub() {
+  if (!state.preview.markerlessPhaseScrubbing) return;
+  state.preview.markerlessPhaseScrubbing = false;
+  if (!state.preview.markerlessPhaseResumePlayback) return;
+  state.preview.markerlessPhaseResumePlayback = false;
+  state.preview.paused = false;
+  updatePreviewPlayPauseButton();
+}
+
+/**
  * Populate the resampling dropdown with only the interpolation modes available in this OpenCV build.
  *
  * @returns {void}
@@ -1549,9 +1780,15 @@ function scheduleProcess() {
  *   paperMarginPx:number,
  *   boundarySensitivity:number,
  *   boundaryPersistencePx:number,
+ *   alignmentPipeline:string,
  *   alignmentMarkerType:string,
  *   crossRoiScalePct:number,
  *   crossRoiScale:number,
+ *   stabilizationStrength:number,
+ *   stabilizationLambda:number,
+ *   markerlessPhaseX:number,
+ *   markerlessPhaseY:number,
+ *   verticalDriftCompensation:number,
  *   detectCrossesWithConvolution:boolean,
  *   useCrossAlignment:boolean,
  *   crop:{left:number,right:number,top:number,bottom:number},
@@ -1590,14 +1827,36 @@ function readConfig() {
     frameRows: Math.max(1, Math.min(20, Math.round(Number(dom.frameRows.value) || SETTINGS_DEFAULTS.layout.frameRows))),
     thresholdMethod: dom.thresholdMethod.value || SETTINGS_DEFAULTS.detection.thresholdMethod,
     thresholdOffset: Math.max(-128, Math.min(128, Math.round(Number(dom.thresholdOffset.value) || SETTINGS_DEFAULTS.detection.thresholdOffset))),
-    paperMarginPx: Math.max(0, Math.min(150, Math.round(Number(dom.paperMargin.value) || SETTINGS_DEFAULTS.detection.paperMarginPx))),
+    paperMarginPx: Math.max(
+      0,
+      Math.min(
+        256,
+        Math.round(
+          Number.isFinite(Number(dom.paperMargin.value))
+            ? Number(dom.paperMargin.value)
+            : SETTINGS_DEFAULTS.detection.paperMarginPx
+        )
+      )
+    ),
     boundarySensitivity: Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)),
     boundaryPersistencePx: Math.max(1, Math.min(15, Math.round(Number(dom.boundaryPersistence.value) || SETTINGS_DEFAULTS.detection.boundaryPersistencePx))),
+    alignmentPipeline: dom.alignmentPipelineMarkerless.checked ? "markerless" : "markers",
     alignmentMarkerType: dom.alignmentMarkerType.value || "crosses",
     crossRoiScalePct: Math.max(18, Math.min(110, Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct)),
     crossRoiScale: Math.max(0.18, Math.min(1.1, (Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct) / 100)),
-    detectCrossesWithConvolution: (dom.alignmentMarkerType.value === "crosses") && dom.detectCrossesWithConvolution.checked,
-    useCrossAlignment: dom.useCrossAlignment.checked,
+    stabilizationStrength: Math.max(0, Math.min(100, Math.round(Number(dom.stabilizationStrength.value) || SETTINGS_DEFAULTS.detection.stabilizationStrength))),
+    stabilizationLambda: Math.max(0.001, Math.min(0.1, Number(dom.stabilizationLambda.value) || SETTINGS_DEFAULTS.detection.stabilizationLambda)),
+    markerlessPhaseX: Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseX.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseX)),
+    markerlessPhaseY: Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseY.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseY)),
+    verticalDriftCompensation: Math.max(
+      -0.05,
+      Math.min(
+        0.05,
+        Number(dom.verticalDriftCompensation?.value) || SETTINGS_DEFAULTS.detection.verticalDriftCompensation
+      )
+    ),
+    detectCrossesWithConvolution: (dom.alignmentPipelineMarkers.checked && dom.alignmentMarkerType.value === "crosses") && dom.detectCrossesWithConvolution.checked,
+    useCrossAlignment: dom.alignmentPipelineMarkerless.checked ? true : dom.useCrossAlignment.checked,
     useRectifiedAsSource: false,
     crop: {
       left: Math.max(0, Math.round(Number(dom.cropLeft.value) || 0)),
@@ -1713,11 +1972,81 @@ function syncPaperPresetUi() {
  * @returns {void}
  */
 function syncAlignmentMarkerUi() {
-  const markerType = dom.alignmentMarkerType.value || "crosses";
+  const pipeline = dom.alignmentPipelineMarkerless.checked ? "markerless" : "markers";
+  document.body.classList.toggle("markerless-pipeline", pipeline === "markerless");
+  if (
+    pipeline === "markerless" &&
+    dom.paperMargin &&
+    Number(dom.paperMargin.value) === SETTINGS_DEFAULTS.detection.paperMarginPx
+  ) {
+    // Markerless mode defaults to no search inset. Preserve any non-default user/saved value.
+    dom.paperMargin.value = "0";
+  }
+  if (
+    pipeline === "markers" &&
+    dom.alignmentMarkerType.value !== "auto" &&
+    dom.alignmentMarkerType.value !== "crosses" &&
+    dom.alignmentMarkerType.value !== "circles"
+  ) {
+    dom.alignmentMarkerType.value = SETTINGS_DEFAULTS.detection.alignmentMarkerType;
+  }
+  const markerType = dom.alignmentMarkerType.value || SETTINGS_DEFAULTS.detection.alignmentMarkerType;
   const resolvedAutoType = state.geometry.alignmentInfo?.resolvedMarkerType || null;
-  const showCrossOnlyControls = markerType === "crosses" || (markerType === "auto" && resolvedAutoType === "crosses");
+  const showMarkersPipelineControls = pipeline === "markers";
+  const showCrossOnlyControls = showMarkersPipelineControls && (markerType === "crosses" || (markerType === "auto" && resolvedAutoType === "crosses"));
+  const showMarkerlessControls = pipeline === "markerless";
+  const frameAlignmentSummary = document.querySelector("#frameAlignmentSummary");
+  const frameAlignmentSummaryLabel =
+    frameAlignmentSummary?.querySelector("[data-i18n='alignment.summary']") ||
+    frameAlignmentSummary?.firstElementChild;
+  const dropGuidanceNote = document.querySelector("#dropGuidanceNote");
+  if (frameAlignmentSummaryLabel) {
+    frameAlignmentSummaryLabel.textContent = showMarkerlessControls ? "Stabilization" : t("alignment.summary");
+  }
+  if (dropGuidanceNote) {
+    dropGuidanceNote.textContent = showMarkerlessControls ? t("photo.dropNoteMarkerless") : t("photo.dropNote");
+  }
+  const headingKey = showMarkerlessControls ? "panels.frameCorners" : "panels.frameAlignmentMarkers";
+  if (dom.crossRegionsHeading) {
+    const label = dom.crossRegionsHeading.querySelector("[data-panel-heading]") || dom.crossRegionsHeading.firstElementChild;
+    if (label) label.textContent = t(headingKey);
+  }
+  if (dom.crossRoiScaleLabel) {
+    dom.crossRoiScaleLabel.textContent = showMarkerlessControls
+      ? t("alignment.frameCornerRoiSize")
+      : t("alignment.roiSize");
+  }
+  const markerlessPhaseXLabel =
+    dom.markerlessPhaseXRow?.querySelector("[data-i18n='alignment.markerlessPhaseX']") ||
+    dom.markerlessPhaseXRow?.querySelector("span span");
+  if (markerlessPhaseXLabel) {
+    markerlessPhaseXLabel.textContent = "Horizontal Phase Offset";
+  }
+  const markerlessPhaseYLabel =
+    dom.markerlessPhaseYRow?.querySelector("[data-i18n='alignment.markerlessPhaseY']") ||
+    dom.markerlessPhaseYRow?.querySelector("span span");
+  if (markerlessPhaseYLabel) {
+    markerlessPhaseYLabel.textContent = "Vertical Phase Offset";
+  }
+  if (dom.alignmentSliderStack && dom.crossRoiScaleRow) {
+    if (showMarkerlessControls) {
+      dom.alignmentSliderStack.appendChild(dom.crossRoiScaleRow);
+    } else {
+      dom.alignmentSliderStack.prepend(dom.crossRoiScaleRow);
+    }
+  }
+  dom.boundarySensitivityRow.hidden = showMarkerlessControls;
+  dom.boundaryPersistenceRow.hidden = showMarkerlessControls;
+  dom.alignmentMarkerTypeField.hidden = !showMarkersPipelineControls;
+  dom.useCrossAlignmentRow.hidden = showMarkerlessControls;
   dom.detectCrossesWithConvolutionRow.hidden = !showCrossOnlyControls;
-  if (markerType === "circles") {
+  dom.stabilizationStrengthRow.hidden = !showMarkerlessControls;
+  dom.stabilizationLambdaRow.hidden = !showMarkerlessControls;
+  dom.emphasizePeripheryRow.hidden = true;
+  dom.markerlessPhaseXRow.hidden = !showMarkerlessControls;
+  dom.markerlessPhaseYRow.hidden = !showMarkerlessControls;
+  dom.verticalDriftCompensationRow.hidden = !showMarkerlessControls;
+  if (!showCrossOnlyControls) {
     dom.detectCrossesWithConvolution.checked = false;
   } else if (state.runtime.markerBlobDebugVisible) {
     state.runtime.markerBlobDebugVisible = false;
@@ -1776,7 +2105,8 @@ function clearMarkerEdits() {
   if (!state.geometry.manualMarkerOverrides.size) return;
   state.geometry.manualMarkerOverrides.clear();
   state.runtime.markerEditingEnabled = false;
-  if (state.geometry.alignmentInfo) {
+  const isMarkerless = readConfig().alignmentPipeline === "markerless";
+  if (state.geometry.alignmentInfo && !isMarkerless) {
     // Original auto-detected positions are cached on the live alignment objects so edits can revert instantly
     // without rerunning the whole detector.
     for (const [key, marker] of state.geometry.alignmentInfo.markerLookup.entries()) {
@@ -1794,10 +2124,16 @@ function clearMarkerEdits() {
     }
   }
   revokeGifUrl();
-  invalidateFrameCaches();
+  if (isMarkerless) {
+    state.frames.base = new Array(state.geometry.frameCount);
+    state.frames.stabilizedCache.clear();
+    state.frames.adjustedCache.clear();
+  } else {
+    invalidateFrameCaches();
+  }
   syncMarkerEditingUi();
   renderCrossRoiGrid(state.geometry.alignmentInfo);
-  drawCurrentGifPreview();
+  scheduleStabilizationPreviewUpdate();
 }
 
 function loadCompanionSettingsText(src, filename, settingsFile = null) {
@@ -1874,9 +2210,32 @@ function updateSliderReadouts() {
   dom.unsharpRadiusValue.textContent = (Math.max(0.1, Math.min(100, Number(dom.unsharpRadius.value) || SETTINGS_DEFAULTS.appearance.unsharpRadius))).toFixed(1);
   dom.unsharpAmountValue.textContent = (Math.max(0, Math.min(500, Number(dom.unsharpAmount.value) || SETTINGS_DEFAULTS.appearance.unsharpAmount))).toFixed(1);
   dom.thresholdOffsetValue.textContent = formatSignedValue(dom.thresholdOffset.value);
-  dom.paperMarginValue.textContent = `${Math.max(0, Math.min(150, Number(dom.paperMargin.value) || SETTINGS_DEFAULTS.detection.paperMarginPx))} px`;
+  dom.paperMarginValue.textContent = `${Math.max(
+    0,
+    Math.min(
+      256,
+      Number.isFinite(Number(dom.paperMargin.value))
+        ? Number(dom.paperMargin.value)
+        : SETTINGS_DEFAULTS.detection.paperMarginPx
+    )
+  )} px`;
   dom.boundarySensitivityValue.textContent = `${Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)).toFixed(1)}`;
   dom.boundaryPersistenceValue.textContent = String(Math.max(1, Math.min(15, Number(dom.boundaryPersistence.value) || SETTINGS_DEFAULTS.detection.boundaryPersistencePx)));
+  dom.stabilizationStrengthValue.textContent = `${Math.max(0, Math.min(100, Math.round(Number(dom.stabilizationStrength.value) || SETTINGS_DEFAULTS.detection.stabilizationStrength)))}%`;
+  dom.stabilizationLambdaValue.textContent = `${Math.max(0.001, Math.min(0.1, Number(dom.stabilizationLambda.value) || SETTINGS_DEFAULTS.detection.stabilizationLambda)).toFixed(3)}`;
+  dom.markerlessPhaseXValue.textContent = formatSignedDecimal(Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseX.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseX)));
+  dom.markerlessPhaseYValue.textContent = formatSignedDecimal(Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseY.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseY)));
+  if (dom.verticalDriftCompensationValue) {
+    dom.verticalDriftCompensationValue.textContent = `${formatSignedDecimal(
+      Math.max(
+        -0.05,
+        Math.min(
+          0.05,
+          Number(dom.verticalDriftCompensation?.value) || SETTINGS_DEFAULTS.detection.verticalDriftCompensation
+        )
+      ) * 100
+    )}%`;
+  }
   const outputSize = getRequestedOutputSize();
   dom.outputWidth.value = outputSize.width > 0 ? String(outputSize.width) : "";
   dom.outputHeight.value = outputSize.height > 0 ? String(outputSize.height) : "";
@@ -1908,6 +2267,17 @@ function updateSliderReadouts() {
 function formatSignedValue(value) {
   const number = Number(value) || 0;
   return (number >= 0 ? "+" : "") + number;
+}
+
+/**
+ * Format a signed decimal readout with fixed precision.
+ *
+ * @param {number} value
+ * @returns {string}
+ */
+function formatSignedDecimal(value) {
+  const number = Number(value) || 0;
+  return `${number >= 0 ? "+" : ""}${number.toFixed(3)}`;
 }
 
 /**
@@ -2098,8 +2468,12 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     if (requestId !== state.processing.requestId) return;
 
     state.frames.base = result.frames;
+    state.frames.stabilizedCache.clear();
+    state.frames.stabilizationPairwise = null;
+    state.frames.stabilizationOffsets = null;
     state.geometry.frameCount = result.frames.length;
     state.geometry.alignmentInfo = result.alignmentInfo;
+    releaseRectifiedCvCache();
     state.geometry.baseRectifiedCanvas = result.rectifiedCanvas;
     state.geometry.baseRectifiedPageCanvas = result.pagePreviewCanvas;
     state.geometry.pagePreviewGridQuad = result.pagePreviewGridQuad;
@@ -2108,6 +2482,9 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     applyManualMarkerOverrides(state.geometry.alignmentInfo);
     if (state.geometry.manualMarkerOverrides.size > 0) {
       state.frames.base = new Array(result.frames.length);
+      state.frames.stabilizedCache.clear();
+      state.frames.stabilizationPairwise = null;
+      state.frames.stabilizationOffsets = null;
     }
     syncAlignmentMarkerUi();
     invalidateAppearanceCache();
@@ -2121,6 +2498,9 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     updatePreviewPlayPauseButton();
     updateExportButtonLabel();
     setStatus(result.statusText);
+    if (config.alignmentPipeline === "markerless") {
+      scheduleMarkerlessStabilizationWarmup(requestId);
+    }
   } catch (error) {
     if (error?.name !== "ProcessAbortedError") {
       if (error?.partialResult?.pageQuadPoints) {
@@ -2185,8 +2565,26 @@ function renderRectifiedPreview(rectifiedCanvas) {
   const offsetX = (targetCanvas.width - drawW) * 0.5;
   const offsetY = (targetCanvas.height - drawH) * 0.5;
   const ctx = targetCanvas.getContext("2d");
+  const config = readConfig();
 
   ctx.save();
+  if (config.alignmentPipeline === "markerless" && !state.preview.showRectifiedDiagnostic) {
+    const insetPx = Math.max(
+      0,
+      Math.min(
+        Math.floor(displayCanvas.width * 0.5) - 1,
+        Math.min(Math.floor(displayCanvas.height * 0.5) - 1, config.paperMarginPx || 0)
+      )
+    );
+    ctx.strokeStyle = "rgb(0, 90, 220)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+      offsetX + (insetPx * scale),
+      offsetY + (insetPx * scale),
+      Math.max(1, drawW - (2 * insetPx * scale)),
+      Math.max(1, drawH - (2 * insetPx * scale))
+    );
+  }
   const currentFrameQuad = getCurrentPreviewFrameQuad();
   if (currentFrameQuad) {
     // Draw the current frame directly in rectified-sheet pixel coordinates.
@@ -2254,7 +2652,27 @@ function getCurrentPreviewFrameQuad() {
   const col = sourceIndex % cols;
   const row = Math.floor(sourceIndex / cols);
   if (row < 0 || row >= alignmentInfo.rows) return null;
-  return resolveFrameQuadForPreview(alignmentInfo, col, row);
+  const extractionInfo =
+    readConfig().alignmentPipeline === "markerless"
+      ? buildMarkerlessExtractionInfoForFrame(alignmentInfo, col, row)
+      : alignmentInfo;
+  const quad = resolveFrameQuadForPreview(extractionInfo, col, row);
+  const phaseOffset = getMarkerlessPhaseSourceOffset(readConfig(), alignmentInfo);
+  const driftOffset = getMarkerlessVerticalDriftSourceOffset(readConfig(), alignmentInfo, sourceIndex);
+  const stabilizationOffset = getFrameStabilizationSourceOffset(sourceIndex);
+  const offset = {
+    x: phaseOffset.x + stabilizationOffset.x + driftOffset.x,
+    y: phaseOffset.y + stabilizationOffset.y + driftOffset.y,
+  };
+  if (Math.abs(offset.x) < 1e-6 && Math.abs(offset.y) < 1e-6) {
+    return quad;
+  }
+  return {
+    tl: { x: quad.tl.x + offset.x, y: quad.tl.y + offset.y },
+    tr: { x: quad.tr.x + offset.x, y: quad.tr.y + offset.y },
+    br: { x: quad.br.x + offset.x, y: quad.br.y + offset.y },
+    bl: { x: quad.bl.x + offset.x, y: quad.bl.y + offset.y },
+  };
 }
 
 /**
@@ -2354,13 +2772,124 @@ function invalidateAppearanceCache() {
 }
 
 /**
+ * Release the cached rectified-sheet OpenCV mat used for lazy frame extraction.
+ *
+ * @returns {void}
+ */
+function releaseRectifiedCvCache() {
+  if (state.geometry.baseRectifiedMat) {
+    state.geometry.baseRectifiedMat.delete();
+    state.geometry.baseRectifiedMat = null;
+  }
+  if (state.geometry.baseRectifiedGrayMat) {
+    state.geometry.baseRectifiedGrayMat.delete();
+    state.geometry.baseRectifiedGrayMat = null;
+  }
+}
+
+/**
+ * Invalidate the post-extraction stabilization solve and any derived frame caches.
+ *
+ * @returns {void}
+ */
+function invalidateStabilizationCache() {
+  state.frames.stabilizedCache.clear();
+  state.frames.stabilizationPairwise = null;
+  state.frames.stabilizationOffsets = null;
+  state.frames.adjustedCache.clear();
+}
+
+/**
+ * Invalidate stabilized/adjusted frame outputs while keeping the solved pairwise offsets cached.
+ *
+ * This is used for stabilization-strength scrubbing because the solve does not change, only the
+ * applied blend amount does.
+ *
+ * @returns {void}
+ */
+function invalidateStabilizedOutputCaches() {
+  state.frames.stabilizedCache.clear();
+  state.frames.adjustedCache.clear();
+}
+
+/**
+ * Invalidate only the solved stabilization offsets plus derived frame outputs, while keeping the
+ * measured pairwise shifts cached. This is used when lambda changes because the solve changes but
+ * the underlying adjacent-frame measurements do not.
+ *
+ * @returns {void}
+ */
+function invalidateStabilizationOffsetsCache() {
+  state.frames.stabilizationOffsets = null;
+  state.frames.stabilizedCache.clear();
+  state.frames.adjustedCache.clear();
+}
+
+/**
  * Invalidate lazily extracted base frames and any adjusted-frame cache derived from them.
  *
  * @returns {void}
  */
 function invalidateFrameCaches() {
   state.frames.base = new Array(state.geometry.frameCount);
+  state.frames.stabilizedCache.clear();
+  state.frames.stabilizationPairwise = null;
+  state.frames.stabilizationOffsets = null;
   state.frames.adjustedCache.clear();
+}
+
+/**
+ * Invalidate only the currently displayed frame so markerless phase dragging stays responsive.
+ *
+ * The current stabilization solve is kept during drag. Full frame/stabilization invalidation still
+ * happens on slider release so playback and export catch up across the whole sequence.
+ *
+ * @returns {void}
+ */
+function invalidateCurrentPreviewFrameCaches() {
+  const frameCount = state.geometry.frameCount;
+  if (frameCount <= 0) return;
+  const index = getCurrentDisplayedFrameSourceIndex();
+  if (index < 0 || index >= frameCount) return;
+  state.frames.base[index] = undefined;
+  state.frames.stabilizedCache.delete(index);
+  state.frames.adjustedCache.delete(index);
+}
+
+/**
+ * Invalidate only the currently displayed stabilized/adjusted frame so stabilization-strength
+ * dragging can feel responsive without recomputing the global shift solve.
+ *
+ * @returns {void}
+ */
+function invalidateCurrentPreviewStabilizationCaches() {
+  const frameCount = state.geometry.frameCount;
+  if (frameCount <= 0) return;
+  const index = getCurrentDisplayedFrameSourceIndex();
+  if (index < 0 || index >= frameCount) return;
+  state.frames.stabilizedCache.delete(index);
+  state.frames.adjustedCache.delete(index);
+}
+
+/**
+ * Invalidate only the currently displayed frame if it is one of the cells touched by an edited
+ * corner marker. This keeps markerless corner dragging responsive by avoiding a full
+ * stabilization/cache rebuild on every pointermove.
+ *
+ * @param {number} markerCol
+ * @param {number} markerRow
+ * @returns {void}
+ */
+function invalidateCurrentPreviewFrameForMarker(markerCol, markerRow) {
+  const frameCount = state.geometry.frameCount;
+  if (frameCount <= 0) return;
+  const index = getCurrentDisplayedFrameSourceIndex();
+  if (index < 0 || index >= frameCount) return;
+  const affected = getAffectedFrameIndicesForMarker(markerCol, markerRow);
+  if (!affected.includes(index)) return;
+  state.frames.base[index] = undefined;
+  state.frames.stabilizedCache.delete(index);
+  state.frames.adjustedCache.delete(index);
 }
 
 /**
@@ -2397,8 +2926,28 @@ function getAffectedFrameIndicesForMarker(markerCol, markerRow) {
  * @returns {void}
  */
 function invalidateFramesForMarker(markerCol, markerRow) {
+  state.frames.stabilizedCache.clear();
+  state.frames.stabilizationOffsets = null;
+  state.frames.adjustedCache.clear();
   for (const index of getAffectedFrameIndicesForMarker(markerCol, markerRow)) {
     state.frames.base[index] = undefined;
+  }
+}
+
+/**
+ * Invalidate only the frame outputs touched by one markerless post-stabilization corner nudge.
+ *
+ * The stabilization solve stays valid because markerless corner overrides are applied after that
+ * solve, at extraction/display time only.
+ *
+ * @param {number} markerCol
+ * @param {number} markerRow
+ * @returns {void}
+ */
+function invalidateMarkerlessNudgedFramesForMarker(markerCol, markerRow) {
+  for (const index of getAffectedFrameIndicesForMarker(markerCol, markerRow)) {
+    state.frames.base[index] = undefined;
+    state.frames.stabilizedCache.delete(index);
     state.frames.adjustedCache.delete(index);
   }
 }
@@ -2421,6 +2970,52 @@ function refreshAppearanceOutputs() {
 }
 
 /**
+ * Extract one frame from the cached rectified sheet, optionally shifting the source quad before
+ * post-crop output transforms are applied. Stabilization uses this path so corrected pixels can
+ * come from neighboring sheet content instead of duplicating the already-extracted frame edges.
+ *
+ * @param {number} index
+ * @param {{x:number,y:number}} [sourceOffset={x:0,y:0}]
+ * @returns {HTMLCanvasElement | null}
+ */
+function extractProcessedFrameCanvas(index, sourceOffset = { x: 0, y: 0 }, includeMarkerlessNudges = true, includeMarkerlessDriftCompensation = true) {
+  if (!state.geometry.baseRectifiedCanvas || !state.geometry.alignmentInfo) return null;
+  if (!state.geometry.baseRectifiedMat) {
+    state.geometry.baseRectifiedMat = cv.imread(state.geometry.baseRectifiedCanvas);
+  }
+  const config = readConfig();
+  const cols = state.geometry.alignmentInfo.cols;
+  const col = index % cols;
+  const row = Math.floor(index / cols);
+  const markerlessOffset = getMarkerlessPhaseSourceOffset(config, state.geometry.alignmentInfo);
+  const driftOffset = includeMarkerlessDriftCompensation
+    ? getMarkerlessVerticalDriftSourceOffset(config, state.geometry.alignmentInfo, index)
+    : { x: 0, y: 0 };
+  const extractionInfo =
+    config.alignmentPipeline === "markerless" && includeMarkerlessNudges
+      ? buildMarkerlessExtractionInfoForFrame(state.geometry.alignmentInfo, col, row)
+      : state.geometry.alignmentInfo;
+  const frame = extractSingleFrameToCanvas(
+    state.geometry.baseRectifiedMat,
+    extractionInfo,
+    col,
+    row,
+    config.crop,
+    getCvInterpolationFlag(config.exportOptions.resampling),
+    {
+      x: markerlessOffset.x + driftOffset.x + (Number(sourceOffset?.x) || 0),
+      y: markerlessOffset.y + driftOffset.y + (Number(sourceOffset?.y) || 0),
+    }
+  );
+  const transformedFrame = transformOutputCanvas(frame, config.postCropGeometry);
+  return scaleOutputCanvas(
+    transformedFrame,
+    getInteractiveOutputWidth(config.exportOptions.outputWidthPx),
+    config.exportOptions.resampling
+  );
+}
+
+/**
  * Lazily extract one unadjusted animation frame from the cached rectified sheet.
  *
  * @param {number} index
@@ -2429,30 +3024,227 @@ function refreshAppearanceOutputs() {
 function getBaseFrameCanvas(index) {
   const cached = state.frames.base[index];
   if (cached) return cached;
-  if (!state.geometry.baseRectifiedCanvas || !state.geometry.alignmentInfo) return null;
-  const rectifiedMat = cv.imread(state.geometry.baseRectifiedCanvas);
-  try {
-    const config = readConfig();
-    const cols = state.geometry.alignmentInfo.cols;
-    const col = index % cols;
-    const row = Math.floor(index / cols);
-    // Extraction stays lazy: pull just this frame from the rectified sheet, then apply
-    // post-crop output scaling without forcing the whole animation to be rebuilt.
-    const frame = extractSingleFrameToCanvas(
-      rectifiedMat,
-      state.geometry.alignmentInfo,
-      col,
-      row,
-      config.crop,
-      getCvInterpolationFlag(config.exportOptions.resampling)
-    );
-    const transformedFrame = transformOutputCanvas(frame, config.postCropGeometry);
-    const scaledFrame = scaleOutputCanvas(transformedFrame, config.exportOptions.outputWidthPx, config.exportOptions.resampling);
-    state.frames.base[index] = scaledFrame;
-    return scaledFrame;
-  } finally {
-    rectifiedMat.delete();
+  // Extraction stays lazy: pull just this frame from the rectified sheet, then apply post-crop
+  // output scaling without forcing the whole animation to be rebuilt.
+  const scaledFrame = extractProcessedFrameCanvas(index);
+  state.frames.base[index] = scaledFrame;
+  return scaledFrame;
+}
+
+/**
+ * Extract one frame for the stabilization solver, explicitly excluding markerless post-stabilization
+ * corner nudges so the solve operates on the underlying automatic extraction.
+ *
+ * @param {number} index
+ * @returns {HTMLCanvasElement | null}
+ */
+function getStabilizationSourceFrameCanvas(index) {
+  return extractProcessedFrameCanvas(index, { x: 0, y: 0 }, false, false);
+}
+
+/**
+ * Measure and cache the pairwise stabilization graph for the current frame set.
+ *
+ * This is the expensive part of markerless stabilization. It is separated from the final solve so
+ * the measurements can be warmed in the background before the user first raises Stabilization
+ * Strength above zero.
+ *
+ * @returns {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[] | null}
+ */
+function getStabilizationPairwiseMeasurements() {
+  const frameCount = state.geometry.frameCount;
+  if (frameCount <= 1) return null;
+  if (state.frames.stabilizationPairwise?.length) {
+    return state.frames.stabilizationPairwise;
   }
+
+  const frames = [];
+  for (let i = 0; i < frameCount; i++) {
+    const frame = getStabilizationSourceFrameCanvas(i);
+    if (!frame) return null;
+    frames.push(frame);
+  }
+
+  const alignmentInfo = state.geometry.alignmentInfo;
+  const cols = Math.max(1, alignmentInfo?.cols || 1);
+  const rows = Math.max(1, alignmentInfo?.rows || Math.ceil(frameCount / cols));
+  const edges = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols - 1; col++) {
+      const from = row * cols + col;
+      const to = from + 1;
+      if (from >= frameCount || to >= frameCount) continue;
+      const horizontalShift = estimateLoopPairShift(frames[from], frames[to]);
+      const edge = {
+        from,
+        to,
+        dx: horizontalShift.dx,
+        dy: horizontalShift.dy,
+        kind: "horizontal",
+      };
+      edge.weight = getStabilizationEdgeWeight(edge);
+      edges.push(edge);
+    }
+  }
+  for (let row = 0; row < rows - 1; row++) {
+    const from = (row * cols) + (cols - 1);
+    const to = from + 1;
+    if (from >= frameCount || to >= frameCount) continue;
+    const rowBreakShift = estimateLoopPairShift(frames[from], frames[to]);
+    const edge = {
+      from,
+      to,
+      dx: rowBreakShift.dx,
+      dy: rowBreakShift.dy,
+      kind: "rowBreak",
+    };
+    edge.weight = getStabilizationEdgeWeight(edge);
+    edges.push(edge);
+  }
+  for (let row = 0; row < rows - 1; row++) {
+    for (let col = 0; col < cols; col++) {
+      const from = row * cols + col;
+      const to = (row + 1) * cols + col;
+      if (from >= frameCount || to >= frameCount) continue;
+      const verticalShift = estimateLoopPairShift(frames[from], frames[to]);
+      const edge = {
+        from,
+        to,
+        dx: verticalShift.dx,
+        dy: verticalShift.dy,
+        kind: "vertical",
+      };
+      edge.weight = getStabilizationEdgeWeight(edge);
+      edges.push(edge);
+    }
+  }
+  const seamFrom = frameCount - 1;
+  const seamTo = 0;
+  if (seamFrom > 0) {
+    const seamShift = estimateLoopPairShift(frames[seamFrom], frames[seamTo]);
+    const edge = {
+      from: seamFrom,
+      to: seamTo,
+      dx: seamShift.dx,
+      dy: seamShift.dy,
+      kind: "seam",
+    };
+    edge.weight = getStabilizationEdgeWeight(edge);
+    edges.push(edge);
+  }
+  state.frames.stabilizationPairwise = edges;
+  return edges;
+}
+
+/**
+ * Return the post-extraction stabilization offsets for the current frame set.
+ *
+ * This solves for translation-only per-frame offsets over a small sheet-topology graph:
+ * within-row horizontal neighbors, above/below vertical neighbors, and one weak loop-seam edge.
+ * The solution is regularized toward zero and then centered so the average offset stays near zero.
+ *
+ * @returns {{x:number, y:number}[] | null}
+ */
+function getStabilizationOffsets() {
+  const strength = readConfig().stabilizationStrength;
+  if (strength <= 0) return null;
+  const frameCount = state.geometry.frameCount;
+  if (frameCount <= 1) return null;
+  if (state.frames.stabilizationOffsets?.length === frameCount) {
+    return state.frames.stabilizationOffsets;
+  }
+
+  const edges = getStabilizationPairwiseMeasurements();
+  if (!edges?.length) return null;
+  const sampleFrame = getStabilizationSourceFrameCanvas(0);
+  if (!sampleFrame) return null;
+
+  const solvedX = solveGraphOffsets(
+    edges.map((edge) => ({ from: edge.from, to: edge.to, delta: edge.dx, weight: edge.weight })),
+    frameCount
+  );
+  const solvedY = solveGraphOffsets(
+    edges.map((edge) => ({ from: edge.from, to: edge.to, delta: edge.dy, weight: edge.weight })),
+    frameCount
+  );
+  const capX = sampleFrame.width * 0.10;
+  const capY = sampleFrame.height * 0.10;
+  const offsets = solvedX.map((x, index) => ({ x, y: solvedY[index] }));
+  clampOffsetsInPlace(offsets, capX, capY);
+  centerOffsetsAroundZero(offsets);
+  state.frames.stabilizationOffsets = offsets;
+  return offsets;
+}
+
+/**
+ * Warm the expensive markerless stabilization measurements after processing so the first
+ * stabilization-strength drag does not have to pay the full startup cost.
+ *
+ * @param {number} requestId
+ * @returns {void}
+ */
+function scheduleMarkerlessStabilizationWarmup(requestId) {
+  window.setTimeout(() => {
+    if (requestId !== state.processing.requestId) return;
+    if (readConfig().alignmentPipeline !== "markerless") return;
+    if (state.processing.active) return;
+    if (state.frames.stabilizationPairwise?.length) return;
+    try {
+      getStabilizationPairwiseMeasurements();
+    } catch (error) {
+      console.error(error);
+    }
+  }, 0);
+}
+
+/**
+ * Format the measured pairwise stabilization shifts for the Status panel.
+ *
+ * @returns {string}
+ */
+function getStabilizationDebugText() {
+  const strength = readConfig().stabilizationStrength;
+  if (strength <= 0) return "";
+  const edges = state.frames.stabilizationPairwise;
+  if (!edges?.length) return "";
+  const lines = ["", "Stabilization shifts:"];
+  for (const edge of edges) {
+    const label =
+      edge.kind === "vertical"
+        ? "Vertical"
+        : edge.kind === "horizontal"
+          ? "Horizontal"
+          : edge.kind === "rowBreak"
+            ? "Row break"
+          : "Seam";
+    lines.push(`${label} ${edge.from}-${edge.to} dx,dy: ${edge.dx},${edge.dy} w:${edge.weight.toFixed(2)}`);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Return one stabilized base frame canvas when stabilization is enabled.
+ *
+ * @param {number} index
+ * @returns {HTMLCanvasElement | null}
+ */
+function getStabilizedFrameCanvas(index) {
+  const baseFrame = getBaseFrameCanvas(index);
+  if (!baseFrame) return null;
+  const strength = readConfig().stabilizationStrength;
+  if (strength <= 0) return baseFrame;
+  if (state.frames.stabilizedCache.has(index)) return state.frames.stabilizedCache.get(index);
+
+  const offsets = getStabilizationOffsets();
+  if (!offsets || !offsets[index]) return baseFrame;
+  const strengthScale = strength / 100;
+  const stabilized = extractProcessedFrameCanvas(index, {
+    x: offsets[index].x * strengthScale,
+    y: offsets[index].y * strengthScale,
+  });
+  if (!stabilized) return baseFrame;
+  state.frames.stabilizedCache.set(index, stabilized);
+  return stabilized;
 }
 
 /**
@@ -2530,6 +3322,32 @@ function scaleOutputCanvas(sourceCanvas, outputWidthPx, resampling) {
 }
 
 /**
+ * During markerless phase scrubbing, render only enough resolution for the live Preview panel.
+ * Full output resolution is restored on slider release when caches are invalidated normally.
+ *
+ * @param {number} outputWidthPx
+ * @returns {number}
+ */
+function getInteractiveOutputWidth(outputWidthPx) {
+  if (!state.preview.markerlessPhaseScrubbing) {
+    return outputWidthPx;
+  }
+  const previewWidth = Math.max(
+    1,
+    Math.round(
+      dom.gifPreviewCanvas.width ||
+      dom.gifPreviewCanvas.clientWidth ||
+      outputWidthPx ||
+      1
+    )
+  );
+  if (!outputWidthPx || outputWidthPx <= 0) {
+    return previewWidth;
+  }
+  return Math.min(outputWidthPx, previewWidth);
+}
+
+/**
  * Apply the post-crop flip/rotation options to one extracted frame.
  *
  * @param {HTMLCanvasElement} sourceCanvas
@@ -2593,7 +3411,7 @@ function rotateCanvas90Cw(sourceCanvas) {
  * @returns {HTMLCanvasElement | null}
  */
 function getAdjustedFrameCanvas(index) {
-  const baseFrame = getBaseFrameCanvas(index);
+  const baseFrame = getStabilizedFrameCanvas(index);
   if (!baseFrame) return null;
   const filters = readConfig().filters;
   if (!hasAppearanceAdjustments(filters)) return baseFrame;
@@ -2602,6 +3420,609 @@ function getAdjustedFrameCanvas(index) {
   applyVisualAdjustments(baseFrame, adjustedFrame, filters);
   state.frames.adjustedCache.set(index, adjustedFrame);
   return adjustedFrame;
+}
+
+/**
+ * Estimate the best translation to align the second frame to the first using a 21x21 search over
+ * cumulative absolute pixel differences in luma space.
+ *
+ * @param {HTMLCanvasElement} currentFrame
+ * @param {HTMLCanvasElement} nextFrame
+ * @returns {{dx:number, dy:number}}
+ */
+function estimateLoopPairShift(currentFrame, nextFrame) {
+  const currentData = getFrameMatchData(currentFrame);
+  const nextData = getFrameMatchData(nextFrame);
+  const maxShiftX = Math.min(10, Math.floor(currentData.width / 2));
+  const maxShiftY = Math.min(10, Math.floor(currentData.height / 2));
+  let bestDx = 0;
+  let bestDy = 0;
+  let bestScore = Infinity;
+
+  for (let dy = -maxShiftY; dy <= maxShiftY; dy++) {
+    for (let dx = -maxShiftX; dx <= maxShiftX; dx++) {
+      const score = computeShiftDifferenceScore(currentData, nextData, currentData.width, currentData.height, dx, dy);
+      if (score < bestScore) {
+        bestScore = score;
+        bestDx = dx;
+        bestDy = dy;
+      }
+    }
+  }
+  return { dx: bestDx, dy: bestDy };
+}
+
+/**
+ * Convert a frame canvas into sampled grayscale luma for pairwise stabilization matching.
+ *
+ * @param {HTMLCanvasElement} canvas
+ * @returns {{data:Float32Array, weights:Float32Array, width:number, height:number}}
+ */
+function getFrameMatchData(canvas) {
+  const sampleStep = Math.max(1, Math.ceil(Math.sqrt((canvas.width * canvas.height) / 60000)));
+  const sampleWidth = Math.max(1, Math.floor(canvas.width / sampleStep));
+  const sampleHeight = Math.max(1, Math.floor(canvas.height / sampleStep));
+  const sampleCanvas = document.createElement("canvas");
+  sampleCanvas.width = sampleWidth;
+  sampleCanvas.height = sampleHeight;
+  const sampleCtx = sampleCanvas.getContext("2d");
+  sampleCtx.drawImage(canvas, 0, 0, sampleWidth, sampleHeight);
+  const imageData = sampleCtx.getImageData(0, 0, sampleWidth, sampleHeight).data;
+  const luma = new Float32Array(sampleWidth * sampleHeight);
+  for (let i = 0, j = 0; i < imageData.length; i += 4, j++) {
+    luma[j] = (0.299 * imageData[i]) + (0.587 * imageData[i + 1]) + (0.114 * imageData[i + 2]);
+  }
+  return {
+    data: luma,
+    weights: getFrameMatchWeights(sampleWidth, sampleHeight),
+    width: sampleWidth,
+    height: sampleHeight,
+  };
+}
+
+/**
+ * Build or reuse a cached radial weight field that emphasizes the frame perimeter over the center.
+ *
+ * Each sampled pixel receives a weight proportional to its distance from the frame center,
+ * normalized by half the smaller frame dimension and clamped to `[0, 1]`.
+ *
+ * @param {number} width
+ * @param {number} height
+ * @returns {Float32Array}
+ */
+function getFrameMatchWeights(width, height) {
+  const key = `${width}x${height}`;
+  const cached = FRAME_MATCH_WEIGHT_CACHE.get(key);
+  if (cached) return cached;
+
+  const weights = new Float32Array(width * height);
+  const cx = (width - 1) * 0.5;
+  const cy = (height - 1) * 0.5;
+  const radius = Math.max(1e-6, Math.min(width, height) * 0.5);
+
+  for (let y = 0; y < height; y++) {
+    const dy = y - cy;
+    for (let x = 0; x < width; x++) {
+      const dx = x - cx;
+      const dist = Math.sqrt((dx * dx) + (dy * dy));
+      weights[(y * width) + x] = Math.max(0, Math.min(1, dist / radius));
+    }
+  }
+
+  FRAME_MATCH_WEIGHT_CACHE.set(key, weights);
+  return weights;
+}
+
+/**
+ * Score one integer translation between two luma frames using average absolute difference on the
+ * overlapping region only.
+ *
+ * @param {{data:Float32Array,weights:Float32Array,width:number,height:number}} frameA
+ * @param {{data:Float32Array,weights:Float32Array,width:number,height:number}} frameB
+ * @param {number} width
+ * @param {number} height
+ * @param {number} dx
+ * @param {number} dy
+ * @returns {number}
+ */
+function computeShiftDifferenceScore(frameA, frameB, width, height, dx, dy) {
+  const overlapX0 = Math.max(0, -dx);
+  const overlapY0 = Math.max(0, -dy);
+  const overlapX1 = Math.min(width, width - dx);
+  const overlapY1 = Math.min(height, height - dy);
+  if (overlapX1 <= overlapX0 || overlapY1 <= overlapY0) return Infinity;
+
+  let diffSum = 0;
+  let normSum = 0;
+  for (let y = overlapY0; y < overlapY1; y++) {
+    const rowA = y * width;
+    const rowB = (y + dy) * width;
+    for (let x = overlapX0; x < overlapX1; x++) {
+      const indexA = rowA + x;
+      const indexB = rowB + x + dx;
+      const weight = 0.5 * (frameA.weights[indexA] + frameB.weights[indexB]);
+      diffSum += Math.abs(frameA.data[indexA] - frameB.data[indexB]) * weight;
+      normSum += weight;
+    }
+  }
+  return diffSum / Math.max(1e-6, normSum);
+}
+
+/**
+ * Solve per-frame offsets from a general graph of pairwise displacement constraints with an L2
+ * penalty on the absolute offsets.
+ *
+ * Each edge contributes a constraint of the form:
+ * `p[to] - p[from] ~= delta`
+ * and the regularized normal equations keep the absolute offsets modest overall.
+ *
+ * @param {{from:number,to:number,delta:number,weight?:number}[]} edges
+ * @param {number} count
+ * @returns {number[]}
+ */
+function solveGraphOffsets(edges, count) {
+  if (!count || !edges.length) return new Array(count).fill(0);
+  const lambda = Math.max(0, readConfig().stabilizationLambda);
+  const matrix = Array.from({ length: count }, () => new Array(count).fill(0));
+  const rhs = new Array(count).fill(0);
+
+  for (const edge of edges) {
+    const from = edge.from;
+    const to = edge.to;
+    const delta = edge.delta;
+    const weight = Math.max(0, Number(edge.weight) || 0);
+    if (weight <= 0) continue;
+    matrix[from][from] += weight;
+    matrix[to][to] += weight;
+    matrix[from][to] -= weight;
+    matrix[to][from] -= weight;
+    rhs[from] -= weight * delta;
+    rhs[to] += weight * delta;
+  }
+
+  for (let i = 0; i < count; i++) {
+    matrix[i][i] += lambda;
+  }
+
+  const solved = solveLinearSystem(matrix, rhs);
+  if (!solved) {
+    return new Array(count).fill(0);
+  }
+  const mean = solved.reduce((sum, value) => sum + value, 0) / count;
+  return solved.map((value) => value - mean);
+}
+
+/**
+ * Downweight suspicious stabilization matches so row seams and boundary-saturated searches do not
+ * dominate the solve.
+ *
+ * @param {{kind:string,dx:number,dy:number}} edge
+ * @returns {number}
+ */
+function getStabilizationEdgeWeight(edge) {
+  let weight = 1;
+  if (edge.kind === "horizontal") weight = 1.0;
+  else if (edge.kind === "vertical") weight = 0.6;
+  else if (edge.kind === "rowBreak" || edge.kind === "seam") {
+    weight = 0.1;
+  }
+
+  const maxAbs = Math.max(Math.abs(edge.dx), Math.abs(edge.dy));
+  if (maxAbs >= 10) {
+    weight *= 0.2;
+  } else if (maxAbs >= 9) {
+    weight *= 0.35;
+  } else if (maxAbs >= 8) {
+    weight *= 0.55;
+  }
+  return weight;
+}
+
+/**
+ * Solve a dense linear system with Gaussian elimination and partial pivoting.
+ *
+ * The stabilization system is tiny (one unknown per frame), so a simple dense solver is
+ * sufficient and keeps the implementation dependency-free.
+ *
+ * @param {number[][]} matrix
+ * @param {number[]} rhs
+ * @returns {number[] | null}
+ */
+function solveLinearSystem(matrix, rhs) {
+  const n = rhs.length;
+  const a = matrix.map((row, rowIndex) => [...row, rhs[rowIndex]]);
+
+  for (let pivot = 0; pivot < n; pivot++) {
+    let bestRow = pivot;
+    let bestValue = Math.abs(a[pivot][pivot]);
+    for (let row = pivot + 1; row < n; row++) {
+      const value = Math.abs(a[row][pivot]);
+      if (value > bestValue) {
+        bestValue = value;
+        bestRow = row;
+      }
+    }
+    if (bestValue < 1e-9) {
+      return null;
+    }
+    if (bestRow !== pivot) {
+      const temp = a[pivot];
+      a[pivot] = a[bestRow];
+      a[bestRow] = temp;
+    }
+
+    const pivotValue = a[pivot][pivot];
+    for (let col = pivot; col <= n; col++) {
+      a[pivot][col] /= pivotValue;
+    }
+
+    for (let row = 0; row < n; row++) {
+      if (row === pivot) continue;
+      const factor = a[row][pivot];
+      if (Math.abs(factor) < 1e-12) continue;
+      for (let col = pivot; col <= n; col++) {
+        a[row][col] -= factor * a[pivot][col];
+      }
+    }
+  }
+
+  return a.map((row) => row[n]);
+}
+
+/**
+ * Clamp solved offsets to the allowed translation limits while preserving their overall structure.
+ *
+ * @param {{x:number,y:number}[]} offsets
+ * @param {number} capX
+ * @param {number} capY
+ * @returns {void}
+ */
+function clampOffsetsInPlace(offsets, capX, capY) {
+  const maxAbsX = Math.max(...offsets.map((offset) => Math.abs(offset.x)), 0);
+  const maxAbsY = Math.max(...offsets.map((offset) => Math.abs(offset.y)), 0);
+  const scaleX = maxAbsX > capX && maxAbsX > 1e-6 ? (capX / maxAbsX) : 1;
+  const scaleY = maxAbsY > capY && maxAbsY > 1e-6 ? (capY / maxAbsY) : 1;
+  for (const offset of offsets) {
+    offset.x *= scaleX;
+    offset.y *= scaleY;
+  }
+}
+
+/**
+ * Keep the average correction near zero after any clamping/scaling step.
+ *
+ * @param {{x:number,y:number}[]} offsets
+ * @returns {void}
+ */
+function centerOffsetsAroundZero(offsets) {
+  if (!offsets.length) return;
+  const meanX = offsets.reduce((sum, offset) => sum + offset.x, 0) / offsets.length;
+  const meanY = offsets.reduce((sum, offset) => sum + offset.y, 0) / offsets.length;
+  for (const offset of offsets) {
+    offset.x -= meanX;
+    offset.y -= meanY;
+  }
+}
+
+/**
+ * Convert the markerless manual phase sliders into a source-quad offset in rectified-sheet
+ * pixels. The autocorrelation estimate remains the baseline; these sliders shift extraction
+ * relative to that baseline by up to half a nominal frame cell in each direction.
+ *
+ * @param {ReturnType<typeof readConfig>} config
+ * @param {object | null} alignmentInfo
+ * @returns {{x:number,y:number}}
+ */
+function getMarkerlessPhaseSourceOffset(config, alignmentInfo) {
+  if (!alignmentInfo || config.alignmentPipeline !== "markerless") {
+    return { x: 0, y: 0 };
+  }
+  const cellWidth = alignmentInfo.gridBounds.width / Math.max(1, alignmentInfo.cols);
+  const cellHeight = alignmentInfo.gridBounds.height / Math.max(1, alignmentInfo.rows);
+  return {
+    x: cellWidth * (config.markerlessPhaseX || 0),
+    y: cellHeight * (config.markerlessPhaseY || 0),
+  };
+}
+
+/**
+ * Convert the markerless vertical drift-compensation slider into a frame-distributed vertical source offset.
+ *
+ * This is a post-stabilization extraction nudge intended to counter vertical drift. The slider
+ * value represents the total compensation over the full animation, measured as a fraction of one
+ * frame height. That total is distributed evenly from the first frame to the last frame.
+ *
+ * @param {ReturnType<typeof readConfig>} config
+ * @param {object | null} alignmentInfo
+ * @param {number} frameIndex
+ * @returns {{x:number,y:number}}
+ */
+function getMarkerlessVerticalDriftSourceOffset(config, alignmentInfo, frameIndex) {
+  if (!alignmentInfo || config.alignmentPipeline !== "markerless") {
+    return { x: 0, y: 0 };
+  }
+  const cellHeight = alignmentInfo.gridBounds.height / Math.max(1, alignmentInfo.rows);
+  const totalDrift = cellHeight * (config.verticalDriftCompensation || 0);
+  const frameCount = Math.max(1, alignmentInfo.rows * alignmentInfo.cols);
+  const frameDenominator = Math.max(1, frameCount - 1);
+  const frameFactor = frameIndex / frameDenominator;
+  return {
+    x: 0,
+    y: totalDrift * frameFactor,
+  };
+}
+
+/**
+ * Average the applied per-frame stabilization offsets for the frames sharing one markerless corner.
+ *
+ * Markerless stabilization is solved per frame, but the Frame Corners panel displays one tile per
+ * shared corner location. Averaging the neighboring frame translations gives one practical display
+ * position for that shared corner that matches the currently stabilized extraction regime.
+ *
+ * @param {number} col
+ * @param {number} row
+ * @param {object | null} alignmentInfo
+ * @returns {{x:number,y:number}}
+ */
+function getMarkerlessCornerStabilizationOffset(col, row, alignmentInfo) {
+  if (!alignmentInfo || readConfig().alignmentPipeline !== "markerless") {
+    return { x: 0, y: 0 };
+  }
+  const offsets = getStabilizationOffsets();
+  const strengthScale = readConfig().stabilizationStrength / 100;
+  if (!offsets?.length || strengthScale <= 0) {
+    return { x: 0, y: 0 };
+  }
+  const samples = [];
+  const frameCoords = [
+    { col: col - 1, row: row - 1 },
+    { col, row: row - 1 },
+    { col: col - 1, row },
+    { col, row },
+  ];
+  for (const frame of frameCoords) {
+    if (frame.col < 0 || frame.row < 0 || frame.col >= alignmentInfo.cols || frame.row >= alignmentInfo.rows) {
+      continue;
+    }
+    const index = frame.row * alignmentInfo.cols + frame.col;
+    const offset = offsets[index];
+    if (!offset) continue;
+    samples.push(offset);
+  }
+  if (!samples.length) {
+    return { x: 0, y: 0 };
+  }
+  const meanX = samples.reduce((sum, offset) => sum + offset.x, 0) / samples.length;
+  const meanY = samples.reduce((sum, offset) => sum + offset.y, 0) / samples.length;
+  return {
+    x: meanX * strengthScale,
+    y: meanY * strengthScale,
+  };
+}
+
+/**
+ * Return the current per-frame stabilization translation applied during markerless extraction.
+ *
+ * @param {number} index
+ * @returns {{x:number,y:number}}
+ */
+function getFrameStabilizationSourceOffset(index) {
+  const offsets = getStabilizationOffsets();
+  const strengthScale = readConfig().stabilizationStrength / 100;
+  if (!offsets?.[index] || strengthScale <= 0) {
+    return { x: 0, y: 0 };
+  }
+  return {
+    x: offsets[index].x * strengthScale,
+    y: offsets[index].y * strengthScale,
+  };
+}
+
+/**
+ * Return the stored post-stabilization nudge for one markerless corner override.
+ *
+ * In markerless mode, manual overrides are interpreted as extraction/display-space deltas relative
+ * to the automatically estimated corner position after phase and stabilization have been applied.
+ *
+ * @param {number} col
+ * @param {number} row
+ * @returns {{x:number,y:number}}
+ */
+function getMarkerlessCornerManualNudge(col, row) {
+  if (readConfig().alignmentPipeline !== "markerless") {
+    return { x: 0, y: 0 };
+  }
+  const override = state.geometry.manualMarkerOverrides.get(getMarkerKey(col, row));
+  if (!override) return { x: 0, y: 0 };
+  return {
+    x: Number.isFinite(override.x) ? override.x : 0,
+    y: Number.isFinite(override.y) ? override.y : 0,
+  };
+}
+
+/**
+ * Build the markerless display-space corner position shown in the Frame Corners panel.
+ *
+ * @param {object} sourceMarker
+ * @param {number} col
+ * @param {number} row
+ * @param {object} alignmentInfo
+ * @param {boolean} [includeManualNudge=true]
+ * @returns {{x:number,y:number,roiCenterX:number,roiCenterY:number,detectedX:number,detectedY:number,autoDetectedX?:number,autoDetectedY?:number}}
+ */
+function getMarkerlessDisplayedCorner(sourceMarker, col, row, alignmentInfo, includeManualNudge = true) {
+  const phaseOffset = getMarkerlessPhaseSourceOffset(readConfig(), alignmentInfo);
+  const stabilizationOffset = getMarkerlessCornerStabilizationOffset(col, row, alignmentInfo);
+  const manualNudge = includeManualNudge ? getMarkerlessCornerManualNudge(col, row) : { x: 0, y: 0 };
+  const totalX = phaseOffset.x + stabilizationOffset.x + manualNudge.x;
+  const totalY = phaseOffset.y + stabilizationOffset.y + manualNudge.y;
+  return {
+    x: sourceMarker.x + totalX,
+    y: sourceMarker.y + totalY,
+    roiCenterX: (Number.isFinite(sourceMarker.roiCenterX) ? sourceMarker.roiCenterX : sourceMarker.x) + totalX,
+    roiCenterY: (Number.isFinite(sourceMarker.roiCenterY) ? sourceMarker.roiCenterY : sourceMarker.y) + totalY,
+    detectedX: sourceMarker.detectedX + totalX,
+    detectedY: sourceMarker.detectedY + totalY,
+    autoDetectedX: Number.isFinite(sourceMarker.autoDetectedX) ? sourceMarker.autoDetectedX + totalX : undefined,
+    autoDetectedY: Number.isFinite(sourceMarker.autoDetectedY) ? sourceMarker.autoDetectedY + totalY : undefined,
+  };
+}
+
+/**
+ * Build a lightweight frame-specific extraction view of markerless corner nudges.
+ *
+ * Markerless manual overrides are post-stabilization extraction nudges, so they should affect only
+ * the four corners surrounding the extracted frame and should not feed back into the stabilization
+ * solve or the shared alignment lattice.
+ *
+ * @param {object} alignmentInfo
+ * @param {number} col
+ * @param {number} row
+ * @returns {object}
+ */
+function buildMarkerlessExtractionInfoForFrame(alignmentInfo, col, row) {
+  const keys = [
+    getMarkerKey(col, row),
+    getMarkerKey(col + 1, row),
+    getMarkerKey(col + 1, row + 1),
+    getMarkerKey(col, row + 1),
+  ];
+  const markerLookup = new Map();
+  for (const key of keys) {
+    const marker = alignmentInfo.markerLookup.get(key);
+    if (!marker) continue;
+    const [markerCol, markerRow] = key.split(",").map(Number);
+    const nudge = getMarkerlessCornerManualNudge(markerCol, markerRow);
+    markerLookup.set(key, {
+      ...marker,
+      detectedX: marker.detectedX + nudge.x,
+      detectedY: marker.detectedY + nudge.y,
+    });
+  }
+  return {
+    ...alignmentInfo,
+    markerLookup,
+  };
+}
+
+/**
+ * Ensure a grayscale rectified-sheet mat is cached for markerless corner-tile rendering.
+ *
+ * @returns {cv.Mat | null}
+ */
+function ensureRectifiedGrayMat() {
+  if (!state.geometry.baseRectifiedCanvas) return null;
+  if (!state.geometry.baseRectifiedMat) {
+    state.geometry.baseRectifiedMat = cv.imread(state.geometry.baseRectifiedCanvas);
+  }
+  if (!state.geometry.baseRectifiedGrayMat) {
+    state.geometry.baseRectifiedGrayMat = new cv.Mat();
+    cv.cvtColor(state.geometry.baseRectifiedMat, state.geometry.baseRectifiedGrayMat, cv.COLOR_RGBA2GRAY);
+  }
+  return state.geometry.baseRectifiedGrayMat;
+}
+
+/**
+ * Build one grayscale diagnostic tile centered on a frame corner, padding with edge pixels when
+ * the shifted markerless corner falls outside the rectified sheet.
+ *
+ * @param {cv.Mat} grayMat
+ * @param {{x:number,y:number,col:number,row:number}} expected
+ * @param {object} alignmentInfo
+ * @param {number} crossRoiScale
+ * @returns {object}
+ */
+function buildMarkerlessCornerTile(grayMat, expected, alignmentInfo, crossRoiScale) {
+  const cellW = alignmentInfo.gridBounds.width / alignmentInfo.cols;
+  const cellH = alignmentInfo.gridBounds.height / alignmentInfo.rows;
+  const roiHalf = Math.max(10, Math.round(Math.min(cellW, cellH) * 0.18 * crossRoiScale));
+  const side = Math.max(1, roiHalf * 2 + 1);
+  const roi = new cv.Mat();
+  const roiCenter = (side - 1) * 0.5;
+  const tx = roiCenter - expected.x;
+  const ty = roiCenter - expected.y;
+  const affine = cv.matFromArray(2, 3, cv.CV_64F, [1, 0, tx, 0, 1, ty]);
+  try {
+    cv.warpAffine(grayMat, roi, affine, new cv.Size(side, side), cv.INTER_LINEAR, cv.BORDER_REPLICATE, new cv.Scalar());
+    const canvas = document.createElement("canvas");
+    canvas.width = roi.cols;
+    canvas.height = roi.rows;
+    cv.imshow(canvas, roi);
+    canvas.style.width = `${canvas.width}px`;
+    canvas.style.height = `${canvas.height}px`;
+    return {
+      ...expected,
+      kind: "markerless",
+      markerType: "markerless",
+      roiCenterX: expected.x,
+      roiCenterY: expected.y,
+      detectedX: expected.x,
+      detectedY: expected.y,
+      dx: 0,
+      dy: 0,
+      darkFrac: 0,
+      confidence: 1,
+      accepted: true,
+      localX: roiCenter,
+      localY: roiCenter,
+      canvas,
+    };
+  } finally {
+    affine.delete();
+    roi.delete();
+  }
+}
+
+/**
+ * Build a display-only alignment view for markerless mode that incorporates the current manual
+ * phase offset while leaving the underlying stored marker coordinates unphased.
+ *
+ * @param {object | null} alignmentInfo
+ * @returns {object | null}
+ */
+function getDisplayAlignmentInfo(alignmentInfo) {
+  if (!alignmentInfo) return null;
+  const config = readConfig();
+  if (config.alignmentPipeline !== "markerless") {
+    return alignmentInfo;
+  }
+  const grayMat = ensureRectifiedGrayMat();
+  if (!grayMat) return alignmentInfo;
+  const crossRoiScale = config.crossRoiScale;
+  const markerLookup = new Map();
+  const crossRoiTiles = [];
+
+  for (let row = 0; row <= alignmentInfo.rows; row++) {
+    for (let col = 0; col <= alignmentInfo.cols; col++) {
+      const key = getMarkerKey(col, row);
+      const sourceMarker = alignmentInfo.markerLookup.get(key);
+      if (!sourceMarker) continue;
+      const displayed = getMarkerlessDisplayedCorner(sourceMarker, col, row, alignmentInfo);
+      const displayMarker = { ...sourceMarker, ...displayed };
+      markerLookup.set(key, displayMarker);
+      const tile = buildMarkerlessCornerTile(grayMat, {
+        col,
+        row,
+        x: displayMarker.roiCenterX,
+        y: displayMarker.roiCenterY,
+      }, alignmentInfo, crossRoiScale);
+      tile.detectedX = displayMarker.detectedX;
+      tile.detectedY = displayMarker.detectedY;
+      tile.autoDetectedX = displayMarker.autoDetectedX;
+      tile.autoDetectedY = displayMarker.autoDetectedY;
+      tile.manualOverride = state.geometry.manualMarkerOverrides.has(key);
+      crossRoiTiles.push(tile);
+    }
+  }
+
+  return {
+    ...alignmentInfo,
+    requestedMarkerType: "markerless",
+    resolvedMarkerType: "markerless",
+    markerLookup,
+    crossRoiTiles,
+    crossRoiTileMap: new Map(crossRoiTiles.map((tile) => [getMarkerKey(tile.col, tile.row), tile])),
+  };
 }
 
 /**
@@ -2645,10 +4066,11 @@ function renderRawPreview() {
  * @returns {void}
  */
 function renderCrossRoiGrid(alignmentInfo) {
+  const displayAlignmentInfo = getDisplayAlignmentInfo(alignmentInfo);
   renderCrossRoiGridViaEditor({
     dom,
     state,
-    alignmentInfo,
+    alignmentInfo: displayAlignmentInfo,
     getMarkerKey,
     syncMarkerEditingUi,
     onApplyOverride: applyMarkerOverride,
@@ -2669,22 +4091,55 @@ function applyMarkerOverride(tile, local, finalize) {
   const center = (tile.canvas.width - 1) * 0.5;
   const roiCenterX = Number.isFinite(tile.roiCenterX) ? tile.roiCenterX : tile.x;
   const roiCenterY = Number.isFinite(tile.roiCenterY) ? tile.roiCenterY : tile.y;
-  const detectedX = roiCenterX + (local.x - center);
-  const detectedY = roiCenterY + (local.y - center);
+  let detectedX = roiCenterX + (local.x - center);
+  let detectedY = roiCenterY + (local.y - center);
+  const config = readConfig();
+  const isMarkerless = config.alignmentPipeline === "markerless";
   const key = getMarkerKey(tile.col, tile.row);
-  state.geometry.manualMarkerOverrides.set(key, { x: detectedX, y: detectedY });
-  if (state.geometry.alignmentInfo) {
+  if (isMarkerless && state.geometry.alignmentInfo) {
+    const sourceMarker = state.geometry.alignmentInfo.markerLookup.get(key);
+    if (sourceMarker) {
+      const displayed = getMarkerlessDisplayedCorner(sourceMarker, tile.col, tile.row, state.geometry.alignmentInfo, false);
+      state.geometry.manualMarkerOverrides.set(key, {
+        x: detectedX - displayed.detectedX,
+        y: detectedY - displayed.detectedY,
+      });
+    }
+  } else {
+    state.geometry.manualMarkerOverrides.set(key, { x: detectedX, y: detectedY });
+  }
+  if (state.geometry.alignmentInfo && !isMarkerless) {
     // Manual overrides patch the already-detected alignment object in place, which lets preview/extraction
     // update lazily from the edited marker positions without another CV pass.
     applyManualMarkerOverrides(state.geometry.alignmentInfo);
   }
   revokeGifUrl();
-  invalidateFramesForMarker(tile.col, tile.row);
+  if (!finalize) {
+    if (isMarkerless) {
+      beginMarkerOverrideScrub();
+    } else {
+      state.preview.markerOverrideScrubbing = true;
+    }
+  }
+  if (isMarkerless && !finalize) {
+    invalidateCurrentPreviewFrameForMarker(tile.col, tile.row);
+  } else if (isMarkerless) {
+    invalidateMarkerlessNudgedFramesForMarker(tile.col, tile.row);
+  } else {
+    invalidateFramesForMarker(tile.col, tile.row);
+  }
   syncMarkerEditingUi();
   if (finalize) {
+    if (isMarkerless) {
+      endMarkerOverrideScrub();
+    } else {
+      state.preview.markerOverrideScrubbing = false;
+    }
     renderCrossRoiGrid(state.geometry.alignmentInfo);
+    scheduleStabilizationPreviewUpdate();
+    return;
   }
-  drawCurrentGifPreview();
+  scheduleStabilizationPreviewUpdate();
 }
 
 /**
@@ -2696,7 +4151,8 @@ function applyMarkerOverride(tile, local, finalize) {
 function restoreMarkerOverride(tile) {
   const key = getMarkerKey(tile.col, tile.row);
   state.geometry.manualMarkerOverrides.delete(key);
-  if (state.geometry.alignmentInfo) {
+  const isMarkerless = readConfig().alignmentPipeline === "markerless";
+  if (state.geometry.alignmentInfo && !isMarkerless) {
     const marker = state.geometry.alignmentInfo.markerLookup.get(key);
     const liveTile = state.geometry.alignmentInfo.crossRoiTileMap?.get(key);
     if (marker && Number.isFinite(marker.autoDetectedX)) {
@@ -2711,10 +4167,14 @@ function restoreMarkerOverride(tile) {
     }
   }
   revokeGifUrl();
-  invalidateFramesForMarker(tile.col, tile.row);
+  if (isMarkerless) {
+    invalidateMarkerlessNudgedFramesForMarker(tile.col, tile.row);
+  } else {
+    invalidateFramesForMarker(tile.col, tile.row);
+  }
   syncMarkerEditingUi();
   renderCrossRoiGrid(state.geometry.alignmentInfo);
-  drawCurrentGifPreview();
+  scheduleStabilizationPreviewUpdate();
 }
 
 function makeSettingsFilename(sourceFilename) {

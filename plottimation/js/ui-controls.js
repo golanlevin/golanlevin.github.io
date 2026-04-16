@@ -112,7 +112,18 @@ export function initializeTooltips({ tooltipText, state, dom, applyTooltipState 
  *   scheduleProcess: () => void,
  *   revokeGifUrl: () => void,
  *   invalidateAppearanceCache: () => void,
+ *   invalidateStabilizationCache: () => void,
+ *   invalidateStabilizedOutputCaches: () => void,
+ *   invalidateStabilizationOffsetsCache: () => void,
+ *   invalidateCurrentPreviewFrameCaches: () => void,
+ *   invalidateCurrentPreviewStabilizationCaches: () => void,
  *   scheduleAppearancePreviewUpdate: (includeRectified?: boolean) => void,
+ *   scheduleStabilizationPreviewUpdate: () => void,
+ *   scheduleMarkerlessPhasePreviewUpdate: () => void,
+ *   beginStabilizationStrengthScrub: () => void,
+ *   endStabilizationStrengthScrub: () => void,
+ *   beginMarkerlessPhaseScrub: () => void,
+ *   endMarkerlessPhaseScrub: () => void,
  *   cancelInFlightProcessing: () => void,
  *   invalidateFrameCaches: () => void,
  *   drawCurrentGifPreview: () => void,
@@ -152,7 +163,18 @@ export function attachUi({
   scheduleProcess,
   revokeGifUrl,
   invalidateAppearanceCache,
+  invalidateStabilizationCache,
+  invalidateStabilizedOutputCaches,
+  invalidateStabilizationOffsetsCache,
+  invalidateCurrentPreviewFrameCaches,
+  invalidateCurrentPreviewStabilizationCaches,
   scheduleAppearancePreviewUpdate,
+  scheduleStabilizationPreviewUpdate,
+  scheduleMarkerlessPhasePreviewUpdate,
+  beginStabilizationStrengthScrub,
+  endStabilizationStrengthScrub,
+  beginMarkerlessPhaseScrub,
+  endMarkerlessPhaseScrub,
   cancelInFlightProcessing,
   invalidateFrameCaches,
   drawCurrentGifPreview,
@@ -162,6 +184,7 @@ export function attachUi({
   saveSettingsFile,
 }) {
   const shouldSkipMarkerTypeReprocess = () => {
+    if (dom.alignmentPipelineMarkerless.checked) return false;
     const requestedMarkerType = dom.alignmentMarkerType.value || "crosses";
     const lastAlignmentInfo = state.geometry.alignmentInfo;
     if (!lastAlignmentInfo) return false;
@@ -297,6 +320,20 @@ export function attachUi({
     });
   });
 
+  [dom.alignmentPipelineMarkerless, dom.alignmentPipelineMarkers].forEach((input) => {
+    input.addEventListener("input", () => {
+      syncAlignmentMarkerUi();
+      revokeGifUrl();
+      updateSliderReadouts();
+      scheduleProcess();
+    });
+    input.addEventListener("change", () => {
+      syncAlignmentMarkerUi();
+      revokeGifUrl();
+      scheduleProcess();
+    });
+  });
+
   dom.alignmentMarkerType.addEventListener("input", () => {
     syncAlignmentMarkerUi();
     if (shouldSkipMarkerTypeReprocess()) return;
@@ -342,7 +379,6 @@ export function attachUi({
     dom.frameCols,
     dom.frameRows,
     dom.thresholdMethod,
-    dom.paperMargin,
     dom.boundarySensitivity,
     dom.boundaryPersistence,
     dom.detectCrossesWithConvolution,
@@ -360,6 +396,42 @@ export function attachUi({
     });
   });
 
+  dom.paperMargin.addEventListener("pointerdown", () => {
+    if (!dom.alignmentPipelineMarkerless.checked) return;
+    beginMarkerlessPhaseScrub();
+  });
+  dom.paperMargin.addEventListener("pointerup", () => {
+    if (!dom.alignmentPipelineMarkerless.checked) return;
+    endMarkerlessPhaseScrub();
+  });
+  dom.paperMargin.addEventListener("pointercancel", () => {
+    if (!dom.alignmentPipelineMarkerless.checked) return;
+    endMarkerlessPhaseScrub();
+  });
+  dom.paperMargin.addEventListener("blur", () => {
+    if (!dom.alignmentPipelineMarkerless.checked) return;
+    endMarkerlessPhaseScrub();
+  });
+  dom.paperMargin.addEventListener("input", () => {
+    revokeGifUrl();
+    updateSliderReadouts();
+    if (dom.alignmentPipelineMarkerless.checked) {
+      beginMarkerlessPhaseScrub();
+      if (state.preview.rectifiedCanvas) {
+        renderRectifiedPreview(state.preview.rectifiedCanvas);
+      }
+      return;
+    }
+    scheduleProcess();
+  });
+  dom.paperMargin.addEventListener("change", () => {
+    revokeGifUrl();
+    if (dom.alignmentPipelineMarkerless.checked) {
+      endMarkerlessPhaseScrub();
+    }
+    scheduleProcess();
+  });
+
   dom.crossRoiScale.addEventListener("input", () => {
     updateSliderReadouts();
   });
@@ -367,6 +439,63 @@ export function attachUi({
     revokeGifUrl();
     updateSliderReadouts();
     scheduleProcess();
+  });
+
+  dom.stabilizationStrength.addEventListener("pointerdown", beginStabilizationStrengthScrub);
+  dom.stabilizationStrength.addEventListener("pointerup", endStabilizationStrengthScrub);
+  dom.stabilizationStrength.addEventListener("pointercancel", endStabilizationStrengthScrub);
+  dom.stabilizationStrength.addEventListener("blur", endStabilizationStrengthScrub);
+  dom.stabilizationStrength.addEventListener("input", () => {
+    beginStabilizationStrengthScrub();
+    revokeGifUrl();
+    updateSliderReadouts();
+    invalidateCurrentPreviewStabilizationCaches();
+    scheduleStabilizationPreviewUpdate();
+  });
+  dom.stabilizationStrength.addEventListener("change", () => {
+    revokeGifUrl();
+    updateSliderReadouts();
+    invalidateStabilizedOutputCaches();
+    scheduleStabilizationPreviewUpdate();
+    endStabilizationStrengthScrub();
+  });
+  dom.stabilizationLambda.addEventListener("pointerdown", beginStabilizationStrengthScrub);
+  dom.stabilizationLambda.addEventListener("pointerup", endStabilizationStrengthScrub);
+  dom.stabilizationLambda.addEventListener("pointercancel", endStabilizationStrengthScrub);
+  dom.stabilizationLambda.addEventListener("blur", endStabilizationStrengthScrub);
+  dom.stabilizationLambda.addEventListener("input", () => {
+    beginStabilizationStrengthScrub();
+    revokeGifUrl();
+    updateSliderReadouts();
+    invalidateCurrentPreviewStabilizationCaches();
+    scheduleStabilizationPreviewUpdate();
+  });
+  dom.stabilizationLambda.addEventListener("change", () => {
+    revokeGifUrl();
+    updateSliderReadouts();
+    invalidateStabilizationOffsetsCache();
+    scheduleStabilizationPreviewUpdate();
+    endStabilizationStrengthScrub();
+  });
+  [dom.markerlessPhaseX, dom.markerlessPhaseY, dom.verticalDriftCompensation].forEach((input) => {
+    input.addEventListener("pointerdown", beginMarkerlessPhaseScrub);
+    input.addEventListener("pointerup", endMarkerlessPhaseScrub);
+    input.addEventListener("pointercancel", endMarkerlessPhaseScrub);
+    input.addEventListener("blur", endMarkerlessPhaseScrub);
+    input.addEventListener("input", () => {
+      beginMarkerlessPhaseScrub();
+      revokeGifUrl();
+      updateSliderReadouts();
+      invalidateCurrentPreviewFrameCaches();
+      scheduleMarkerlessPhasePreviewUpdate();
+    });
+    input.addEventListener("change", () => {
+      revokeGifUrl();
+      updateSliderReadouts();
+      invalidateFrameCaches();
+      drawCurrentGifPreview();
+      endMarkerlessPhaseScrub();
+    });
   });
 
   dom.thresholdOffset.addEventListener("input", () => {

@@ -1,14 +1,14 @@
 # Plottimation Tool
 
-[This tool](https://golanlevin.github.io/plottimation/) builds a looping animation from a photograph of a plotted frame-sheet.<br/>
+[This free tool](https://golanlevin.github.io/plottimation/) builds a looping animation from a photograph of a plotted frame-sheet.<br/>
 Version 1.09 • By @GolanLevin, 2026.
 
 * [**Plottimation Tool Online Here**](https://golanlevin.github.io/plottimation/)
-* [**Quickstart Instructions**](#quickstart-instructions)
+* [**Quickstart Instructions**](#quickstart-instructions) (below)
 * [p5.js Code](https://editor.p5js.org/golan/sketches/_ZMbagYFc) • [Design Templates](templates/README.md) • [Demo Video](https://www.youtube.com/watch?v=MOXB63DgItQ) • [Documentation](documentation.md) 
 • [Gallery](#plottimation-gif-gallery)
 
-![plottimation_ui.png](doc/plottimation_spinnyrect.gif)
+[![plottimation_ui.png](doc/plottimation_spinnyrect.gif)](https://golanlevin.github.io/plottimation/)
 
 ## Quickstart Instructions
 
@@ -25,7 +25,7 @@ Version 1.09 • By @GolanLevin, 2026.
 
 ## Plottimation GIF Gallery
 
-GIF designs by Golan Levin, Julian Gachadoat, and others.
+<img src="doc/plotti_demo_2.gif" alt="By Golan Levin" height="200"> Golan Levin
 
-<img src="doc/plotti_demo_2.gif" alt="By Golan Levin" height="200"> <img src="doc/plotti_demo_4.gif" alt="By Julian Gachadoat" height="200"> 
+<img src="doc/plotti_demo_4.gif" alt="By Julian Gachadoat" height="200"> Julian Gachadoat
 

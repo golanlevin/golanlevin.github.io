@@ -21,6 +21,7 @@ export const SETTINGS_DEFAULTS = {
     frameRows: 4,
   },
   detection: {
+    alignmentPipeline: "markers",
     thresholdMethod: "offset-peak",
     thresholdOffset: -20,
     paperMarginPx: 80,
@@ -28,6 +29,11 @@ export const SETTINGS_DEFAULTS = {
     boundaryPersistencePx: 7,
     alignmentMarkerType: "auto",
     crossRoiScalePct: 52,
+    stabilizationStrength: 0,
+    stabilizationLambda: 0.01,
+    markerlessPhaseX: 0,
+    markerlessPhaseY: 0,
+    verticalDriftCompensation: 0,
     useCrossAlignment: true,
     detectCrossesWithConvolution: false,
   },
@@ -39,7 +45,6 @@ export const SETTINGS_DEFAULTS = {
     unsharpAmount: 0,
     unsharpRadius: 1.0,
     invert: false,
-    resampling: "linear",
   },
   cropGeometry: {
     cropLeft: 0,
@@ -77,7 +82,6 @@ export function applyAppearanceDefaults(dom) {
   dom.unsharpAmount.value = String(SETTINGS_DEFAULTS.appearance.unsharpAmount);
   dom.unsharpRadius.value = SETTINGS_DEFAULTS.appearance.unsharpRadius.toFixed(1);
   dom.invert.checked = SETTINGS_DEFAULTS.appearance.invert;
-  dom.gifResampling.value = SETTINGS_DEFAULTS.appearance.resampling;
 }
 
 /**
@@ -103,6 +107,8 @@ export function applyCropGeometryDefaults(dom) {
  * @returns {void}
  */
 export function applyNonLayoutDefaults(dom) {
+  dom.alignmentPipelineMarkers.checked = SETTINGS_DEFAULTS.detection.alignmentPipeline === "markers";
+  dom.alignmentPipelineMarkerless.checked = SETTINGS_DEFAULTS.detection.alignmentPipeline === "markerless";
   dom.thresholdMethod.value = SETTINGS_DEFAULTS.detection.thresholdMethod;
   dom.thresholdOffset.value = String(SETTINGS_DEFAULTS.detection.thresholdOffset);
   dom.paperMargin.value = String(SETTINGS_DEFAULTS.detection.paperMarginPx);
@@ -110,6 +116,13 @@ export function applyNonLayoutDefaults(dom) {
   dom.boundaryPersistence.value = String(SETTINGS_DEFAULTS.detection.boundaryPersistencePx);
   dom.alignmentMarkerType.value = SETTINGS_DEFAULTS.detection.alignmentMarkerType;
   dom.crossRoiScale.value = String(SETTINGS_DEFAULTS.detection.crossRoiScalePct);
+  dom.stabilizationStrength.value = String(SETTINGS_DEFAULTS.detection.stabilizationStrength);
+  dom.stabilizationLambda.value = SETTINGS_DEFAULTS.detection.stabilizationLambda.toFixed(3);
+  dom.markerlessPhaseX.value = String(SETTINGS_DEFAULTS.detection.markerlessPhaseX);
+  dom.markerlessPhaseY.value = String(SETTINGS_DEFAULTS.detection.markerlessPhaseY);
+  if (dom.verticalDriftCompensation) {
+    dom.verticalDriftCompensation.value = String(SETTINGS_DEFAULTS.detection.verticalDriftCompensation);
+  }
   dom.useCrossAlignment.checked = SETTINGS_DEFAULTS.detection.useCrossAlignment;
   dom.detectCrossesWithConvolution.checked = SETTINGS_DEFAULTS.detection.detectCrossesWithConvolution;
 

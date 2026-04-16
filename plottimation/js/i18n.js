@@ -7,7 +7,7 @@
  * shared translation block, such as Traditional Chinese or region-specific Portuguese tags.
  */
 
-export const APP_VERSION = "v1.09";
+export const APP_VERSION = "v1.10";
 
 const LOCALES = {
   en: {
@@ -31,6 +31,7 @@ const LOCALES = {
       dropLeadMobile1: "Choose a photo to begin,",
       dropLeadMobile2: "or load a demo.",
       dropNote: "Animation frames should be\nseparated by small crosses or dots.",
+      dropNoteMarkerless: "Animation frames should be\nseparated by empty gutters.",
     },
     layout: {
       summary: "Layout",
@@ -77,6 +78,11 @@ const LOCALES = {
       boundaryPersistence: "Boundary Persistence",
     },
     alignment: {
+      pipeline: "Alignment Pipeline",
+      pipelineOptions: {
+        markerless: "Markerless (gutters, frames)",
+        markers: "Markers (crosses, dots)",
+      },
       summary: "Automatic Frame Alignment",
       markerType: "Alignment Marker Type",
       markerTypeOptions: {
@@ -85,6 +91,11 @@ const LOCALES = {
         circles: "Dots",
       },
       roiSize: "Alignment Marker Region Size",
+      frameCornerRoiSize: "Frame Corner Region Size",
+      stabilizationStrength: "Stabilization Strength",
+      stabilizationLambda: "Stabilization Rigidity",
+      markerlessPhaseX: "Horizontal Phase",
+      markerlessPhaseY: "Vertical Phase",
       useMarkers: "Do subpixel alignment using markers",
       detectCrossesWithConvolution: "Detect crosses with convolution",
       enableOverrides: "Enable Overrides",
@@ -174,6 +185,7 @@ const LOCALES = {
       rectifiedSheet: "2. Rectified Sheet",
       convolutionDebugView: "2. Convolution Debug View",
       frameAlignmentMarkers: "3. Frame Alignment Markers",
+      frameCorners: "3. Frame Corners",
       preview: "4. Preview",
       gifOutput: "4. GIF Output",
       status: "Status",
@@ -209,11 +221,18 @@ const LOCALES = {
       paperMargin: "Insets the coarse boundary search away from the page edge to avoid background bleed and warped borders.",
       boundarySensitivity: "The threshold used to find the frame-grid.",
       boundaryPersistence: "How many consecutive pixels must stay above the threshold before the frame-grid boundary is accepted.",
-      alignmentMarkerTypeField: "Choose whether frame alignment uses cross markers or filled-dot markers.",
+      alignmentPipelineField: "Choose between markerless frame estimation and marker-based alignment.",
+      alignmentPipelineMarkerless: "Estimate frame divisions without registration marks by fitting a straight grid from image autocorrelation and gutter evidence.",
+      alignmentPipelineMarkers: "Use registration markers between frames to refine the grid alignment.",
+      alignmentMarkerTypeField: "Choose whether marker-based frame alignment uses cross markers or filled-dot markers.",
       alignmentMarkerTypeAuto: "Estimate whether the alignment markers are crosses or filled dots from blob circularity.",
       alignmentMarkerTypeCrosses: "Use cross-shaped alignment markers when refining the frame grid.",
       alignmentMarkerTypeCircles: "Use filled-dot alignment markers when refining the frame grid.",
       crossRoiScale: "Sets the size of the square search regions used to localize each alignment marker.",
+      stabilizationStrength: "Applies loop-consistent translation-only stabilization after frame extraction. Higher values use more of the solved per-frame correction.",
+      stabilizationLambda: "Regularization strength for the stabilization solve. Higher values keep absolute per-frame offsets smaller.",
+      markerlessPhaseX: "Manual horizontal phase offset for markerless extraction. Shifts the extracted content left or right by up to half a frame cell relative to the autocorrelation baseline.",
+      markerlessPhaseY: "Manual vertical phase offset for markerless extraction. Shifts the extracted content up or down by up to half a frame cell relative to the autocorrelation baseline.",
       toggleMarkerBlobViewButton: "Toggle the binarized dot-blob diagnostics shown in the marker tiles.",
       detectCrossesWithConvolution: "Use the cross-kernel convolution inside each ROI instead of the default profile-based localizer.",
       useCrossAlignment: "Use detected alignment markers to refine frame extraction beyond a nominal equal-spaced grid.",
@@ -280,6 +299,7 @@ const LOCALES = {
       reanalyzingPage: "Re-analyzing page…",
       loadImageToUseSettings: "Load an image to use them.",
       pageBoundaryFailure: "Unable to find page boundary. Try adjusting the Thresholding Offset or other Page & Grid Detection settings.",
+      markerlessEstimationFailed: "Markerless alignment estimation failed.",
       rawPhoto: "Raw photo: {width} × {height}",
       paperThreshold: "Paper threshold: {value}/255",
       largestContourArea: "Largest contour area: {value}%",
@@ -292,6 +312,7 @@ const LOCALES = {
       markerCircularity: "Marker circularity: {value} ({type})",
       markerAlignment: "Marker alignment: {count}/{expected} used",
       markerAlignmentFallback: "Marker alignment fallback: {reason}",
+      markerlessGridPitch: "Markerless grid: {pitchX} × {pitchY}",
       sourceRawPhoto: "raw photo",
       sourceRectified: "rectified",
       markerTypeDots: "dots",
@@ -4135,12 +4156,19 @@ export function getTooltipText() {
     "#paperMargin": tooltips.paperMargin || "",
     "#boundarySensitivity": tooltips.boundarySensitivity || "",
     "#boundaryPersistence": tooltips.boundaryPersistence || "",
+    "#alignmentPipelineField": tooltips.alignmentPipelineField || "",
+    "#alignmentPipelineMarkerless": tooltips.alignmentPipelineField || "",
+    "#alignmentPipelineMarkers": tooltips.alignmentPipelineField || "",
     "#alignmentMarkerTypeField": tooltips.alignmentMarkerTypeField || "",
     "#alignmentMarkerType": tooltips.alignmentMarkerTypeField || "",
     '#alignmentMarkerType option[value="auto"]': tooltips.alignmentMarkerTypeAuto || "",
     '#alignmentMarkerType option[value="crosses"]': tooltips.alignmentMarkerTypeCrosses || "",
     '#alignmentMarkerType option[value="circles"]': tooltips.alignmentMarkerTypeCircles || "",
     "#crossRoiScale": tooltips.crossRoiScale || "",
+    "#stabilizationStrength": tooltips.stabilizationStrength || "",
+    "#stabilizationLambda": tooltips.stabilizationLambda || "",
+    "#markerlessPhaseX": tooltips.markerlessPhaseX || "",
+    "#markerlessPhaseY": tooltips.markerlessPhaseY || "",
     "#toggleMarkerBlobViewButton": tooltips.toggleMarkerBlobViewButton || "",
     "#detectCrossesWithConvolution": tooltips.detectCrossesWithConvolution || "",
     "#useCrossAlignment": tooltips.useCrossAlignment || "",

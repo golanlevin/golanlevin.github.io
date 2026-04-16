@@ -155,6 +155,11 @@ select {
   gap: 12px;
 }
 
+#alignmentPipelineGroup {
+  position: relative;
+  top: -7px;
+}
+
 .section-head {
   display: flex;
   align-items: center;
@@ -670,6 +675,12 @@ button:hover:not(:disabled),
 body.has-loaded-image .viewer-stage,
 body.has-loaded-image .output-preview {
   background-color: #f3f4f6;
+  background-image: none;
+}
+
+body.has-loaded-image.markerless-pipeline .viewer-card[data-view="preview"] .output-preview,
+body.has-loaded-image.markerless-pipeline .viewer-card[data-view="markers"] .cross-roi-viewport {
+  background-color: rgb(243, 244, 246);
   background-image: none;
 }
 

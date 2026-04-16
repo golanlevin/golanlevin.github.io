@@ -668,3 +668,18 @@ was done partly to make this future work easier.
 
 - Handle removal of blue-pencil guides
 - Handle light-on-dark source images
+- Add a markerless frame-alignment branch
+  - intended use case: sheets with no cross/dot registration marks, only known `rows` and `cols`
+  - proposed approach:
+    - rectify the page as usual
+    - build a low-resolution blurred working image
+    - estimate `pitchX` and `pitchY` from seeded horizontal/vertical autocorrelation near the nominal cell spacing
+    - estimate `phaseX` and `phaseY` from low-energy row/column profiles near the nominal boundary locations
+    - construct a straight rectangular grid from that pitch/phase solution
+  - rationale:
+    - does not require visible gutters
+    - assumes neighboring animation frames are approximately correlated
+    - avoids the current marker-localization path entirely
+  - cautions:
+    - constrain lag search tightly around the user-seeded nominal spacing to avoid locking onto harmonics or repeated internal motifs
+    - treat this as a separate alignment mode, not a small variation of the marker pipeline
