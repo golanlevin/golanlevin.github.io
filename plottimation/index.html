@@ -34,7 +34,7 @@
           </p>
           <p id="appLedeMobileNote" class="lede mobile-header-note" data-i18n="app.mobileNote">(Please use desktop version for advanced controls.)</p>
           <p id="appLedeSecondary" class="lede">
-            <span data-app-version>v1.10</span> • <a href="https://github.com/golanlevin/plottimation/tree/main/README.md" target="_blank" rel="noopener noreferrer" data-i18n="app.documentation">Instructions</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer" data-i18n="app.demoVideo">Demo Video</a> • <a href="templates/index.html" target="_blank" rel="noopener noreferrer" data-i18n="app.templates">Templates</a>
+            <span data-app-version>v1.11</span> • <a href="https://github.com/golanlevin/plottimation/tree/main/README.md" target="_blank" rel="noopener noreferrer" data-i18n="app.documentation">Instructions</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer" data-i18n="app.demoVideo">Demo Video</a> • <a href="templates/index.html" target="_blank" rel="noopener noreferrer" data-i18n="app.templates">Templates</a>
           </p>
           <p id="appLedeTertiary" class="lede"><span data-i18n="app.bylinePrefix">By @golanlevin •</span> <a href="https://buymeacoffee.com/golanlevin" target="_blank" rel="noopener noreferrer" data-i18n="app.buyMeCoffee">Buy me a coffee</a> :)</p>
         </div>
@@ -130,6 +130,10 @@ separated by small crosses or dots.</span>
 
         <details id="pageGridDetectionGroup" class="control-group collapsible" data-mobile-control="page-grid">
           <summary id="pageGridDetectionSummary"><span data-i18n="detection.summary">Page &amp; Grid Detection</span><span id="pageGridDetectionWarning" class="header-note summary-warning" hidden>⚠️</span></summary>
+          <label id="lightOnDarkDesignRow" class="toggle">
+            <input id="lightOnDarkDesign" type="checkbox" />
+            <span data-i18n="detection.lightOnDarkDesign">Light-on-dark design</span>
+          </label>
           <label id="thresholdMethodRow" class="stack-label">
             <span data-i18n="detection.thresholdMethod">Thresholding Method</span>
             <select id="thresholdMethod">
@@ -182,6 +186,22 @@ separated by small crosses or dots.</span>
               <span><span data-i18n="alignment.stabilizationLambda">Lambda</span> <output id="stabilizationLambdaValue">0.010</output></span>
               <input id="stabilizationLambda" type="range" min="0.001" max="0.1" step="0.001" value="0.010" />
             </label>
+            <label id="markerlessPhaseDebugRow" class="toggle" hidden style="display:none;">
+              <input id="markerlessPhaseDebug" type="checkbox" />
+              <span>Show phase debug chart</span>
+            </label>
+            <label id="markerlessUseDarknessRow" class="toggle" hidden style="display:none;">
+              <input id="markerlessUseDarkness" type="checkbox" checked />
+              <span>Use darkness</span>
+            </label>
+            <label id="markerlessUseTextureRow" class="toggle" hidden style="display:none;">
+              <input id="markerlessUseTexture" type="checkbox" checked />
+              <span>Use texture</span>
+            </label>
+            <label id="markerlessUseVarianceRow" class="toggle" hidden style="display:none;">
+              <input id="markerlessUseVariance" type="checkbox" checked />
+              <span>Use variance</span>
+            </label>
             <label id="emphasizePeripheryRow" class="toggle" hidden style="display:none;">
               <input id="emphasizePeriphery" type="checkbox" checked />
               <span>Emphasize periphery</span>
@@ -195,7 +215,7 @@ separated by small crosses or dots.</span>
               <input id="markerlessPhaseY" type="range" min="-0.4" max="0.4" step="0.005" value="0" />
             </label>
             <label id="verticalDriftCompensationRow" hidden>
-              <span><span>Vertical Drift Compensation</span> <output id="verticalDriftCompensationValue">+0.0%</output></span>
+              <span><span data-i18n="alignment.verticalDriftCompensation">Vertical Drift Compensation</span> <output id="verticalDriftCompensationValue">+0.0%</output></span>
               <input id="verticalDriftCompensation" type="range" min="-0.05" max="0.05" step="0.001" value="0" />
             </label>
           </div>
@@ -411,12 +431,12 @@ separated by small crosses or dots.</span>
 
         <section id="previewViewerCard" class="viewer-card" data-view="preview">
           <header>
-            <h2 id="animationPreviewHeading" data-i18n="panels.preview">4. Preview</h2>
+            <h2 id="animationPreviewHeading" data-i18n="panels.preview">4. Preview &amp; Export</h2>
             <div class="header-actions">
               <button id="previewPlayPauseButton" class="header-button icon-button" type="button" data-i18n-aria-label="aria.pauseAnimation">⏸</button>
-              <button id="exportZipButton" class="header-button" type="button" disabled data-i18n="export.exportZip">Export ZIP</button>
-              <button id="exportMp4Button" class="header-button" type="button" hidden disabled data-i18n="export.exportMp4">Export MP4</button>
-              <button id="exportButton" class="header-button" type="button" disabled data-i18n="export.exportGif">Export GIF</button>
+              <button id="exportZipButton" class="header-button" type="button" disabled data-i18n="export.exportZip">↓ZIP</button>
+              <button id="exportMp4Button" class="header-button" type="button" hidden disabled data-i18n="export.exportMp4">↓MP4</button>
+              <button id="exportButton" class="header-button" type="button" disabled data-i18n="export.exportGif">↓GIF</button>
             </div>
           </header>
           <div class="output-preview">

@@ -1,8 +1,13 @@
 /**
  * Computer-vision pipeline.
  *
- * This module performs page detection, page warping, coarse grid detection, marker localization,
- * and frame extraction using OpenCV.
+ * This module implements both alignment branches used by the app:
+ * - marker-based alignment, which finds crosses or dots between frames
+ * - markerless alignment, which estimates a straight frame lattice directly from the sheet image
+ *
+ * The markerless branch deliberately emits synthetic frame-corner intersections in the same shape
+ * as the marker pipeline's lookup data. That keeps the manual-corner editor and diagnostics shared
+ * across both modes instead of maintaining a second parallel editing model.
  */
 import { t } from "./i18n.js";
 const IGNORE_PX = 8;
@@ -16,6 +21,7 @@ const MARKERLESS_WORKING_LONG_EDGE_PX = 720;
 const MARKERLESS_AUTOCORR_SEARCH_FRAC = 0.25;
 const MARKERLESS_MIN_PITCH_PX = 12;
 const MARKERLESS_PADDING_FRAC = 0.35;
+const MARKERLESS_PHASE_BAND_WIDTH = 3;
 // High-resolution extraction should track the real source-image resolution instead of a fixed
 // paper-size number. The long edge of the extraction warp is capped at 90% of the source-image
 // diagonal so extraction preserves more detail while still preventing pathological warp sizes.
@@ -183,7 +189,18 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
   let pageWarpPreviewCanvas = null;
 
   try {
-    // Segment the bright paper sheet from the darker surroundings.
+    const useMarkerlessAlignment = config.alignmentPipeline === "markerless";
+    const useInvertedMarkerVision = !useMarkerlessAlignment && config.lightOnDarkDesign;
+    if (useInvertedMarkerVision) {
+      // Marker mode normally assumes dark artwork / markers on a lighter page. For light ink on
+      // dark paper, invert only the CV input so page detection and marker localization can keep
+      // using the normal detector path. The styled image stays untouched so previews and extracted
+      // frames retain the original artwork colors.
+      cv.bitwise_not(visionSrc, visionSrc);
+    }
+
+    // Segment the paper sheet from the surroundings. In light-on-dark marker mode the vision image
+    // has already been inverted, so this stage still sees a bright page against darker surroundings.
     cv.cvtColor(visionSrc, grayImg, cv.COLOR_RGBA2GRAY);
     const threshVal = applyPaperThreshold(grayImg, thresh, config.thresholdMethod, config.thresholdOffset);
     throwIfAborted(requestId);
@@ -209,7 +226,6 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
     throwIfAborted(requestId);
 
     const useRectifiedAsSource = config.useRectifiedAsSource;
-    const useMarkerlessAlignment = config.alignmentPipeline === "markerless";
     rectifiedWarp = useMarkerlessAlignment
       ? buildFrameGridRectification_withoutMarkers(pageWarpHigh)
       : buildFrameGridRectification_fromCrosses(
@@ -232,6 +248,12 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
               config.crossRoiScale,
               rectifiedWarp.gridBounds,
               config.paperMarginPx,
+              {
+                useDarkness: config.markerlessUseDarkness,
+                useTexture: config.markerlessUseTexture,
+                useVariance: config.markerlessUseVariance,
+                lightOnDark: config.lightOnDarkDesign,
+              },
             )
           : buildCrossAlignmentData(
               rectifiedWarp.visionMat,
@@ -1522,13 +1544,21 @@ function buildCrossAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 0.75,
  * @param {{left:number, top:number, width:number, height:number} | null} [gridBounds=null]
  * @returns {object}
  */
-function buildMarkerlessAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 0.75, gridBounds = null, paperMarginPx = 0) {
+function buildMarkerlessAlignmentData(
+  rectifiedMat,
+  cols,
+  rows,
+  crossRoiScale = 0.75,
+  gridBounds = null,
+  paperMarginPx = 0,
+  gutterMetricFlags = {},
+) {
   const bounds = gridBounds || { left: 0, top: 0, width: rectifiedMat.cols, height: rectifiedMat.rows };
   const grayMat = toLightnessGray(rectifiedMat);
   const boundedGray = extractBoundsRoi(grayMat, bounds);
 
   try {
-    const estimate = estimateMarkerlessGrid(boundedGray, cols, rows, paperMarginPx);
+    const estimate = estimateMarkerlessGrid(boundedGray, cols, rows, paperMarginPx, gutterMetricFlags);
     if (!estimate) {
       return buildUnrefinedCrossRegionInfo(
         rectifiedMat,
@@ -1541,6 +1571,8 @@ function buildMarkerlessAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 
       );
     }
 
+    // Convert the local grid estimate back into full rectified-sheet coordinates so downstream
+    // extraction, overlays, and manual overrides stay in one shared coordinate system.
     const xPositions = estimate.xPositions.map((x) => bounds.left + x);
     const yPositions = estimate.yPositions.map((y) => bounds.top + y);
     const markerLookup = new Map();
@@ -1623,6 +1655,7 @@ function buildMarkerlessAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 
         pitchY: estimate.pitchY,
         startX: estimate.startX,
         startY: estimate.startY,
+        phaseDebugX: estimate.phaseDebugX,
       },
     };
   } finally {
@@ -1634,12 +1667,20 @@ function buildMarkerlessAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 
 /**
  * Estimate a straight grid from seeded autocorrelation and multi-signal gutter scoring.
  *
+ * The markerless estimator intentionally splits the problem into pitch and phase:
+ * - pitch comes from seeded autocorrelation on a reduced blurred image
+ * - phase comes from 1D gutter profiles built from darkness / edge-energy / variance cues
+ *
+ * Search Inset Margin only changes the pitch seed region. That lets the user ignore large blank
+ * page margins without changing the final phase search model.
+ *
  * @param {cv.Mat} grayMat
  * @param {number} cols
  * @param {number} rows
+ * @param {{useDarkness?:boolean, useTexture?:boolean, useVariance?:boolean, lightOnDark?:boolean}} [gutterMetricFlags={}]
  * @returns {{pitchX:number, pitchY:number, startX:number, startY:number, xPositions:number[], yPositions:number[]} | null}
  */
-function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0) {
+function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0, gutterMetricFlags = {}) {
   const working = new cv.Mat();
   const blurred = new cv.Mat();
   const insetRoi = new cv.Mat();
@@ -1654,6 +1695,8 @@ function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0) {
     const blurKernel = Math.max(3, ((Math.floor(Math.max(working.cols, working.rows) / 90) * 2) + 1));
     cv.GaussianBlur(working, blurred, new cv.Size(blurKernel, blurKernel), 0, 0, cv.BORDER_REPLICATE);
 
+    // Apply Search Inset Margin in the reduced-resolution domain used for seeded autocorrelation.
+    // This keeps large outer page margins from dominating the nominal period estimate.
     const insetSmall = Math.max(0, Math.round(Math.max(0, paperMarginPx) * scale));
     const insetWidth = Math.max(1, blurred.cols - (insetSmall * 2));
     const insetHeight = Math.max(1, blurred.rows - (insetSmall * 2));
@@ -1669,6 +1712,9 @@ function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0) {
 
     const nominalPitchX = Math.max(MARKERLESS_MIN_PITCH_PX, insetRoi.cols / Math.max(1, cols));
     const nominalPitchY = Math.max(MARKERLESS_MIN_PITCH_PX, insetRoi.rows / Math.max(1, rows));
+    // A small replicate padding lets the inferred periodic lattice extend slightly beyond the
+    // observed sheet, which matters for tightly trimmed frame sheets whose true outer boundaries
+    // would otherwise fall outside the page image.
     const padXSmall = Math.max(1, Math.round(nominalPitchX * MARKERLESS_PADDING_FRAC));
     const padYSmall = Math.max(1, Math.round(nominalPitchY * MARKERLESS_PADDING_FRAC));
     cv.copyMakeBorder(
@@ -1683,10 +1729,10 @@ function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0) {
 
     const pitchXSmall = estimateAutocorrelationPitch(padded, "x", nominalPitchX);
     const pitchYSmall = estimateAutocorrelationPitch(padded, "y", nominalPitchY);
-    const xProfile = computeMarkerlessGutterProfile(padded, "x");
-    const yProfile = computeMarkerlessGutterProfile(padded, "y");
-    const startXSmall = estimateGridPhase(xProfile, pitchXSmall, cols);
-    const startYSmall = estimateGridPhase(yProfile, pitchYSmall, rows);
+    const xProfiles = computeMarkerlessGutterProfile(padded, "x", MARKERLESS_PHASE_BAND_WIDTH, gutterMetricFlags);
+    const yProfiles = computeMarkerlessGutterProfile(padded, "y", MARKERLESS_PHASE_BAND_WIDTH, gutterMetricFlags);
+    const startXSmall = estimateGridPhase(xProfiles.gutter, pitchXSmall, cols);
+    const startYSmall = estimateGridPhase(yProfiles.gutter, pitchYSmall, rows);
 
     const scaleX = grayMat.cols / blurred.cols;
     const scaleY = grayMat.rows / blurred.rows;
@@ -1694,12 +1740,28 @@ function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0) {
     const pitchY = pitchYSmall * scaleY;
     const insetOffsetX = useInsetForPitch ? (insetSmall * scaleX) : 0;
     const insetOffsetY = useInsetForPitch ? (insetSmall * scaleY) : 0;
+    // Phase is solved in padded/inset working coordinates, then translated back into the original
+    // bounded rectified-sheet coordinates used by the rest of the pipeline.
     const startX = ((startXSmall - padXSmall) * scaleX) + insetOffsetX;
     const startY = ((startYSmall - padYSmall) * scaleY) + insetOffsetY;
     const xPositions = buildGridPositions(startX, pitchX, cols);
     const yPositions = buildGridPositions(startY, pitchY, rows);
     if (!xPositions || !yPositions) return null;
-    return { pitchX, pitchY, startX, startY, xPositions, yPositions };
+    return {
+      pitchX,
+      pitchY,
+      startX,
+      startY,
+      xPositions,
+      yPositions,
+      phaseDebugX: {
+        positions: Array.from({ length: xProfiles.gutter.length }, (_, i) => ((i - padXSmall) * scaleX) + insetOffsetX),
+        darkness: Array.from(xProfiles.darkness),
+        variance: Array.from(xProfiles.variance),
+        texture: Array.from(xProfiles.texture),
+        gutter: Array.from(xProfiles.gutter),
+      },
+    };
   } finally {
     working.delete();
     blurred.delete();
@@ -1795,67 +1857,103 @@ function estimateAutocorrelationPitch(grayMat, axis, nominalPitch) {
 }
 
 /**
- * Build a 1D gutter-likelihood profile by combining darkness, edge energy, and variance.
+ * Build a 1D gutter-likelihood profile by combining darkness, edge energy, and variance over a
+ * centered stripe rather than a single pixel row or column.
  *
  * @param {cv.Mat} grayMat
  * @param {"x"|"y"} axis
+ * @param {number} [bandWidth=1]
+ * @param {{useDarkness?:boolean, useTexture?:boolean, useVariance?:boolean, lightOnDark?:boolean}} [flags={}]
  * @returns {Float64Array}
  */
-function computeMarkerlessGutterProfile(grayMat, axis) {
+function computeMarkerlessGutterProfile(grayMat, axis, bandWidth = 1, flags = {}) {
   const data = grayMat.data;
   const width = grayMat.cols;
   const height = grayMat.rows;
   const length = axis === "x" ? width : height;
+  const normalizedBandWidth = Math.max(1, Math.min(11, Math.round(bandWidth) | 1));
+  const radius = Math.floor(normalizedBandWidth / 2);
   const darkness = new Float64Array(length);
   const variance = new Float64Array(length);
   const edge = new Float64Array(length);
 
   if (axis === "x") {
     for (let x = 0; x < width; x++) {
+      const bandStart = Math.max(0, x - radius);
+      const bandEnd = Math.min(width - 1, x + radius);
       let sum = 0;
       let sumSq = 0;
       let edgeSum = 0;
+      let sampleCount = 0;
       for (let y = 0; y < height; y++) {
         const rowOffset = y * width;
-        const value = 255 - data[rowOffset + x];
-        sum += value;
-        sumSq += value * value;
-        const leftValue = data[rowOffset + Math.max(0, x - 1)];
-        const rightValue = data[rowOffset + Math.min(width - 1, x + 1)];
-        edgeSum += Math.abs(rightValue - leftValue);
+        for (let bx = bandStart; bx <= bandEnd; bx++) {
+          const value = 255 - data[rowOffset + bx];
+          sum += value;
+          sumSq += value * value;
+          const leftValue = data[rowOffset + Math.max(0, bx - 1)];
+          const rightValue = data[rowOffset + Math.min(width - 1, bx + 1)];
+          edgeSum += Math.abs(rightValue - leftValue);
+          sampleCount++;
+        }
       }
-      darkness[x] = sum / Math.max(1, height);
-      variance[x] = Math.max(0, (sumSq / Math.max(1, height)) - darkness[x] * darkness[x]);
-      edge[x] = edgeSum / Math.max(1, height);
+      darkness[x] = sum / Math.max(1, sampleCount);
+      variance[x] = Math.max(0, (sumSq / Math.max(1, sampleCount)) - darkness[x] * darkness[x]);
+      edge[x] = edgeSum / Math.max(1, sampleCount);
     }
   } else {
     for (let y = 0; y < height; y++) {
+      const bandStart = Math.max(0, y - radius);
+      const bandEnd = Math.min(height - 1, y + radius);
       let sum = 0;
       let sumSq = 0;
       let edgeSum = 0;
-      const rowOffset = y * width;
-      const rowOffsetUp = Math.max(0, y - 1) * width;
-      const rowOffsetDown = Math.min(height - 1, y + 1) * width;
-      for (let x = 0; x < width; x++) {
-        const value = 255 - data[rowOffset + x];
-        sum += value;
-        sumSq += value * value;
-        edgeSum += Math.abs(data[rowOffsetDown + x] - data[rowOffsetUp + x]);
+      let sampleCount = 0;
+      for (let by = bandStart; by <= bandEnd; by++) {
+        const rowOffset = by * width;
+        const rowOffsetUp = Math.max(0, by - 1) * width;
+        const rowOffsetDown = Math.min(height - 1, by + 1) * width;
+        for (let x = 0; x < width; x++) {
+          const value = 255 - data[rowOffset + x];
+          sum += value;
+          sumSq += value * value;
+          edgeSum += Math.abs(data[rowOffsetDown + x] - data[rowOffsetUp + x]);
+          sampleCount++;
+        }
       }
-      darkness[y] = sum / Math.max(1, width);
-      variance[y] = Math.max(0, (sumSq / Math.max(1, width)) - darkness[y] * darkness[y]);
-      edge[y] = edgeSum / Math.max(1, width);
+      darkness[y] = sum / Math.max(1, sampleCount);
+      variance[y] = Math.max(0, (sumSq / Math.max(1, sampleCount)) - darkness[y] * darkness[y]);
+      edge[y] = edgeSum / Math.max(1, sampleCount);
     }
   }
 
   const darknessNorm = normalizeProfile(darkness);
   const varianceNorm = normalizeProfile(variance);
   const edgeNorm = normalizeProfile(edge);
+  const useDarkness = flags.useDarkness !== false;
+  const useVariance = flags.useVariance !== false;
+  const useTexture = flags.useTexture !== false;
+  const lightOnDark = flags.lightOnDark === true;
+  const darknessSupport = new Float64Array(length);
+  const varianceSupport = new Float64Array(length);
+  const textureSupport = new Float64Array(length);
   const gutter = new Float64Array(length);
   for (let i = 0; i < length; i++) {
-    gutter[i] = (1 - darknessNorm[i]) + (1 - varianceNorm[i]) + (1 - edgeNorm[i]);
+    darknessSupport[i] = lightOnDark ? darknessNorm[i] : (1 - darknessNorm[i]);
+    varianceSupport[i] = 1 - varianceNorm[i];
+    textureSupport[i] = 1 - edgeNorm[i];
+    let combined = null;
+    if (useDarkness) combined = darknessSupport[i];
+    if (useVariance) combined = combined === null ? varianceSupport[i] : (combined * varianceSupport[i]);
+    if (useTexture) combined = combined === null ? textureSupport[i] : (combined * textureSupport[i]);
+    gutter[i] = combined === null ? 0 : combined;
   }
-  return smooth1D(gutter, 7);
+  return {
+    darkness: smooth1D(darknessSupport, 7),
+    variance: smooth1D(varianceSupport, 7),
+    texture: smooth1D(textureSupport, 7),
+    gutter: smooth1D(gutter, 7),
+  };
 }
 
 /**

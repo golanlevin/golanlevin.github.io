@@ -196,11 +196,15 @@ function applyGifPreviewDisplaySize(dom, width, height) {
   const safeWidth = Math.max(1, Math.round(width || 1));
   const safeHeight = Math.max(1, Math.round(height || 1));
   const minDisplay = 32;
-  const scale = (Math.min(safeWidth, safeHeight) < minDisplay)
-    ? (minDisplay / Math.min(safeWidth, safeHeight))
-    : 1;
-  dom.gifImage.style.width = `${Math.max(minDisplay, Math.round(safeWidth * scale))}px`;
-  dom.gifImage.style.height = `${Math.max(minDisplay, Math.round(safeHeight * scale))}px`;
+  if (Math.min(safeWidth, safeHeight) < minDisplay) {
+    const scale = minDisplay / Math.min(safeWidth, safeHeight);
+    dom.gifImage.style.width = `${Math.max(minDisplay, Math.round(safeWidth * scale))}px`;
+    dom.gifImage.style.height = `${Math.max(minDisplay, Math.round(safeHeight * scale))}px`;
+    return;
+  }
+  // Large previews should use intrinsic aspect ratio and fit naturally inside the panel.
+  dom.gifImage.style.width = "";
+  dom.gifImage.style.height = "";
 }
 
 /**

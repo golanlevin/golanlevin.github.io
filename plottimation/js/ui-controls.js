@@ -80,6 +80,213 @@ export function initializeTooltips({ tooltipText, state, dom, applyTooltipState 
   applyTooltipState(false);
 }
 
+function attachAlignmentPipelineControls({
+  dom,
+  revokeGifUrl,
+  updateSliderReadouts,
+  scheduleProcess,
+  syncAlignmentMarkerUi,
+}) {
+  const alignmentDom = dom.alignment;
+  [alignmentDom.alignmentPipelineMarkerless, alignmentDom.alignmentPipelineMarkers].forEach((input) => {
+    input.addEventListener("input", () => {
+      syncAlignmentMarkerUi();
+      revokeGifUrl();
+      updateSliderReadouts();
+      scheduleProcess();
+    });
+    input.addEventListener("change", () => {
+      syncAlignmentMarkerUi();
+      revokeGifUrl();
+      scheduleProcess();
+    });
+  });
+}
+
+function attachAlignmentMarkerTypeControls({
+  dom,
+  state,
+  revokeGifUrl,
+  updateSliderReadouts,
+  scheduleProcess,
+  syncAlignmentMarkerUi,
+}) {
+  const alignmentDom = dom.alignment;
+  const shouldSkipMarkerTypeReprocess = () => {
+    if (alignmentDom.alignmentPipelineMarkerless.checked) return false;
+    const requestedMarkerType = alignmentDom.alignmentMarkerType.value || "crosses";
+    const lastAlignmentInfo = state.geometry.alignmentInfo;
+    if (!lastAlignmentInfo) return false;
+    return (
+      requestedMarkerType !== "auto" &&
+      lastAlignmentInfo.requestedMarkerType === "auto" &&
+      lastAlignmentInfo.resolvedMarkerType === requestedMarkerType
+    );
+  };
+
+  alignmentDom.alignmentMarkerType.addEventListener("input", () => {
+    syncAlignmentMarkerUi();
+    if (shouldSkipMarkerTypeReprocess()) return;
+    revokeGifUrl();
+    updateSliderReadouts();
+    scheduleProcess();
+  });
+  alignmentDom.alignmentMarkerType.addEventListener("change", () => {
+    syncAlignmentMarkerUi();
+    if (shouldSkipMarkerTypeReprocess()) return;
+    revokeGifUrl();
+    scheduleProcess();
+  });
+}
+
+function attachMarkerlessSearchInsetControls({
+  dom,
+  state,
+  beginMarkerlessPhaseScrub,
+  endMarkerlessPhaseScrub,
+  revokeGifUrl,
+  updateSliderReadouts,
+  renderRectifiedPreview,
+  scheduleProcess,
+}) {
+  const alignmentDom = dom.alignment;
+  const pageDetectionDom = dom.pageDetection;
+  const isMarkerless = () => alignmentDom.alignmentPipelineMarkerless.checked;
+  const paperMargin = pageDetectionDom.paperMargin;
+
+  paperMargin.addEventListener("pointerdown", () => {
+    if (!isMarkerless()) return;
+    beginMarkerlessPhaseScrub();
+  });
+  paperMargin.addEventListener("pointerup", () => {
+    if (!isMarkerless()) return;
+    endMarkerlessPhaseScrub();
+  });
+  paperMargin.addEventListener("pointercancel", () => {
+    if (!isMarkerless()) return;
+    endMarkerlessPhaseScrub();
+  });
+  paperMargin.addEventListener("blur", () => {
+    if (!isMarkerless()) return;
+    endMarkerlessPhaseScrub();
+  });
+  paperMargin.addEventListener("input", () => {
+    revokeGifUrl();
+    updateSliderReadouts();
+    if (isMarkerless()) {
+      beginMarkerlessPhaseScrub();
+      if (state.preview.rectifiedCanvas) {
+        renderRectifiedPreview(state.preview.rectifiedCanvas);
+      }
+      return;
+    }
+    scheduleProcess();
+  });
+  paperMargin.addEventListener("change", () => {
+    revokeGifUrl();
+    if (isMarkerless()) {
+      endMarkerlessPhaseScrub();
+    }
+    scheduleProcess();
+  });
+}
+
+function attachStabilizationControls({
+  dom,
+  beginStabilizationStrengthScrub,
+  endStabilizationStrengthScrub,
+  revokeGifUrl,
+  updateSliderReadouts,
+  invalidateCurrentPreviewStabilizationCaches,
+  invalidateStabilizedOutputCaches,
+  invalidateStabilizationOffsetsCache,
+  scheduleStabilizationPreviewUpdate,
+}) {
+  const alignmentDom = dom.alignment;
+  const bindSlider = (input, onChangeInvalidate) => {
+    input.addEventListener("pointerdown", beginStabilizationStrengthScrub);
+    input.addEventListener("pointerup", endStabilizationStrengthScrub);
+    input.addEventListener("pointercancel", endStabilizationStrengthScrub);
+    input.addEventListener("blur", endStabilizationStrengthScrub);
+    input.addEventListener("input", () => {
+      beginStabilizationStrengthScrub();
+      revokeGifUrl();
+      updateSliderReadouts();
+      invalidateCurrentPreviewStabilizationCaches();
+      scheduleStabilizationPreviewUpdate();
+    });
+    input.addEventListener("change", () => {
+      revokeGifUrl();
+      updateSliderReadouts();
+      onChangeInvalidate();
+      scheduleStabilizationPreviewUpdate();
+      endStabilizationStrengthScrub();
+    });
+  };
+
+  bindSlider(alignmentDom.stabilizationStrength, invalidateStabilizedOutputCaches);
+  bindSlider(alignmentDom.stabilizationLambda, invalidateStabilizationOffsetsCache);
+}
+
+function attachMarkerlessPhaseControls({
+  dom,
+  beginMarkerlessPhaseScrub,
+  endMarkerlessPhaseScrub,
+  revokeGifUrl,
+  updateSliderReadouts,
+  invalidateCurrentPreviewFrameCaches,
+  invalidateFrameCaches,
+  scheduleMarkerlessPhasePreviewUpdate,
+  drawCurrentGifPreview,
+}) {
+  const alignmentDom = dom.alignment;
+  [
+    alignmentDom.markerlessPhaseX,
+    alignmentDom.markerlessPhaseY,
+    alignmentDom.verticalDriftCompensation,
+  ].forEach((input) => {
+    input.addEventListener("pointerdown", beginMarkerlessPhaseScrub);
+    input.addEventListener("pointerup", endMarkerlessPhaseScrub);
+    input.addEventListener("pointercancel", endMarkerlessPhaseScrub);
+    input.addEventListener("blur", endMarkerlessPhaseScrub);
+    input.addEventListener("input", () => {
+      beginMarkerlessPhaseScrub();
+      revokeGifUrl();
+      updateSliderReadouts();
+      invalidateCurrentPreviewFrameCaches();
+      scheduleMarkerlessPhasePreviewUpdate();
+    });
+    input.addEventListener("change", () => {
+      revokeGifUrl();
+      updateSliderReadouts();
+      invalidateFrameCaches();
+      drawCurrentGifPreview();
+      endMarkerlessPhaseScrub();
+    });
+  });
+}
+
+function attachMarkerlessPhaseMetricToggles({
+  dom,
+  revokeGifUrl,
+  scheduleProcess,
+}) {
+  const alignmentDom = dom.alignment;
+  const pageDetectionDom = dom.pageDetection;
+  [
+    alignmentDom.markerlessUseDarkness,
+    alignmentDom.markerlessUseTexture,
+    alignmentDom.markerlessUseVariance,
+    pageDetectionDom.lightOnDarkDesign,
+  ].forEach((input) => {
+    if (!input) return;
+    input.addEventListener("change", () => {
+      revokeGifUrl();
+      scheduleProcess();
+    });
+  });
+}
+
 /**
  * Attach all DOM event listeners and classify controls by what they invalidate.
  *
@@ -100,6 +307,7 @@ export function initializeTooltips({ tooltipText, state, dom, applyTooltipState 
  *   togglePreviewPaused: () => void,
  *   stepPausedPreviewFrame: (direction: number) => void,
  *   toggleMarkerBlobView: () => void,
+ *   toggleMarkerlessPhaseDebug: () => void,
  *   toggleMarkerEditing: () => void,
  *   clearMarkerEdits: () => void,
  *   syncOutputSizeFromWidthInput: () => void,
@@ -151,6 +359,7 @@ export function attachUi({
   togglePreviewPaused,
   stepPausedPreviewFrame,
   toggleMarkerBlobView,
+  toggleMarkerlessPhaseDebug,
   toggleMarkerEditing,
   clearMarkerEdits,
   syncOutputSizeFromWidthInput,
@@ -183,18 +392,6 @@ export function attachUi({
   exportZip,
   saveSettingsFile,
 }) {
-  const shouldSkipMarkerTypeReprocess = () => {
-    if (dom.alignmentPipelineMarkerless.checked) return false;
-    const requestedMarkerType = dom.alignmentMarkerType.value || "crosses";
-    const lastAlignmentInfo = state.geometry.alignmentInfo;
-    if (!lastAlignmentInfo) return false;
-    return (
-      requestedMarkerType !== "auto" &&
-      lastAlignmentInfo.requestedMarkerType === "auto" &&
-      lastAlignmentInfo.resolvedMarkerType === requestedMarkerType
-    );
-  };
-
   makeCanvasDraggable(dom.rawCanvas, () => {
     if (state.source.dragUrl && state.source.filename) {
       return {
@@ -271,6 +468,9 @@ export function attachUi({
   });
   dom.previewPlayPauseButton.addEventListener("click", togglePreviewPaused);
   dom.toggleMarkerBlobViewButton?.addEventListener("click", toggleMarkerBlobView);
+  dom.alignment.markerlessPhaseDebug?.addEventListener("change", () => {
+    toggleMarkerlessPhaseDebug();
+  });
   dom.toggleMarkerEditingButton.addEventListener("click", toggleMarkerEditing);
   dom.clearMarkerEditsButton.addEventListener("click", clearMarkerEdits);
 
@@ -320,32 +520,20 @@ export function attachUi({
     });
   });
 
-  [dom.alignmentPipelineMarkerless, dom.alignmentPipelineMarkers].forEach((input) => {
-    input.addEventListener("input", () => {
-      syncAlignmentMarkerUi();
-      revokeGifUrl();
-      updateSliderReadouts();
-      scheduleProcess();
-    });
-    input.addEventListener("change", () => {
-      syncAlignmentMarkerUi();
-      revokeGifUrl();
-      scheduleProcess();
-    });
+  attachAlignmentPipelineControls({
+    dom,
+    revokeGifUrl,
+    updateSliderReadouts,
+    scheduleProcess,
+    syncAlignmentMarkerUi,
   });
-
-  dom.alignmentMarkerType.addEventListener("input", () => {
-    syncAlignmentMarkerUi();
-    if (shouldSkipMarkerTypeReprocess()) return;
-    revokeGifUrl();
-    updateSliderReadouts();
-    scheduleProcess();
-  });
-  dom.alignmentMarkerType.addEventListener("change", () => {
-    syncAlignmentMarkerUi();
-    if (shouldSkipMarkerTypeReprocess()) return;
-    revokeGifUrl();
-    scheduleProcess();
+  attachAlignmentMarkerTypeControls({
+    dom,
+    state,
+    revokeGifUrl,
+    updateSliderReadouts,
+    scheduleProcess,
+    syncAlignmentMarkerUi,
   });
 
   const appearanceInputs = [
@@ -396,40 +584,15 @@ export function attachUi({
     });
   });
 
-  dom.paperMargin.addEventListener("pointerdown", () => {
-    if (!dom.alignmentPipelineMarkerless.checked) return;
-    beginMarkerlessPhaseScrub();
-  });
-  dom.paperMargin.addEventListener("pointerup", () => {
-    if (!dom.alignmentPipelineMarkerless.checked) return;
-    endMarkerlessPhaseScrub();
-  });
-  dom.paperMargin.addEventListener("pointercancel", () => {
-    if (!dom.alignmentPipelineMarkerless.checked) return;
-    endMarkerlessPhaseScrub();
-  });
-  dom.paperMargin.addEventListener("blur", () => {
-    if (!dom.alignmentPipelineMarkerless.checked) return;
-    endMarkerlessPhaseScrub();
-  });
-  dom.paperMargin.addEventListener("input", () => {
-    revokeGifUrl();
-    updateSliderReadouts();
-    if (dom.alignmentPipelineMarkerless.checked) {
-      beginMarkerlessPhaseScrub();
-      if (state.preview.rectifiedCanvas) {
-        renderRectifiedPreview(state.preview.rectifiedCanvas);
-      }
-      return;
-    }
-    scheduleProcess();
-  });
-  dom.paperMargin.addEventListener("change", () => {
-    revokeGifUrl();
-    if (dom.alignmentPipelineMarkerless.checked) {
-      endMarkerlessPhaseScrub();
-    }
-    scheduleProcess();
+  attachMarkerlessSearchInsetControls({
+    dom,
+    state,
+    beginMarkerlessPhaseScrub,
+    endMarkerlessPhaseScrub,
+    revokeGifUrl,
+    updateSliderReadouts,
+    renderRectifiedPreview,
+    scheduleProcess,
   });
 
   dom.crossRoiScale.addEventListener("input", () => {
@@ -441,61 +604,32 @@ export function attachUi({
     scheduleProcess();
   });
 
-  dom.stabilizationStrength.addEventListener("pointerdown", beginStabilizationStrengthScrub);
-  dom.stabilizationStrength.addEventListener("pointerup", endStabilizationStrengthScrub);
-  dom.stabilizationStrength.addEventListener("pointercancel", endStabilizationStrengthScrub);
-  dom.stabilizationStrength.addEventListener("blur", endStabilizationStrengthScrub);
-  dom.stabilizationStrength.addEventListener("input", () => {
-    beginStabilizationStrengthScrub();
-    revokeGifUrl();
-    updateSliderReadouts();
-    invalidateCurrentPreviewStabilizationCaches();
-    scheduleStabilizationPreviewUpdate();
+  attachStabilizationControls({
+    dom,
+    beginStabilizationStrengthScrub,
+    endStabilizationStrengthScrub,
+    revokeGifUrl,
+    updateSliderReadouts,
+    invalidateCurrentPreviewStabilizationCaches,
+    invalidateStabilizedOutputCaches,
+    invalidateStabilizationOffsetsCache,
+    scheduleStabilizationPreviewUpdate,
   });
-  dom.stabilizationStrength.addEventListener("change", () => {
-    revokeGifUrl();
-    updateSliderReadouts();
-    invalidateStabilizedOutputCaches();
-    scheduleStabilizationPreviewUpdate();
-    endStabilizationStrengthScrub();
+  attachMarkerlessPhaseControls({
+    dom,
+    beginMarkerlessPhaseScrub,
+    endMarkerlessPhaseScrub,
+    revokeGifUrl,
+    updateSliderReadouts,
+    invalidateCurrentPreviewFrameCaches,
+    invalidateFrameCaches,
+    scheduleMarkerlessPhasePreviewUpdate,
+    drawCurrentGifPreview,
   });
-  dom.stabilizationLambda.addEventListener("pointerdown", beginStabilizationStrengthScrub);
-  dom.stabilizationLambda.addEventListener("pointerup", endStabilizationStrengthScrub);
-  dom.stabilizationLambda.addEventListener("pointercancel", endStabilizationStrengthScrub);
-  dom.stabilizationLambda.addEventListener("blur", endStabilizationStrengthScrub);
-  dom.stabilizationLambda.addEventListener("input", () => {
-    beginStabilizationStrengthScrub();
-    revokeGifUrl();
-    updateSliderReadouts();
-    invalidateCurrentPreviewStabilizationCaches();
-    scheduleStabilizationPreviewUpdate();
-  });
-  dom.stabilizationLambda.addEventListener("change", () => {
-    revokeGifUrl();
-    updateSliderReadouts();
-    invalidateStabilizationOffsetsCache();
-    scheduleStabilizationPreviewUpdate();
-    endStabilizationStrengthScrub();
-  });
-  [dom.markerlessPhaseX, dom.markerlessPhaseY, dom.verticalDriftCompensation].forEach((input) => {
-    input.addEventListener("pointerdown", beginMarkerlessPhaseScrub);
-    input.addEventListener("pointerup", endMarkerlessPhaseScrub);
-    input.addEventListener("pointercancel", endMarkerlessPhaseScrub);
-    input.addEventListener("blur", endMarkerlessPhaseScrub);
-    input.addEventListener("input", () => {
-      beginMarkerlessPhaseScrub();
-      revokeGifUrl();
-      updateSliderReadouts();
-      invalidateCurrentPreviewFrameCaches();
-      scheduleMarkerlessPhasePreviewUpdate();
-    });
-    input.addEventListener("change", () => {
-      revokeGifUrl();
-      updateSliderReadouts();
-      invalidateFrameCaches();
-      drawCurrentGifPreview();
-      endMarkerlessPhaseScrub();
-    });
+  attachMarkerlessPhaseMetricToggles({
+    dom,
+    revokeGifUrl,
+    scheduleProcess,
   });
 
   dom.thresholdOffset.addEventListener("input", () => {

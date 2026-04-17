@@ -276,6 +276,17 @@ function syncMarkerEditingUi() {
 }
 
 /**
+ * Keep the temporary markerless phase-debug toggle synchronized with runtime state.
+ *
+ * @returns {void}
+ */
+function syncMarkerlessPhaseDebugUi() {
+  if (dom.markerlessPhaseDebug) {
+    dom.markerlessPhaseDebug.checked = !!state.runtime.markerlessPhaseDebugVisible;
+  }
+}
+
+/**
  * Detect whether the viewport should use the mobile single-viewer layout.
  *
  * @returns {boolean}
@@ -757,13 +768,21 @@ function ensureSourceCvCaches() {
 function previewPageBoundaryForThresholdOffset() {
   if (!state.runtime.cvReady || !state.source.image || state.processing.active) return;
   const config = readConfig();
+  let previewGrayMat = null;
   try {
     const cachedSource = ensureSourceCvCaches();
     if (!cachedSource) return;
-    const previewWidth = cachedSource.previewGrayMat.cols;
-    const previewHeight = cachedSource.previewGrayMat.rows;
+    previewGrayMat = cachedSource.previewGrayMat.clone();
+    const useInvertedMarkerVision = config.alignmentPipeline === "markers" && config.lightOnDarkDesign;
+    if (useInvertedMarkerVision) {
+      // Match the lightweight threshold-preview path to the full marker pipeline so dragging
+      // threshold controls previews the same light-on-dark interpretation used during processing.
+      cv.bitwise_not(previewGrayMat, previewGrayMat);
+    }
+    const previewWidth = previewGrayMat.cols;
+    const previewHeight = previewGrayMat.rows;
     const preview = previewPageBoundary(
-      cachedSource.previewGrayMat,
+      previewGrayMat,
       previewWidth,
       previewHeight,
       config.thresholdMethod,
@@ -785,6 +804,8 @@ function previewPageBoundaryForThresholdOffset() {
     clearDerivedOutputsForDetectionFailure();
     updatePageGridDetectionHeading(true);
     console.error(error);
+  } finally {
+    previewGrayMat?.delete();
   }
 }
 
@@ -1137,6 +1158,7 @@ function attachUi() {
       drawCurrentGifPreview();
     },
     toggleMarkerBlobView,
+    toggleMarkerlessPhaseDebug,
     toggleMarkerEditing,
     clearMarkerEdits,
     syncOutputSizeFromWidthInput,
@@ -1789,6 +1811,10 @@ function scheduleProcess() {
  *   markerlessPhaseX:number,
  *   markerlessPhaseY:number,
  *   verticalDriftCompensation:number,
+ *   markerlessUseDarkness:boolean,
+ *   markerlessUseTexture:boolean,
+ *   markerlessUseVariance:boolean,
+ *   lightOnDarkDesign:boolean,
  *   detectCrossesWithConvolution:boolean,
  *   useCrossAlignment:boolean,
  *   crop:{left:number,right:number,top:number,bottom:number},
@@ -1855,6 +1881,10 @@ function readConfig() {
         Number(dom.verticalDriftCompensation?.value) || SETTINGS_DEFAULTS.detection.verticalDriftCompensation
       )
     ),
+    markerlessUseDarkness: dom.markerlessUseDarkness ? dom.markerlessUseDarkness.checked : true,
+    markerlessUseTexture: dom.markerlessUseTexture ? dom.markerlessUseTexture.checked : true,
+    markerlessUseVariance: dom.markerlessUseVariance ? dom.markerlessUseVariance.checked : true,
+    lightOnDarkDesign: dom.lightOnDarkDesign ? dom.lightOnDarkDesign.checked : false,
     detectCrossesWithConvolution: (dom.alignmentPipelineMarkers.checked && dom.alignmentMarkerType.value === "crosses") && dom.detectCrossesWithConvolution.checked,
     useCrossAlignment: dom.alignmentPipelineMarkerless.checked ? true : dom.useCrossAlignment.checked,
     useRectifiedAsSource: false,
@@ -1966,14 +1996,17 @@ function syncPaperPresetUi() {
   }
 }
 
+function getActiveAlignmentPipeline() {
+  return dom.alignmentPipelineMarkerless.checked ? "markerless" : "markers";
+}
+
 /**
- * Show or hide controls that only apply to cross-shaped alignment markers.
+ * Preserve the markerless default of zero Search Inset Margin when switching away from marker mode.
  *
+ * @param {"markerless"|"markers"} pipeline
  * @returns {void}
  */
-function syncAlignmentMarkerUi() {
-  const pipeline = dom.alignmentPipelineMarkerless.checked ? "markerless" : "markers";
-  document.body.classList.toggle("markerless-pipeline", pipeline === "markerless");
+function applyAlignmentPipelineDefaults(pipeline) {
   if (
     pipeline === "markerless" &&
     dom.paperMargin &&
@@ -1982,6 +2015,15 @@ function syncAlignmentMarkerUi() {
     // Markerless mode defaults to no search inset. Preserve any non-default user/saved value.
     dom.paperMargin.value = "0";
   }
+}
+
+/**
+ * Ensure marker-pipeline-only controls hold a valid state before being shown again.
+ *
+ * @param {"markerless"|"markers"} pipeline
+ * @returns {void}
+ */
+function sanitizeAlignmentPipelineState(pipeline) {
   if (
     pipeline === "markers" &&
     dom.alignmentMarkerType.value !== "auto" &&
@@ -1990,26 +2032,58 @@ function syncAlignmentMarkerUi() {
   ) {
     dom.alignmentMarkerType.value = SETTINGS_DEFAULTS.detection.alignmentMarkerType;
   }
+}
+
+/**
+ * Return which alignment-specific control groups should be visible for the active pipeline.
+ *
+ * @param {"markerless"|"markers"} pipeline
+ * @returns {{showMarkerlessControls:boolean,showMarkersPipelineControls:boolean,showCrossOnlyControls:boolean}}
+ */
+function getAlignmentUiModeFlags(pipeline) {
+  document.body.classList.toggle("markerless-pipeline", pipeline === "markerless");
   const markerType = dom.alignmentMarkerType.value || SETTINGS_DEFAULTS.detection.alignmentMarkerType;
   const resolvedAutoType = state.geometry.alignmentInfo?.resolvedMarkerType || null;
   const showMarkersPipelineControls = pipeline === "markers";
   const showCrossOnlyControls = showMarkersPipelineControls && (markerType === "crosses" || (markerType === "auto" && resolvedAutoType === "crosses"));
   const showMarkerlessControls = pipeline === "markerless";
+  return {
+    showMarkerlessControls,
+    showMarkersPipelineControls,
+    showCrossOnlyControls,
+  };
+}
+
+/**
+ * Rewrite alignment-related labels so the UI language matches the active pipeline.
+ *
+ * @param {{showMarkerlessControls:boolean}} flags
+ * @returns {void}
+ */
+function syncAlignmentPipelineLabels(flags) {
+  const { showMarkerlessControls } = flags;
   const frameAlignmentSummary = document.querySelector("#frameAlignmentSummary");
   const frameAlignmentSummaryLabel =
     frameAlignmentSummary?.querySelector("[data-i18n='alignment.summary']") ||
     frameAlignmentSummary?.firstElementChild;
   const dropGuidanceNote = document.querySelector("#dropGuidanceNote");
   if (frameAlignmentSummaryLabel) {
-    frameAlignmentSummaryLabel.textContent = showMarkerlessControls ? "Stabilization" : t("alignment.summary");
+    frameAlignmentSummaryLabel.textContent = showMarkerlessControls ? t("alignment.summaryMarkerless") : t("alignment.summary");
   }
   if (dropGuidanceNote) {
     dropGuidanceNote.textContent = showMarkerlessControls ? t("photo.dropNoteMarkerless") : t("photo.dropNote");
   }
-  const headingKey = showMarkerlessControls ? "panels.frameCorners" : "panels.frameAlignmentMarkers";
+  const isMobileViewerMode = state.runtime.mobileSingleViewerMode;
+  const headingText = isMobileViewerMode
+    ? t(showMarkerlessControls ? "viewerTabs.centers" : "viewerTabs.markers")
+    : t(showMarkerlessControls ? "panels.frameCorners" : "panels.frameAlignmentMarkers");
   if (dom.crossRegionsHeading) {
     const label = dom.crossRegionsHeading.querySelector("[data-panel-heading]") || dom.crossRegionsHeading.firstElementChild;
-    if (label) label.textContent = t(headingKey);
+    if (label) label.textContent = headingText;
+  }
+  if (dom.viewerTabMarkers) {
+    const viewerTabKey = showMarkerlessControls ? "viewerTabs.centers" : "viewerTabs.markers";
+    dom.viewerTabMarkers.textContent = t(viewerTabKey);
   }
   if (dom.crossRoiScaleLabel) {
     dom.crossRoiScaleLabel.textContent = showMarkerlessControls
@@ -2020,14 +2094,24 @@ function syncAlignmentMarkerUi() {
     dom.markerlessPhaseXRow?.querySelector("[data-i18n='alignment.markerlessPhaseX']") ||
     dom.markerlessPhaseXRow?.querySelector("span span");
   if (markerlessPhaseXLabel) {
-    markerlessPhaseXLabel.textContent = "Horizontal Phase Offset";
+    markerlessPhaseXLabel.textContent = t("alignment.markerlessPhaseXOffset");
   }
   const markerlessPhaseYLabel =
     dom.markerlessPhaseYRow?.querySelector("[data-i18n='alignment.markerlessPhaseY']") ||
     dom.markerlessPhaseYRow?.querySelector("span span");
   if (markerlessPhaseYLabel) {
-    markerlessPhaseYLabel.textContent = "Vertical Phase Offset";
+    markerlessPhaseYLabel.textContent = t("alignment.markerlessPhaseYOffset");
   }
+}
+
+/**
+ * Keep the shared ROI-size slider in the right position for the active alignment mode.
+ *
+ * @param {{showMarkerlessControls:boolean}} flags
+ * @returns {void}
+ */
+function syncAlignmentSliderOrder(flags) {
+  const { showMarkerlessControls } = flags;
   if (dom.alignmentSliderStack && dom.crossRoiScaleRow) {
     if (showMarkerlessControls) {
       dom.alignmentSliderStack.appendChild(dom.crossRoiScaleRow);
@@ -2035,6 +2119,16 @@ function syncAlignmentMarkerUi() {
       dom.alignmentSliderStack.prepend(dom.crossRoiScaleRow);
     }
   }
+}
+
+/**
+ * Show or hide the alignment controls appropriate for the active pipeline.
+ *
+ * @param {{showMarkerlessControls:boolean,showMarkersPipelineControls:boolean,showCrossOnlyControls:boolean}} flags
+ * @returns {void}
+ */
+function syncAlignmentPipelineVisibility(flags) {
+  const { showMarkerlessControls, showMarkersPipelineControls, showCrossOnlyControls } = flags;
   dom.boundarySensitivityRow.hidden = showMarkerlessControls;
   dom.boundaryPersistenceRow.hidden = showMarkerlessControls;
   dom.alignmentMarkerTypeField.hidden = !showMarkersPipelineControls;
@@ -2045,7 +2139,29 @@ function syncAlignmentMarkerUi() {
   dom.emphasizePeripheryRow.hidden = true;
   dom.markerlessPhaseXRow.hidden = !showMarkerlessControls;
   dom.markerlessPhaseYRow.hidden = !showMarkerlessControls;
+  if (dom.markerlessPhaseDebugRow) {
+    dom.markerlessPhaseDebugRow.hidden = true;
+  }
+  if (dom.markerlessUseDarknessRow) {
+    dom.markerlessUseDarknessRow.hidden = true;
+  }
+  if (dom.markerlessUseTextureRow) {
+    dom.markerlessUseTextureRow.hidden = true;
+  }
+  if (dom.markerlessUseVarianceRow) {
+    dom.markerlessUseVarianceRow.hidden = true;
+  }
   dom.verticalDriftCompensationRow.hidden = !showMarkerlessControls;
+}
+
+/**
+ * Clear or collapse inactive alignment-only diagnostics when the active pipeline changes.
+ *
+ * @param {{showCrossOnlyControls:boolean}} flags
+ * @returns {void}
+ */
+function resetInactiveAlignmentUiState(flags) {
+  const { showCrossOnlyControls } = flags;
   if (!showCrossOnlyControls) {
     dom.detectCrossesWithConvolution.checked = false;
   } else if (state.runtime.markerBlobDebugVisible) {
@@ -2054,6 +2170,36 @@ function syncAlignmentMarkerUi() {
       renderCrossRoiGrid(state.geometry.alignmentInfo);
     }
   }
+}
+
+/**
+ * Reconfigure the alignment UI for the active pipeline.
+ *
+ * Markerless mode intentionally presents a different mental model from marker mode:
+ * - the subpanel becomes "Stabilization"
+ * - marker-type controls disappear
+ * - gutter / phase / stabilization controls appear
+ * - the marker tile panel is relabeled as Frame Corners, even though it still reuses the same
+ *   underlying tile widget and override machinery
+ *
+ * @returns {void}
+ */
+function syncAlignmentMarkerUi() {
+  const pipeline = getActiveAlignmentPipeline();
+  applyAlignmentPipelineDefaults(pipeline);
+  sanitizeAlignmentPipelineState(pipeline);
+  const flags = getAlignmentUiModeFlags(pipeline);
+  syncAlignmentPipelineLabels(flags);
+  syncAlignmentSliderOrder(flags);
+  syncAlignmentPipelineVisibility(flags);
+  resetInactiveAlignmentUiState(flags);
+  if (state.runtime.markerlessPhaseDebugVisible) {
+    state.runtime.markerlessPhaseDebugVisible = false;
+    if (state.preview.rectifiedCanvas) {
+      renderRectifiedPreview(state.preview.rectifiedCanvas);
+    }
+  }
+  syncMarkerlessPhaseDebugUi();
 }
 
 /**
@@ -2094,6 +2240,20 @@ function toggleMarkerBlobView() {
   state.runtime.markerBlobDebugVisible = !state.runtime.markerBlobDebugVisible;
   syncMarkerEditingUi();
   renderCrossRoiGrid(state.geometry.alignmentInfo);
+}
+
+/**
+ * Toggle the temporary markerless phase-debug overlay and refresh the rectified-sheet preview.
+ *
+ * @returns {void}
+ */
+function toggleMarkerlessPhaseDebug() {
+  if (readConfig().alignmentPipeline !== "markerless") return;
+  state.runtime.markerlessPhaseDebugVisible = !state.runtime.markerlessPhaseDebugVisible;
+  syncMarkerlessPhaseDebugUi();
+  if (state.preview.rectifiedCanvas) {
+    renderRectifiedPreview(state.preview.rectifiedCanvas);
+  }
 }
 
 /**
@@ -2598,7 +2758,139 @@ function renderRectifiedPreview(rectifiedCanvas) {
     ctx.closePath();
     ctx.stroke();
   }
+  if (
+    config.alignmentPipeline === "markerless" &&
+    state.runtime.markerlessPhaseDebugVisible &&
+    !state.preview.showRectifiedDiagnostic
+  ) {
+    drawMarkerlessPhaseDebugChart(
+      ctx,
+      state.geometry.alignmentInfo?.markerlessEstimate?.phaseDebugX || null,
+      offsetX,
+      offsetY,
+      scale,
+      drawW,
+      drawH,
+      displayCanvas.width,
+      displayCanvas.height,
+    );
+  }
   ctx.restore();
+}
+
+/**
+ * Draw a temporary inset chart showing the left-to-right markerless phase-support metrics.
+ *
+ * The three plotted curves are the same normalized gutter-support terms used by the phase solver:
+ * low darkness, low texture, and low variance. That means likely gutters appear as upward spikes.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{positions:number[], darkness:number[], texture:number[], variance:number[], gutter:number[]}|null} phaseDebugX
+ * @param {number} imageOffsetX
+ * @param {number} imageOffsetY
+ * @param {number} imageScale
+ * @param {number} imageDrawWidth
+ * @param {number} imageDrawHeight
+ * @param {number} imageWidth
+ * @param {number} imageHeight
+ * @returns {void}
+ */
+function drawMarkerlessPhaseDebugChart(
+  ctx,
+  phaseDebugX,
+  imageOffsetX,
+  imageOffsetY,
+  imageScale,
+  imageDrawWidth,
+  imageDrawHeight,
+  imageWidth,
+  imageHeight,
+) {
+  const amplitudeScale = 0.25;
+  if (
+    !phaseDebugX?.positions?.length ||
+    !phaseDebugX?.darkness?.length ||
+    !phaseDebugX?.texture?.length ||
+    !phaseDebugX?.variance?.length ||
+    !phaseDebugX?.gutter?.length
+  ) return;
+  const chartHeight = Math.min(180, Math.max(120, Math.round(imageDrawHeight * 0.28)));
+  const chartBottom = imageOffsetY + imageDrawHeight;
+  const chartTop = chartBottom - chartHeight;
+  const plotX = imageOffsetX;
+  const plotY = chartTop;
+  const plotW = imageDrawWidth;
+  const plotH = chartHeight;
+  const curves = [
+    { data: phaseDebugX.darkness, color: "#8B0000", label: "darkness", amplitudeScale },
+    { data: phaseDebugX.texture, color: "#006400", label: "texture", amplitudeScale },
+    { data: phaseDebugX.variance, color: "#0000CD", label: "variance", amplitudeScale },
+    { data: normalizeDebugCurveForDisplay(phaseDebugX.gutter), color: "#000000", label: "product", amplitudeScale: 1 },
+  ];
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(imageOffsetX, imageOffsetY, imageDrawWidth, imageDrawHeight);
+  ctx.clip();
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
+  ctx.fillRect(plotX, plotY, plotW, plotH);
+
+  ctx.strokeStyle = "rgba(32, 33, 36, 0.15)";
+  ctx.beginPath();
+  ctx.moveTo(plotX, plotY + plotH * 0.5);
+  ctx.lineTo(plotX + plotW, plotY + plotH * 0.5);
+  ctx.stroke();
+
+  ctx.font = "11px sans-serif";
+  ctx.textBaseline = "top";
+  let legendX = plotX;
+  for (const curve of curves) {
+    ctx.fillStyle = curve.color;
+    ctx.fillRect(legendX, plotY + 6, 10, 3);
+    legendX += 14;
+    ctx.fillText(curve.label, legendX, plotY + 1);
+    legendX += ctx.measureText(curve.label).width + 14;
+  }
+
+  const positions = phaseDebugX.positions;
+  for (const curve of curves) {
+    const data = curve.data;
+    ctx.strokeStyle = curve.color;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i < data.length; i++) {
+      const rectifiedX = Math.max(0, Math.min(imageWidth, Number(positions[i]) || 0));
+      const x = imageOffsetX + (rectifiedX * imageScale);
+      const y = plotY + plotH - (Math.max(0, Number(data[i]) || 0) * plotH * curve.amplitudeScale);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * Normalize one debug curve into 0..1 for chart display only.
+ *
+ * The combined gutter signal can use a different numeric range than the component terms, so the
+ * overlay scales it independently to keep the black curve legible.
+ *
+ * @param {number[]} data
+ * @returns {number[]}
+ */
+function normalizeDebugCurveForDisplay(data) {
+  if (!Array.isArray(data) || data.length === 0) return [];
+  let min = Infinity;
+  let max = -Infinity;
+  for (const value of data) {
+    const numeric = Number(value) || 0;
+    if (numeric < min) min = numeric;
+    if (numeric > max) max = numeric;
+  }
+  const range = Math.max(1e-6, max - min);
+  return data.map((value) => ((Number(value) || 0) - min) / range);
 }
 
 /**
@@ -2974,38 +3266,39 @@ function refreshAppearanceOutputs() {
  * post-crop output transforms are applied. Stabilization uses this path so corrected pixels can
  * come from neighboring sheet content instead of duplicating the already-extracted frame edges.
  *
+ * Markerless extraction stacks several source-space adjustments in a fixed order:
+ * 1. autocorrelation baseline from the pipeline
+ * 2. manual phase offsets (`Horizontal/Vertical Phase Offset`)
+ * 3. optional animation-wide vertical drift compensation
+ * 4. optional per-frame stabilization translation
+ * 5. optional post-stabilization per-corner nudges from Frame Corners overrides
+ *
+ * Keeping these layers explicit is important because only some of them are allowed to feed back
+ * into the stabilization solve. In particular, manual Frame Corners overrides are intentionally
+ * post-stabilization nudges in markerless mode.
+ *
  * @param {number} index
  * @param {{x:number,y:number}} [sourceOffset={x:0,y:0}]
  * @returns {HTMLCanvasElement | null}
  */
 function extractProcessedFrameCanvas(index, sourceOffset = { x: 0, y: 0 }, includeMarkerlessNudges = true, includeMarkerlessDriftCompensation = true) {
-  if (!state.geometry.baseRectifiedCanvas || !state.geometry.alignmentInfo) return null;
-  if (!state.geometry.baseRectifiedMat) {
-    state.geometry.baseRectifiedMat = cv.imread(state.geometry.baseRectifiedCanvas);
-  }
-  const config = readConfig();
-  const cols = state.geometry.alignmentInfo.cols;
-  const col = index % cols;
-  const row = Math.floor(index / cols);
-  const markerlessOffset = getMarkerlessPhaseSourceOffset(config, state.geometry.alignmentInfo);
-  const driftOffset = includeMarkerlessDriftCompensation
-    ? getMarkerlessVerticalDriftSourceOffset(config, state.geometry.alignmentInfo, index)
-    : { x: 0, y: 0 };
-  const extractionInfo =
-    config.alignmentPipeline === "markerless" && includeMarkerlessNudges
-      ? buildMarkerlessExtractionInfoForFrame(state.geometry.alignmentInfo, col, row)
-      : state.geometry.alignmentInfo;
+  const extractionContext = getFrameExtractionContext(index, includeMarkerlessNudges);
+  if (!extractionContext) return null;
+  const { config, col, row, alignmentInfo, rectifiedMat } = extractionContext;
+  const automaticOffset = getAutomaticMarkerlessSourceOffset(
+    config,
+    alignmentInfo,
+    index,
+    includeMarkerlessDriftCompensation
+  );
   const frame = extractSingleFrameToCanvas(
-    state.geometry.baseRectifiedMat,
-    extractionInfo,
+    rectifiedMat,
+    alignmentInfo,
     col,
     row,
     config.crop,
     getCvInterpolationFlag(config.exportOptions.resampling),
-    {
-      x: markerlessOffset.x + driftOffset.x + (Number(sourceOffset?.x) || 0),
-      y: markerlessOffset.y + driftOffset.y + (Number(sourceOffset?.y) || 0),
-    }
+    combineSourceOffsets(automaticOffset, sourceOffset)
   );
   const transformedFrame = transformOutputCanvas(frame, config.postCropGeometry);
   return scaleOutputCanvas(
@@ -3043,11 +3336,221 @@ function getStabilizationSourceFrameCanvas(index) {
 }
 
 /**
+ * Ensure the base rectified-sheet OpenCV mat exists.
+ *
+ * @returns {cv.Mat | null}
+ */
+function ensureBaseRectifiedMat() {
+  if (!state.geometry.baseRectifiedCanvas) return null;
+  if (!state.geometry.baseRectifiedMat) {
+    state.geometry.baseRectifiedMat = cv.imread(state.geometry.baseRectifiedCanvas);
+  }
+  return state.geometry.baseRectifiedMat;
+}
+
+/**
+ * Resolve the per-frame grid coordinates used by extraction.
+ *
+ * @param {number} index
+ * @param {object} alignmentInfo
+ * @returns {{col:number,row:number}}
+ */
+function getFrameGridCoords(index, alignmentInfo) {
+  const cols = alignmentInfo.cols;
+  return {
+    col: index % cols,
+    row: Math.floor(index / cols),
+  };
+}
+
+/**
+ * Return the alignment lattice view used for one extracted frame.
+ *
+ * Markerless manual overrides are applied by swapping in a lightweight frame-specific view of the
+ * four surrounding corners. Marker mode continues to use the shared alignment lattice.
+ *
+ * @param {ReturnType<typeof readConfig>} config
+ * @param {object} alignmentInfo
+ * @param {number} col
+ * @param {number} row
+ * @param {boolean} includeMarkerlessNudges
+ * @returns {object}
+ */
+function getFrameExtractionAlignmentInfo(config, alignmentInfo, col, row, includeMarkerlessNudges) {
+  if (config.alignmentPipeline === "markerless" && includeMarkerlessNudges) {
+    return buildMarkerlessExtractionInfoForFrame(alignmentInfo, col, row);
+  }
+  return alignmentInfo;
+}
+
+/**
+ * Gather the static extraction context for one frame.
+ *
+ * @param {number} index
+ * @param {boolean} includeMarkerlessNudges
+ * @returns {{config: ReturnType<typeof readConfig>, col:number, row:number, alignmentInfo:object, rectifiedMat:cv.Mat} | null}
+ */
+function getFrameExtractionContext(index, includeMarkerlessNudges) {
+  const alignmentInfo = state.geometry.alignmentInfo;
+  const rectifiedMat = ensureBaseRectifiedMat();
+  if (!alignmentInfo || !rectifiedMat) return null;
+  const config = readConfig();
+  const { col, row } = getFrameGridCoords(index, alignmentInfo);
+  return {
+    config,
+    col,
+    row,
+    alignmentInfo: getFrameExtractionAlignmentInfo(config, alignmentInfo, col, row, includeMarkerlessNudges),
+    rectifiedMat,
+  };
+}
+
+/**
+ * Collect the frame canvases used by the stabilization matcher.
+ *
+ * @returns {HTMLCanvasElement[] | null}
+ */
+function collectStabilizationSourceFrames() {
+  const frameCount = state.geometry.frameCount;
+  if (frameCount <= 1) return null;
+  const frames = [];
+  for (let i = 0; i < frameCount; i++) {
+    const frame = getStabilizationSourceFrameCanvas(i);
+    if (!frame) return null;
+    frames.push(frame);
+  }
+  return frames;
+}
+
+/**
+ * Build one weighted stabilization edge between two frame indices.
+ *
+ * @param {HTMLCanvasElement[]} frames
+ * @param {number} from
+ * @param {number} to
+ * @param {"horizontal"|"rowBreak"|"vertical"|"seam"} kind
+ * @returns {{from:number,to:number,dx:number,dy:number,kind:string,weight:number} | null}
+ */
+function buildStabilizationEdge(frames, from, to, kind) {
+  if (from < 0 || to < 0 || from >= frames.length || to >= frames.length) return null;
+  const shift = estimateLoopPairShift(frames[from], frames[to]);
+  const edge = {
+    from,
+    to,
+    dx: shift.dx,
+    dy: shift.dy,
+    kind,
+  };
+  edge.weight = getStabilizationEdgeWeight(edge);
+  return edge;
+}
+
+/**
+ * Append all within-row horizontal stabilization edges.
+ *
+ * @param {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[]} edges
+ * @param {HTMLCanvasElement[]} frames
+ * @param {number} cols
+ * @param {number} rows
+ * @returns {void}
+ */
+function appendHorizontalStabilizationEdges(edges, frames, cols, rows) {
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols - 1; col++) {
+      const from = row * cols + col;
+      const to = from + 1;
+      const edge = buildStabilizationEdge(frames, from, to, "horizontal");
+      if (edge) edges.push(edge);
+    }
+  }
+}
+
+/**
+ * Append end-of-row discontinuity stabilization edges.
+ *
+ * @param {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[]} edges
+ * @param {HTMLCanvasElement[]} frames
+ * @param {number} cols
+ * @param {number} rows
+ * @returns {void}
+ */
+function appendRowBreakStabilizationEdges(edges, frames, cols, rows) {
+  for (let row = 0; row < rows - 1; row++) {
+    const from = (row * cols) + (cols - 1);
+    const to = from + 1;
+    const edge = buildStabilizationEdge(frames, from, to, "rowBreak");
+    if (edge) edges.push(edge);
+  }
+}
+
+/**
+ * Append vertical stabilization edges between neighboring sheet rows.
+ *
+ * @param {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[]} edges
+ * @param {HTMLCanvasElement[]} frames
+ * @param {number} cols
+ * @param {number} rows
+ * @returns {void}
+ */
+function appendVerticalStabilizationEdges(edges, frames, cols, rows) {
+  for (let row = 0; row < rows - 1; row++) {
+    for (let col = 0; col < cols; col++) {
+      const from = row * cols + col;
+      const to = (row + 1) * cols + col;
+      const edge = buildStabilizationEdge(frames, from, to, "vertical");
+      if (edge) edges.push(edge);
+    }
+  }
+}
+
+/**
+ * Append the weak loop-seam stabilization edge from the last frame back to the first.
+ *
+ * @param {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[]} edges
+ * @param {HTMLCanvasElement[]} frames
+ * @returns {void}
+ */
+function appendSeamStabilizationEdge(edges, frames) {
+  const edge = buildStabilizationEdge(frames, frames.length - 1, 0, "seam");
+  if (edge) edges.push(edge);
+}
+
+/**
+ * Build the full stabilization graph for the current frame set.
+ *
+ * @param {HTMLCanvasElement[]} frames
+ * @returns {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[]}
+ */
+function buildStabilizationGraph(frames) {
+  const frameCount = frames.length;
+  const alignmentInfo = state.geometry.alignmentInfo;
+  const cols = Math.max(1, alignmentInfo?.cols || 1);
+  const rows = Math.max(1, alignmentInfo?.rows || Math.ceil(frameCount / cols));
+  const edges = [];
+  appendHorizontalStabilizationEdges(edges, frames, cols, rows);
+  appendRowBreakStabilizationEdges(edges, frames, cols, rows);
+  appendVerticalStabilizationEdges(edges, frames, cols, rows);
+  if (frameCount > 1) {
+    appendSeamStabilizationEdge(edges, frames);
+  }
+  return edges;
+}
+
+/**
  * Measure and cache the pairwise stabilization graph for the current frame set.
  *
  * This is the expensive part of markerless stabilization. It is separated from the final solve so
  * the measurements can be warmed in the background before the user first raises Stabilization
  * Strength above zero.
+ *
+ * The graph intentionally follows sheet topology rather than pure timeline order:
+ * - horizontal edges within each printed row
+ * - row-break edges between the end of one row and the start of the next
+ * - vertical edges between rows
+ * - one weak loop seam from the last frame back to the first
+ *
+ * That gives the solver access to the printed 2D layout, which is often a better prior for riso
+ * sheets than treating the animation as a simple 1D chain.
  *
  * @returns {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[] | null}
  */
@@ -3058,82 +3561,54 @@ function getStabilizationPairwiseMeasurements() {
     return state.frames.stabilizationPairwise;
   }
 
-  const frames = [];
-  for (let i = 0; i < frameCount; i++) {
-    const frame = getStabilizationSourceFrameCanvas(i);
-    if (!frame) return null;
-    frames.push(frame);
-  }
-
-  const alignmentInfo = state.geometry.alignmentInfo;
-  const cols = Math.max(1, alignmentInfo?.cols || 1);
-  const rows = Math.max(1, alignmentInfo?.rows || Math.ceil(frameCount / cols));
-  const edges = [];
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols - 1; col++) {
-      const from = row * cols + col;
-      const to = from + 1;
-      if (from >= frameCount || to >= frameCount) continue;
-      const horizontalShift = estimateLoopPairShift(frames[from], frames[to]);
-      const edge = {
-        from,
-        to,
-        dx: horizontalShift.dx,
-        dy: horizontalShift.dy,
-        kind: "horizontal",
-      };
-      edge.weight = getStabilizationEdgeWeight(edge);
-      edges.push(edge);
-    }
-  }
-  for (let row = 0; row < rows - 1; row++) {
-    const from = (row * cols) + (cols - 1);
-    const to = from + 1;
-    if (from >= frameCount || to >= frameCount) continue;
-    const rowBreakShift = estimateLoopPairShift(frames[from], frames[to]);
-    const edge = {
-      from,
-      to,
-      dx: rowBreakShift.dx,
-      dy: rowBreakShift.dy,
-      kind: "rowBreak",
-    };
-    edge.weight = getStabilizationEdgeWeight(edge);
-    edges.push(edge);
-  }
-  for (let row = 0; row < rows - 1; row++) {
-    for (let col = 0; col < cols; col++) {
-      const from = row * cols + col;
-      const to = (row + 1) * cols + col;
-      if (from >= frameCount || to >= frameCount) continue;
-      const verticalShift = estimateLoopPairShift(frames[from], frames[to]);
-      const edge = {
-        from,
-        to,
-        dx: verticalShift.dx,
-        dy: verticalShift.dy,
-        kind: "vertical",
-      };
-      edge.weight = getStabilizationEdgeWeight(edge);
-      edges.push(edge);
-    }
-  }
-  const seamFrom = frameCount - 1;
-  const seamTo = 0;
-  if (seamFrom > 0) {
-    const seamShift = estimateLoopPairShift(frames[seamFrom], frames[seamTo]);
-    const edge = {
-      from: seamFrom,
-      to: seamTo,
-      dx: seamShift.dx,
-      dy: seamShift.dy,
-      kind: "seam",
-    };
-    edge.weight = getStabilizationEdgeWeight(edge);
-    edges.push(edge);
-  }
+  const frames = collectStabilizationSourceFrames();
+  if (!frames) return null;
+  const edges = buildStabilizationGraph(frames);
   state.frames.stabilizationPairwise = edges;
   return edges;
+}
+
+/**
+ * Convert one stabilization edge set into the scalar graph expected by the least-squares solver.
+ *
+ * @param {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[]} edges
+ * @param {"x"|"y"} axis
+ * @returns {{from:number,to:number,delta:number,weight:number}[]}
+ */
+function projectStabilizationEdgesForAxis(edges, axis) {
+  const key = axis === "x" ? "dx" : "dy";
+  return edges.map((edge) => ({
+    from: edge.from,
+    to: edge.to,
+    delta: edge[key],
+    weight: edge.weight,
+  }));
+}
+
+/**
+ * Return the stabilization translation caps derived from one sample extracted frame.
+ *
+ * @param {HTMLCanvasElement} sampleFrame
+ * @returns {{capX:number, capY:number}}
+ */
+function getStabilizationOffsetCaps(sampleFrame) {
+  return {
+    capX: sampleFrame.width * 0.10,
+    capY: sampleFrame.height * 0.10,
+  };
+}
+
+/**
+ * Solve one per-frame x/y stabilization offset field from the weighted graph measurements.
+ *
+ * @param {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[]} edges
+ * @param {number} frameCount
+ * @returns {{x:number, y:number}[]}
+ */
+function solveStabilizationOffsetField(edges, frameCount) {
+  const solvedX = solveGraphOffsets(projectStabilizationEdgesForAxis(edges, "x"), frameCount);
+  const solvedY = solveGraphOffsets(projectStabilizationEdgesForAxis(edges, "y"), frameCount);
+  return solvedX.map((x, index) => ({ x, y: solvedY[index] }));
 }
 
 /**
@@ -3159,17 +3634,8 @@ function getStabilizationOffsets() {
   const sampleFrame = getStabilizationSourceFrameCanvas(0);
   if (!sampleFrame) return null;
 
-  const solvedX = solveGraphOffsets(
-    edges.map((edge) => ({ from: edge.from, to: edge.to, delta: edge.dx, weight: edge.weight })),
-    frameCount
-  );
-  const solvedY = solveGraphOffsets(
-    edges.map((edge) => ({ from: edge.from, to: edge.to, delta: edge.dy, weight: edge.weight })),
-    frameCount
-  );
-  const capX = sampleFrame.width * 0.10;
-  const capY = sampleFrame.height * 0.10;
-  const offsets = solvedX.map((x, index) => ({ x, y: solvedY[index] }));
+  const offsets = solveStabilizationOffsetField(edges, frameCount);
+  const { capX, capY } = getStabilizationOffsetCaps(sampleFrame);
   clampOffsetsInPlace(offsets, capX, capY);
   centerOffsetsAroundZero(offsets);
   state.frames.stabilizationOffsets = offsets;
@@ -3426,6 +3892,10 @@ function getAdjustedFrameCanvas(index) {
  * Estimate the best translation to align the second frame to the first using a 21x21 search over
  * cumulative absolute pixel differences in luma space.
  *
+ * The search is performed on sampled grayscale frames, not full-resolution exports, and the score
+ * is perimeter-weighted so relatively static border content influences the match more than the
+ * animated center of the frame.
+ *
  * @param {HTMLCanvasElement} currentFrame
  * @param {HTMLCanvasElement} nextFrame
  * @returns {{dx:number, dy:number}}
@@ -3596,6 +4066,12 @@ function solveGraphOffsets(edges, count) {
  * Downweight suspicious stabilization matches so row seams and boundary-saturated searches do not
  * dominate the solve.
  *
+ * The weights intentionally encode qualitative trust, not strict probabilities:
+ * - horizontal within-row comparisons are trusted most
+ * - vertical comparisons are helpful but weaker
+ * - row breaks and the loop seam are retained at low weight because they are often contaminated
+ *   by discontinuities in the artwork or by end-of-row extraction bias
+ *
  * @param {{kind:string,dx:number,dy:number}} edge
  * @returns {number}
  */
@@ -3726,6 +4202,20 @@ function getMarkerlessPhaseSourceOffset(config, alignmentInfo) {
 }
 
 /**
+ * Add two source-space extraction offsets together.
+ *
+ * @param {{x:number,y:number}} baseOffset
+ * @param {{x:number,y:number}} extraOffset
+ * @returns {{x:number,y:number}}
+ */
+function combineSourceOffsets(baseOffset, extraOffset) {
+  return {
+    x: (Number(baseOffset?.x) || 0) + (Number(extraOffset?.x) || 0),
+    y: (Number(baseOffset?.y) || 0) + (Number(extraOffset?.y) || 0),
+  };
+}
+
+/**
  * Convert the markerless vertical drift-compensation slider into a frame-distributed vertical source offset.
  *
  * This is a post-stabilization extraction nudge intended to counter vertical drift. The slider
@@ -3750,6 +4240,28 @@ function getMarkerlessVerticalDriftSourceOffset(config, alignmentInfo, frameInde
     x: 0,
     y: totalDrift * frameFactor,
   };
+}
+
+/**
+ * Return the automatic markerless extraction offset before any explicit caller-supplied shift.
+ *
+ * This combines the autocorrelation-based phase offset with optional drift compensation. Frame-
+ * specific stabilization is supplied separately by the caller so that different extraction paths
+ * can opt in or out without duplicating the automatic baseline logic.
+ *
+ * @param {ReturnType<typeof readConfig>} config
+ * @param {object | null} alignmentInfo
+ * @param {number} frameIndex
+ * @param {boolean} includeDriftCompensation
+ * @returns {{x:number,y:number}}
+ */
+function getAutomaticMarkerlessSourceOffset(config, alignmentInfo, frameIndex, includeDriftCompensation = true) {
+  const phaseOffset = getMarkerlessPhaseSourceOffset(config, alignmentInfo);
+  if (!includeDriftCompensation) {
+    return phaseOffset;
+  }
+  const driftOffset = getMarkerlessVerticalDriftSourceOffset(config, alignmentInfo, frameIndex);
+  return combineSourceOffsets(phaseOffset, driftOffset);
 }
 
 /**
@@ -3842,6 +4354,10 @@ function getMarkerlessCornerManualNudge(col, row) {
 
 /**
  * Build the markerless display-space corner position shown in the Frame Corners panel.
+ *
+ * The displayed corner is not just the raw pipeline estimate. It is the current automatic corner
+ * position after applying phase offsets and any solved stabilization, plus an optional stored
+ * post-stabilization manual nudge.
  *
  * @param {object} sourceMarker
  * @param {number} col

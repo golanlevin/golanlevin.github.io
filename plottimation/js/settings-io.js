@@ -118,6 +118,7 @@ export function applyLoadedSettingsText({
   setIfPresent("frame_rows", dom.frameRows);
   setIfPresent("threshold_method", dom.thresholdMethod);
   setIfPresent("threshold_offset", dom.thresholdOffset);
+  setCheckedIfPresent("light_on_dark_design", dom.lightOnDarkDesign);
   setIfPresent("search_inset_margin_px", dom.paperMargin);
   setIfPresent("boundary_threshold", dom.boundarySensitivity);
   setIfPresent("boundary_persistence_px", dom.boundaryPersistence);
@@ -226,6 +227,7 @@ export function buildSettingsTsv({
     ["frame_rows", String(config.frameRows)],
     ["threshold_method", config.thresholdMethod],
     ["threshold_offset", String(config.thresholdOffset)],
+    ["light_on_dark_design", String(config.lightOnDarkDesign)],
     ["search_inset_margin_px", String(config.paperMarginPx)],
     ["boundary_threshold", String(config.boundarySensitivity)],
     ["boundary_persistence_px", String(config.boundaryPersistencePx)],

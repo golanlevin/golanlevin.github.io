@@ -723,6 +723,7 @@ body.has-loaded-image .output-preview.is-empty,
   max-height: 100%;
   width: auto;
   height: auto;
+  object-fit: contain;
 }
 
 .cross-roi-grid {

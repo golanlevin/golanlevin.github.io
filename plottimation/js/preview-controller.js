@@ -8,15 +8,14 @@ import { renderCanvasFit, resizeCanvasToBox } from "./canvas-view.js";
 import { t } from "./i18n.js";
 
 /**
- * Keep the Preview panel title in sync with whether it is showing the live canvas
- * or a completed exported GIF.
+ * Keep the Preview panel title fixed.
  *
  * @param {import("./dom-state.js").dom} dom
  * @param {import("./dom-state.js").state} state
  * @returns {void}
  */
 export function updateAnimationPreviewHeading(dom, state) {
-  dom.animationPreviewHeading.textContent = state.export.url ? t("panels.gifOutput") : t("panels.preview");
+  dom.animationPreviewHeading.textContent = t("panels.preview");
 }
 
 /**

@@ -50,6 +50,11 @@ Notes:
 
 Use `Page & Grid Detection` to help the app find the paper and the outer boundary of the frame grid.
 
+- `Light-on-dark design`
+  Use this when the artwork is made with light ink on dark paper. In `Markers` mode, the app
+  internally inverts the raw photo for page finding and marker localization while keeping the
+  displayed rectified sheet and extracted frames in their original colors. In `Markerless` mode,
+  the same checkbox flips the darkness cue so darker gutters are favored instead of lighter ones.
 - `Thresholding Method`
   Chooses how the grayscale photo is thresholded for page detection.
   - `Offset Peak`
@@ -77,20 +82,36 @@ and the `Page & Grid Detection` header will display a warning mark.
 
 ## Automatic Frame Alignment
 
-Use `Automatic Frame Alignment` to refine the frame corners using the small markers printed between frames.
+Plottimation now supports two different alignment pipelines:
+
+- `Markers (crosses, dots)`
+  Uses printed registration markers between frames.
+- `Markerless (gutters, frames)`
+  Estimates the frame grid without registration markers, using the spacing and gutters between frames.
+
+Use `Alignment Pipeline` to choose between these modes.
+
+### Markers Pipeline
+
+In `Markers` mode, `Automatic Frame Alignment` refines the frame corners using the printed registration markers.
+
+This mode assumes the frames are separated by crosses or dots. If those markers are printed as
+light ink on dark paper, enable `Light-on-dark design` under `Page & Grid Detection`.
 
 - `Alignment Marker Type`
   Chooses the type of registration markers.
+  - `Auto`
+    Tries to determine whether the sheet uses crosses or dots.
   - `Crosses`
-    The currently supported mode.
-  - `Dots (not yet supported)`
-    Present in the UI, but not active in the current detector.
+    Uses cross-shaped markers.
+  - `Dots`
+    Uses dot-shaped markers.
 - `Alignment Marker Region Size`
   Sets the size of the square ROI used to inspect each alignment marker.
 - `Do subpixel alignment using markers`
   When enabled, the app uses the detected markers to refine frame extraction beyond a purely nominal equal-spaced grid.
 - `Detect crosses with convolution`
-  When enabled, each marker ROI is localized using a convolution-based cross detector instead of the default profile-based method.
+  When enabled, each cross-marker ROI is localized using a convolution-based detector instead of the default profile-based method.
 
 The `Frame Alignment Markers` viewer shows the marker ROIs used for this step. Each tile can display:
 
@@ -111,6 +132,54 @@ Manual overrides are also available on desktop:
   Removes all saved marker overrides.
 
 Override edits are saved into exported settings files.
+
+### Markerless Pipeline
+
+In `Markerless` mode, the same control area is renamed `Stabilization`.
+
+This mode assumes:
+
+- the sheet has no registration markers
+- frames are arranged on a straight grid
+- neighboring frames are separated by visible empty gutters
+
+The markerless pipeline estimates a nominal grid automatically, then lets you refine it with post-estimation controls:
+
+- `Search Inset Margin`
+  In markerless mode, this also defines the inset ROI used to seed the autocorrelation search. Large empty page margins can confuse pitch estimation, so increasing this value can help the app ignore blank borders.
+- `Stabilization Strength`
+  Applies translation-only loop stabilization after extraction.
+- `Stabilization Rigidity`
+  Controls how resistant the stabilization solver is to large per-frame corrections.
+- `Horizontal Phase Offset`
+  Shifts the extracted grid left or right relative to the automatically estimated phase.
+- `Vertical Phase Offset`
+  Shifts the extracted grid up or down relative to the automatically estimated phase.
+- `Vertical Drift Compensation`
+  Applies a post-stabilization vertical correction distributed over the animation to counter slow top-to-bottom drift.
+- `Frame Corner Region Size`
+  Sets the size of the square tiles shown in the corner editor. This does not change the extracted frame size.
+
+In markerless mode:
+
+- `Boundary Threshold` and `Boundary Persistence` are hidden
+- the `Rectified Sheet` shows a blue inset rectangle for the current markerless search ROI
+- panel `3` is renamed `Frame Alignment Centers` on desktop and `Centers` on mobile
+
+The `Frame Alignment Centers` viewer shows the current corner locations used for extraction. In markerless mode, these are the stabilized corner positions, not raw marker detections.
+
+Desktop markerless editing:
+
+- `Enable Overrides`
+  Turns on interactive corner editing.
+- drag a corner tile
+  Applies a post-stabilization extraction nudge at that corner.
+- double-click an edited corner
+  Restores it to the current automatic location.
+- `Clear Edits`
+  Removes all saved corner overrides.
+
+Markerless overrides are post-stabilization nudges, so they do not feed back into the stabilization solve itself.
 
 ---
 
@@ -221,17 +290,17 @@ Furthermore:
 
 ## Preview Panel Header Buttons
 
-The `Preview` panel header contains the export actions.
+The `Preview & Export` panel header contains the export actions.
 
 - `Play/Pause`
   Starts or stops the live preview animation.
-- `Export ZIP`
+- `↓ZIP`
   Downloads a ZIP archive containing:
   - PNG frames in a `frames/` folder
   - a settings text file
-- `Export MP4`
+- `↓MP4`
   Downloads an H.264 MP4 when the current browser supports WebCodecs + MP4 muxing.
-- `Export GIF`
+- `↓GIF`
   Generates and downloads an animated GIF.
 
 The exported filename includes:
@@ -256,6 +325,8 @@ Typical messages include:
 - failure details
 
 It also surfaces page-detection failures and other diagnostic information.
+
+The `Enable Tooltips` / `Disable Tooltips` button in the panel header toggles explanatory tooltips for the interface, including pipeline-specific controls in both `Markers` and `Markerless` modes.
 
 ---
 
@@ -300,10 +371,11 @@ The four main viewer panels are:
   Shows the source photo, with the detected page outline drawn in green.
 - `2. Rectified Sheet`
   Shows the rectified page used for frame extraction, along with the current frame quad.
-- `3. Frame Alignment Markers`
-  Shows the marker ROI tiles used for frame alignment.
-- `4. Preview`
-  Shows the live animation preview, or `GIF Output` after a GIF has been exported.
+- `3. Frame Alignment Markers` or `3. Frame Corners`
+  In `Markers` mode, this panel shows the marker ROI tiles used for frame alignment.
+  In `Markerless` mode, it shows the extracted corner tiles used for corner nudging.
+- `4. Preview & Export`
+  Shows the live animation preview and the export controls.
 
 Desktop notes:
 

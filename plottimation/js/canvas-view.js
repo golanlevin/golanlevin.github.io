@@ -4,6 +4,11 @@
  * This module handles simple browser-canvas tasks such as copying images into canvases,
  * resizing preview backing stores to their CSS boxes, and fitting one canvas into another.
  */
+function getDisplayPixelRatio() {
+  const dpr = Number(globalThis.devicePixelRatio) || 1;
+  return Math.max(1, Math.min(2, dpr));
+}
+
 /**
  * Copy an HTML image element into a canvas at native resolution.
  *
@@ -49,8 +54,9 @@ export function renderCanvasFit(sourceCanvas, targetCanvas) {
  */
 export function resizeCanvasToBox(canvas) {
   const box = canvas.getBoundingClientRect();
-  const width = Math.max(1, Math.round(box.width));
-  const height = Math.max(1, Math.round(box.height));
+  const pixelRatio = getDisplayPixelRatio();
+  const width = Math.max(1, Math.round(box.width * pixelRatio));
+  const height = Math.max(1, Math.round(box.height * pixelRatio));
   if ((canvas.width !== width) || (canvas.height !== height)) {
     canvas.width = width;
     canvas.height = height;

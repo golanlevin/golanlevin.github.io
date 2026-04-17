@@ -19,7 +19,17 @@ It now has a first-pass mobile layout in addition to the desktop interface:
 
 ## Active sheet format
 
-The active CV pipeline supports three alignment-marker modes:
+The app now supports two alignment pipelines:
+
+- `Markers`
+  - intended for sheets whose frames are separated by explicit crosses or dots
+  - uses ROI-based marker localization to refine the nominal frame lattice
+- `Markerless`
+  - intended for sheets whose frames are separated by empty gutters and do not use registration marks
+  - estimates a straight frame lattice directly from the rectified sheet
+  - still emits synthetic frame-corner intersections so the existing marker/corner editor can be reused
+
+Within the `Markers` pipeline, the active CV path supports three alignment-marker modes:
 
 - `Crosses`
   - the frame grid is refined from a complete `(cols + 1) x (rows + 1)` lattice of dark `+` markers
@@ -35,8 +45,18 @@ The active CV pipeline supports three alignment-marker modes:
     nominal marker ROIs
   - current threshold: `medianCircularity >= 0.3` resolves to `Dots`
 
+`Light-on-dark design` is now a first-class detection setting shared by both pipelines:
+
+- in `Markers` mode:
+  - the raw input is inverted only for the CV path
+  - page detection, page-warp vision mats, and marker localization all run on that inverted source
+  - styled rectified previews and extracted frames remain in the original colors
+- in `Markerless` mode:
+  - the darkness contribution inside the gutter metric is inverted so darker gutters are favored
+    instead of lighter ones
+
 Legacy `_old` helpers still exist in `js/pipeline.js` for reference, but the active detector path is
-the cross/dot/auto system above.
+the markers system above plus the separate markerless branch.
 
 ## Main directories
 
@@ -301,6 +321,56 @@ Active method:
 4. clamp convolution to `[0,255]`
 5. perform 1D boundary sweeps from each side inside the `Search Inset Margin`
 
+Markerless mode does not use this coarse cross-convolution boundary detector to locate the frame
+grid. It branches earlier, immediately after page rectification.
+
+### 3b. Markerless grid estimation
+
+Markerless mode is implemented as a separate alignment branch, not a small variation of the marker
+pipeline.
+
+What it uses:
+
+- the rectified sheet image
+- `Frame Columns` / `Frame Rows`
+- `Search Inset Margin`
+
+What it does not use:
+
+- `Boundary Threshold`
+- `Boundary Persistence`
+
+Implementation outline:
+
+1. convert the rectified-sheet ROI to grayscale
+2. downsample it to a manageable working size (long edge about `720 px`)
+3. blur it lightly
+4. estimate `pitchX` and `pitchY` from seeded horizontal/vertical autocorrelation
+   - the seed period comes from the inset ROI:
+     - `(rectifiedWidth - 2*searchInsetMargin) / nCols`
+     - `(rectifiedHeight - 2*searchInsetMargin) / nRows`
+5. build 1D gutter profiles from several cues
+   - darkness
+   - edge energy
+   - local variance / texture
+6. estimate the periodic phase of the lattice from those gutter profiles
+7. allow modest replicate padding so the inferred outer frame boundaries may fall slightly outside
+   the visible sheet when a page has been tightly trimmed
+8. emit `(cols + 1) x (rows + 1)` synthetic frame-corner intersections
+
+Important implementation detail:
+
+- markerless mode returns its inferred corners in the same `markerLookup` / ROI-tile structure used
+  by the marker pipeline
+- this is why the app can reuse the existing `Frame Corners` / override UI instead of maintaining a
+  second editing system
+- the gutter support signal currently multiplies its enabled component cues rather than summing them
+  - current default cues are:
+    - darkness
+    - edge / texture
+    - local variance
+  - the phase-support band width is currently fixed at `3 px` in the reduced blurred grayscale image
+
 ### 4. Marker localization
 
 - `Crosses`
@@ -314,13 +384,62 @@ Active method:
 - `Auto`
   - measures median blob circularity first, reports it in Status, then resolves to `Crosses` or `Dots`
 
-### 5. Frame extraction + preview
+Markerless mode does not localize physical markers. Instead it synthesizes one corner position per
+lattice intersection and builds grayscale diagnostic tiles centered on those inferred corners.
+
+### 5. Markerless stabilization and post-extraction nudges
+
+Markerless mode adds a second-stage extraction model after the autocorrelation lattice is estimated.
+
+Stabilization:
+
+- translation only
+- no rotation / scale / shear / perspective correction
+- solved from a small graph of pairwise frame comparisons:
+  - horizontal neighbors within each row
+  - row-break neighbors between rows
+  - vertical neighbors between rows
+  - one weak loop seam from `N-1 -> 0`
+- pairwise shifts are measured on sampled grayscale frames, not full-resolution outputs
+- matching is perimeter-weighted so border content contributes more than the animated center
+- the final per-frame offsets are solved with a regularized least-squares system
+
+Markerless extraction adjustments currently stack in this order:
+
+1. autocorrelation baseline
+2. `Horizontal Phase Offset` / `Vertical Phase Offset`
+3. `Vertical Drift Compensation`
+4. solved stabilization translation
+5. manual `Frame Corners` overrides
+
+Important behavior:
+
+- markerless `Frame Corners` overrides are post-stabilization extraction nudges
+- they must not feed back into the stabilization solve
+
+### 6. Frame extraction + preview
 
 - extraction uses the resolved marker lookup, including dot centroids and manual overrides
 - the `Rectified Sheet` panel now shows the extraction-space rectified canvas directly, so the green
   animated frame quad can be drawn in the same coordinate system without remapping distortions
 - paused arrow-key stepping ignores reverse / boustrophedon / ping-pong ordering and instead inspects
   the physical frame grid directly
+
+Markerless-specific notes:
+
+- `Search Inset Margin` is visualized on `Rectified Sheet` as a blue ROI rectangle
+- `Frame Corners` tiles display the currently shown corner positions after phase offset and
+  stabilization have been applied
+- markerless manual overrides affect only the local extracted frame geometry around the edited
+  corner(s)
+- the left-to-right gutter debug-chart code still exists in `js/app.js` / `js/pipeline.js` but is
+  currently hidden from the UI and no longer toggled by keyboard
+
+Marker-mode note:
+
+- the lightweight `Thresholding Offset` preview in `js/app.js` mirrors the same light-on-dark
+  inversion used by the full marker pipeline, so the Raw Photo page-boundary preview stays
+  consistent while dragging detection controls
 
 ## Internationalization
 
@@ -571,6 +690,27 @@ Desktop viewer panels:
 - `2. Rectified Sheet`
 - `3. Frame Alignment Markers`
 - `4. Preview`
+
+Markerless-mode UI differences:
+
+- the `Alignment Pipeline` radio lives directly under the file target
+- `Light-on-dark design` now lives at the top of `Page & Grid Detection` and is saved as
+  `light_on_dark_design` in settings files
+- the file target guidance changes from crosses/dots to empty gutters
+- `Automatic Frame Alignment` is relabeled to `Stabilization`
+- `Frame Alignment Markers` is relabeled to `Frame Alignment Centers` on desktop and `Centers` on mobile
+- markerless mode hides:
+  - `Alignment Marker Type`
+  - `Boundary Threshold`
+  - `Boundary Persistence`
+- markerless mode shows:
+  - `Stabilization Strength`
+  - `Stabilization Rigidity`
+  - `Horizontal Phase Offset`
+  - `Vertical Phase Offset`
+  - `Vertical Drift Compensation`
+  - `Frame Corner Region Size`
+- `Search Inset Margin` remains visible in markerless mode because it seeds the autocorrelation ROI
 
 Mobile viewer tabs:
 

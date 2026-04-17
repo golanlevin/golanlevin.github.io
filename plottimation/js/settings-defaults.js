@@ -24,6 +24,7 @@ export const SETTINGS_DEFAULTS = {
     alignmentPipeline: "markers",
     thresholdMethod: "offset-peak",
     thresholdOffset: -20,
+    lightOnDarkDesign: false,
     paperMarginPx: 80,
     boundarySensitivity: 8.0,
     boundaryPersistencePx: 7,
@@ -111,6 +112,9 @@ export function applyNonLayoutDefaults(dom) {
   dom.alignmentPipelineMarkerless.checked = SETTINGS_DEFAULTS.detection.alignmentPipeline === "markerless";
   dom.thresholdMethod.value = SETTINGS_DEFAULTS.detection.thresholdMethod;
   dom.thresholdOffset.value = String(SETTINGS_DEFAULTS.detection.thresholdOffset);
+  if (dom.lightOnDarkDesign) {
+    dom.lightOnDarkDesign.checked = SETTINGS_DEFAULTS.detection.lightOnDarkDesign;
+  }
   dom.paperMargin.value = String(SETTINGS_DEFAULTS.detection.paperMarginPx);
   dom.boundarySensitivity.value = SETTINGS_DEFAULTS.detection.boundarySensitivity.toFixed(1);
   dom.boundaryPersistence.value = String(SETTINGS_DEFAULTS.detection.boundaryPersistencePx);
