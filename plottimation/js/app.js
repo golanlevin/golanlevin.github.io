@@ -940,11 +940,14 @@ function clearDerivedPreviews() {
   state.geometry.alignmentInfo = null;
   state.geometry.frameCount = 0;
   state.geometry.manualMarkerOverrides.clear();
+  state.preview.activeEditedMarker = null;
   state.runtime.markerEditingEnabled = false;
   state.runtime.markerBlobDebugVisible = false;
   state.frames.base = [];
   state.frames.stabilizedCache.clear();
+  state.frames.stabilizationMatchData = null;
   state.frames.stabilizationPairwise = null;
+  state.frames.stabilizationAverageReference = null;
   state.frames.stabilizationOffsets = null;
   state.frames.adjustedCache.clear();
   state.preview.frameIndex = 0;
@@ -1019,7 +1022,9 @@ function clearDerivedOutputsForDetectionFailure() {
   state.runtime.markerBlobDebugVisible = false;
   state.frames.base = [];
   state.frames.stabilizedCache.clear();
+  state.frames.stabilizationMatchData = null;
   state.frames.stabilizationPairwise = null;
+  state.frames.stabilizationAverageReference = null;
   state.frames.stabilizationOffsets = null;
   state.frames.adjustedCache.clear();
   state.preview.frameIndex = 0;
@@ -1179,6 +1184,7 @@ function attachUi() {
     scheduleAppearancePreviewUpdate,
     scheduleStabilizationPreviewUpdate,
     scheduleMarkerlessPhasePreviewUpdate,
+    warmCurrentStabilizationMethod: scheduleCurrentStabilizationWarmup,
     beginStabilizationStrengthScrub,
     endStabilizationStrengthScrub,
     beginMarkerlessPhaseScrub,
@@ -1413,6 +1419,7 @@ function resetExportControls() {
 function resetNonLayoutControls() {
   applyNonLayoutDefaults(dom);
   state.geometry.manualMarkerOverrides.clear();
+  state.preview.activeEditedMarker = null;
   state.runtime.markerEditingEnabled = false;
   state.runtime.outputWidthPx = 0;
   state.runtime.outputHeightPx = 0;
@@ -1505,6 +1512,9 @@ function scheduleStabilizationPreviewUpdate() {
  * @returns {void}
  */
 function beginStabilizationStrengthScrub() {
+  if (readConfig().alignmentPipeline === "markerless") {
+    scheduleCurrentStabilizationWarmup();
+  }
   if (state.preview.stabilizationStrengthScrubbing) return;
   state.preview.stabilizationStrengthScrubbing = true;
   if (state.preview.paused) {
@@ -1726,7 +1736,7 @@ function syncRawPhotoFilenameDisplay() {
   dom.rawPhotoName.textContent = shouldEllipsizeRawFilename(fullFilename, availableLinkWidth, font)
     ? truncateMiddleTextToFit(fullFilename, availableLinkWidth, font)
     : fullFilename;
-  dom.rawPhotoName.title = fullFilename;
+  dom.rawPhotoName.title = state.runtime.tooltipsEnabled ? t("tooltip.rawPhotoName") : "";
 }
 
 /**
@@ -1803,6 +1813,7 @@ function scheduleProcess() {
  *   boundarySensitivity:number,
  *   boundaryPersistencePx:number,
  *   alignmentPipeline:string,
+ *   stabilizationMethod:string,
  *   alignmentMarkerType:string,
  *   crossRoiScalePct:number,
  *   crossRoiScale:number,
@@ -1867,10 +1878,13 @@ function readConfig() {
     boundarySensitivity: Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)),
     boundaryPersistencePx: Math.max(1, Math.min(15, Math.round(Number(dom.boundaryPersistence.value) || SETTINGS_DEFAULTS.detection.boundaryPersistencePx))),
     alignmentPipeline: dom.alignmentPipelineMarkerless.checked ? "markerless" : "markers",
+    // The radio group exposes a temporary-friendly UI label, but the config keeps stable internal
+    // ids so settings files and solver branching do not depend on user-facing wording.
+    stabilizationMethod: dom.stabilizationMethodAverage?.checked ? "difference-from-average" : "pairwise-cyclic",
     alignmentMarkerType: dom.alignmentMarkerType.value || "crosses",
     crossRoiScalePct: Math.max(18, Math.min(110, Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct)),
     crossRoiScale: Math.max(0.18, Math.min(1.1, (Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct) / 100)),
-    stabilizationStrength: Math.max(0, Math.min(100, Math.round(Number(dom.stabilizationStrength.value) || SETTINGS_DEFAULTS.detection.stabilizationStrength))),
+    stabilizationStrength: Math.max(0, Math.min(150, Math.round(Number(dom.stabilizationStrength.value) || SETTINGS_DEFAULTS.detection.stabilizationStrength))),
     stabilizationLambda: Math.max(0.001, Math.min(0.1, Number(dom.stabilizationLambda.value) || SETTINGS_DEFAULTS.detection.stabilizationLambda)),
     markerlessPhaseX: Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseX.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseX)),
     markerlessPhaseY: Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseY.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseY)),
@@ -2085,6 +2099,10 @@ function syncAlignmentPipelineLabels(flags) {
     const viewerTabKey = showMarkerlessControls ? "viewerTabs.centers" : "viewerTabs.markers";
     dom.viewerTabMarkers.textContent = t(viewerTabKey);
   }
+  if (dom.mobileControlTabAlignment) {
+    const mobileControlTabKey = showMarkerlessControls ? "mobileControlTabs.stabilize" : "mobileControlTabs.markers";
+    dom.mobileControlTabAlignment.textContent = t(mobileControlTabKey);
+  }
   if (dom.crossRoiScaleLabel) {
     dom.crossRoiScaleLabel.textContent = showMarkerlessControls
       ? t("alignment.frameCornerRoiSize")
@@ -2102,6 +2120,56 @@ function syncAlignmentPipelineLabels(flags) {
   if (markerlessPhaseYLabel) {
     markerlessPhaseYLabel.textContent = t("alignment.markerlessPhaseYOffset");
   }
+  syncAlignmentModeTooltips(showMarkerlessControls);
+}
+
+/**
+ * Keep shared tooltip text aligned with the active pipeline when marker terminology becomes
+ * corner/stabilization terminology in markerless mode.
+ *
+ * @param {boolean} showMarkerlessControls
+ * @returns {void}
+ */
+function syncAlignmentModeTooltips(showMarkerlessControls) {
+  const applyTooltip = (element, key, extraElements = []) => {
+    if (!element) return;
+    const text = t(`tooltip.${key}`);
+    const targets = [element, ...extraElements].filter(Boolean);
+    if (Array.isArray(state.runtime.tooltipRegistry)) {
+      for (const entry of state.runtime.tooltipRegistry) {
+        if (targets.includes(entry[0])) entry[1] = text;
+      }
+    }
+    for (const target of targets) {
+      if (state.runtime.tooltipsEnabled && String(text || "").trim()) {
+        target.title = text;
+      } else {
+        target.removeAttribute("title");
+      }
+    }
+  };
+
+  applyTooltip(
+    document.querySelector("#frameAlignmentSummary"),
+    showMarkerlessControls ? "frameAlignmentSummaryMarkerless" : "frameAlignmentSummary",
+  );
+  applyTooltip(
+    dom.crossRegionsHeading,
+    showMarkerlessControls ? "crossRegionsHeadingMarkerless" : "crossRegionsHeading",
+  );
+  applyTooltip(
+    dom.crossRoiScale,
+    showMarkerlessControls ? "crossRoiScaleMarkerless" : "crossRoiScale",
+    [dom.crossRoiScale?.closest("label")],
+  );
+  applyTooltip(
+    dom.toggleMarkerEditingButton,
+    showMarkerlessControls ? "toggleMarkerEditingButtonMarkerless" : "toggleMarkerEditingButton",
+  );
+  applyTooltip(
+    dom.clearMarkerEditsButton,
+    showMarkerlessControls ? "clearMarkerEditsButtonMarkerless" : "clearMarkerEditsButton",
+  );
 }
 
 /**
@@ -2131,6 +2199,9 @@ function syncAlignmentPipelineVisibility(flags) {
   const { showMarkerlessControls, showMarkersPipelineControls, showCrossOnlyControls } = flags;
   dom.boundarySensitivityRow.hidden = showMarkerlessControls;
   dom.boundaryPersistenceRow.hidden = showMarkerlessControls;
+  if (dom.stabilizationMethodGroup) {
+    dom.stabilizationMethodGroup.hidden = !showMarkerlessControls;
+  }
   dom.alignmentMarkerTypeField.hidden = !showMarkersPipelineControls;
   dom.useCrossAlignmentRow.hidden = showMarkerlessControls;
   dom.detectCrossesWithConvolutionRow.hidden = !showCrossOnlyControls;
@@ -2152,6 +2223,30 @@ function syncAlignmentPipelineVisibility(flags) {
     dom.markerlessUseVarianceRow.hidden = true;
   }
   dom.verticalDriftCompensationRow.hidden = !showMarkerlessControls;
+}
+
+/**
+ * Enable only the stabilization controls that apply to the current markerless method.
+ *
+ * `Stabilization Rigidity` (`lambda`) only affects the pairwise/cyclic least-squares solve. The
+ * alternate average-reference method does not use it, so the slider should be visibly inactive in
+ * that mode to avoid implying that it has any effect.
+ *
+ * @param {{showMarkerlessControls:boolean}} flags
+ * @returns {void}
+ */
+function syncStabilizationMethodUi(flags) {
+  const { showMarkerlessControls } = flags;
+  const usesLambda =
+    showMarkerlessControls &&
+    (dom.stabilizationMethodPairwise?.checked || !dom.stabilizationMethodAverage?.checked);
+  if (dom.stabilizationLambda) {
+    dom.stabilizationLambda.disabled = !usesLambda;
+  }
+  if (dom.stabilizationLambdaRow) {
+    dom.stabilizationLambdaRow.classList.toggle("is-disabled", !usesLambda);
+    dom.stabilizationLambdaRow.setAttribute("aria-disabled", usesLambda ? "false" : "true");
+  }
 }
 
 /**
@@ -2192,6 +2287,7 @@ function syncAlignmentMarkerUi() {
   syncAlignmentPipelineLabels(flags);
   syncAlignmentSliderOrder(flags);
   syncAlignmentPipelineVisibility(flags);
+  syncStabilizationMethodUi(flags);
   resetInactiveAlignmentUiState(flags);
   if (state.runtime.markerlessPhaseDebugVisible) {
     state.runtime.markerlessPhaseDebugVisible = false;
@@ -2264,6 +2360,7 @@ function toggleMarkerlessPhaseDebug() {
 function clearMarkerEdits() {
   if (!state.geometry.manualMarkerOverrides.size) return;
   state.geometry.manualMarkerOverrides.clear();
+  state.preview.activeEditedMarker = null;
   state.runtime.markerEditingEnabled = false;
   const isMarkerless = readConfig().alignmentPipeline === "markerless";
   if (state.geometry.alignmentInfo && !isMarkerless) {
@@ -2381,7 +2478,7 @@ function updateSliderReadouts() {
   )} px`;
   dom.boundarySensitivityValue.textContent = `${Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)).toFixed(1)}`;
   dom.boundaryPersistenceValue.textContent = String(Math.max(1, Math.min(15, Number(dom.boundaryPersistence.value) || SETTINGS_DEFAULTS.detection.boundaryPersistencePx)));
-  dom.stabilizationStrengthValue.textContent = `${Math.max(0, Math.min(100, Math.round(Number(dom.stabilizationStrength.value) || SETTINGS_DEFAULTS.detection.stabilizationStrength)))}%`;
+  dom.stabilizationStrengthValue.textContent = `${Math.max(0, Math.min(150, Math.round(Number(dom.stabilizationStrength.value) || SETTINGS_DEFAULTS.detection.stabilizationStrength)))}%`;
   dom.stabilizationLambdaValue.textContent = `${Math.max(0.001, Math.min(0.1, Number(dom.stabilizationLambda.value) || SETTINGS_DEFAULTS.detection.stabilizationLambda)).toFixed(3)}`;
   dom.markerlessPhaseXValue.textContent = formatSignedDecimal(Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseX.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseX)));
   dom.markerlessPhaseYValue.textContent = formatSignedDecimal(Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseY.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseY)));
@@ -2438,6 +2535,22 @@ function formatSignedValue(value) {
 function formatSignedDecimal(value) {
   const number = Number(value) || 0;
   return `${number >= 0 ? "+" : ""}${number.toFixed(3)}`;
+}
+
+/**
+ * Return an overlay stroke width in backing-store pixels while preserving the intended CSS-pixel
+ * thickness on HiDPI canvases.
+ *
+ * Standard-density screens keep the existing stroke widths. On `devicePixelRatio > 1`, selected
+ * geometry overlays switch to a `1.5 px` visual stroke, which means scaling that width back up
+ * into the canvas backing-store coordinate system.
+ *
+ * @param {number} standardCssPx
+ * @returns {number}
+ */
+function getPanelOverlayStrokeWidth(standardCssPx) {
+  const dpr = Math.max(1, Math.min(2, Number(globalThis.devicePixelRatio) || 1));
+  return dpr > 1 ? (1.5 * dpr) : standardCssPx;
 }
 
 /**
@@ -2629,7 +2742,9 @@ async function processCurrentImage(requestId = state.processing.requestId) {
 
     state.frames.base = result.frames;
     state.frames.stabilizedCache.clear();
+    state.frames.stabilizationMatchData = null;
     state.frames.stabilizationPairwise = null;
+    state.frames.stabilizationAverageReference = null;
     state.frames.stabilizationOffsets = null;
     state.geometry.frameCount = result.frames.length;
     state.geometry.alignmentInfo = result.alignmentInfo;
@@ -2643,7 +2758,9 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     if (state.geometry.manualMarkerOverrides.size > 0) {
       state.frames.base = new Array(result.frames.length);
       state.frames.stabilizedCache.clear();
+      state.frames.stabilizationMatchData = null;
       state.frames.stabilizationPairwise = null;
+      state.frames.stabilizationAverageReference = null;
       state.frames.stabilizationOffsets = null;
     }
     syncAlignmentMarkerUi();
@@ -2737,7 +2854,7 @@ function renderRectifiedPreview(rectifiedCanvas) {
       )
     );
     ctx.strokeStyle = "rgb(0, 90, 220)";
-    ctx.lineWidth = 1;
+    ctx.lineWidth = getPanelOverlayStrokeWidth(1);
     ctx.strokeRect(
       offsetX + (insetPx * scale),
       offsetY + (insetPx * scale),
@@ -2749,7 +2866,7 @@ function renderRectifiedPreview(rectifiedCanvas) {
   if (currentFrameQuad) {
     // Draw the current frame directly in rectified-sheet pixel coordinates.
     ctx.strokeStyle = "rgb(0, 128, 0)";
-    ctx.lineWidth = 1;
+    ctx.lineWidth = getPanelOverlayStrokeWidth(1);
     ctx.beginPath();
     ctx.moveTo(offsetX + currentFrameQuad.tl.x * scale, offsetY + currentFrameQuad.tl.y * scale);
     ctx.lineTo(offsetX + currentFrameQuad.tr.x * scale, offsetY + currentFrameQuad.tr.y * scale);
@@ -2758,6 +2875,7 @@ function renderRectifiedPreview(rectifiedCanvas) {
     ctx.closePath();
     ctx.stroke();
   }
+  drawActiveEditedMarkerEdges(ctx, offsetX, offsetY, scale);
   if (
     config.alignmentPipeline === "markerless" &&
     state.runtime.markerlessPhaseDebugVisible &&
@@ -2968,6 +3086,69 @@ function getCurrentPreviewFrameQuad() {
 }
 
 /**
+ * Resolve one currently displayed alignment point for Rectified Sheet overlays.
+ *
+ * Marker mode reads directly from the live alignment lattice, which already includes in-place
+ * override edits. Markerless mode resolves the current displayed corner position after phase,
+ * stabilization, and any stored post-stabilization manual nudge.
+ *
+ * @param {object} alignmentInfo
+ * @param {number} col
+ * @param {number} row
+ * @returns {{x:number,y:number}}
+ */
+function resolveDisplayedAlignmentPoint(alignmentInfo, col, row) {
+  const key = getMarkerKey(col, row);
+  if (readConfig().alignmentPipeline === "markerless") {
+    const sourceMarker = alignmentInfo?.markerLookup?.get(key);
+    if (sourceMarker) {
+      const displayed = getMarkerlessDisplayedCorner(sourceMarker, col, row, alignmentInfo);
+      return { x: displayed.detectedX, y: displayed.detectedY };
+    }
+  }
+  return resolveFrameMarkerPoint(alignmentInfo, col, row);
+}
+
+/**
+ * Draw the frame-boundary segments incident to the marker/corner currently being edited.
+ *
+ * Only the 2-4 connected lattice edges are drawn so the user can see which local frame boundaries
+ * are moving while dragging an override.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} offsetX
+ * @param {number} offsetY
+ * @param {number} scale
+ * @returns {void}
+ */
+function drawActiveEditedMarkerEdges(ctx, offsetX, offsetY, scale) {
+  const activeMarker = state.preview.activeEditedMarker;
+  const alignmentInfo = state.geometry.alignmentInfo;
+  if (!activeMarker || !alignmentInfo) return;
+
+  const { col, row } = activeMarker;
+  const segments = [];
+  if (col > 0) segments.push([{ col: col - 1, row }, { col, row }]);
+  if (col < alignmentInfo.cols) segments.push([{ col, row }, { col: col + 1, row }]);
+  if (row > 0) segments.push([{ col, row: row - 1 }, { col, row }]);
+  if (row < alignmentInfo.rows) segments.push([{ col, row }, { col, row: row + 1 }]);
+  if (!segments.length) return;
+
+  ctx.save();
+  ctx.strokeStyle = "rgb(0, 128, 0)";
+  ctx.lineWidth = getPanelOverlayStrokeWidth(1);
+  for (const [startMarker, endMarker] of segments) {
+    const start = resolveDisplayedAlignmentPoint(alignmentInfo, startMarker.col, startMarker.row);
+    const end = resolveDisplayedAlignmentPoint(alignmentInfo, endMarker.col, endMarker.row);
+    ctx.beginPath();
+    ctx.moveTo(offsetX + start.x * scale, offsetY + start.y * scale);
+    ctx.lineTo(offsetX + end.x * scale, offsetY + end.y * scale);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
  * Map one point from extraction-rectified coordinates back into the full page-preview warp.
  *
  * @param {{x:number,y:number}} point
@@ -3086,7 +3267,9 @@ function releaseRectifiedCvCache() {
  */
 function invalidateStabilizationCache() {
   state.frames.stabilizedCache.clear();
+  state.frames.stabilizationMatchData = null;
   state.frames.stabilizationPairwise = null;
+  state.frames.stabilizationAverageReference = null;
   state.frames.stabilizationOffsets = null;
   state.frames.adjustedCache.clear();
 }
@@ -3125,7 +3308,9 @@ function invalidateStabilizationOffsetsCache() {
 function invalidateFrameCaches() {
   state.frames.base = new Array(state.geometry.frameCount);
   state.frames.stabilizedCache.clear();
+  state.frames.stabilizationMatchData = null;
   state.frames.stabilizationPairwise = null;
+  state.frames.stabilizationAverageReference = null;
   state.frames.stabilizationOffsets = null;
   state.frames.adjustedCache.clear();
 }
@@ -3219,7 +3404,10 @@ function getAffectedFrameIndicesForMarker(markerCol, markerRow) {
  */
 function invalidateFramesForMarker(markerCol, markerRow) {
   state.frames.stabilizedCache.clear();
+  state.frames.stabilizationMatchData = null;
+  state.frames.stabilizationAverageReference = null;
   state.frames.stabilizationOffsets = null;
+  state.frames.stabilizationPairwise = null;
   state.frames.adjustedCache.clear();
   for (const index of getAffectedFrameIndicesForMarker(markerCol, markerRow)) {
     state.frames.base[index] = undefined;
@@ -3423,9 +3611,31 @@ function collectStabilizationSourceFrames() {
 }
 
 /**
+ * Build or reuse sampled grayscale match data for every pre-stabilization frame.
+ *
+ * Both stabilization methods use the same sampled/periphery-weighted matcher, so this shared cache
+ * avoids rebuilding the reduced luma representation separately for pairwise and average-reference
+ * experiments.
+ *
+ * @returns {{data:Float32Array,weights:Float32Array,width:number,height:number}[] | null}
+ */
+function getStabilizationMatchDataFrames() {
+  const frameCount = state.geometry.frameCount;
+  if (frameCount <= 1) return null;
+  if (state.frames.stabilizationMatchData?.length === frameCount) {
+    return state.frames.stabilizationMatchData;
+  }
+  const frames = collectStabilizationSourceFrames();
+  if (!frames) return null;
+  const matchData = frames.map((frame) => getFrameMatchData(frame));
+  state.frames.stabilizationMatchData = matchData;
+  return matchData;
+}
+
+/**
  * Build one weighted stabilization edge between two frame indices.
  *
- * @param {HTMLCanvasElement[]} frames
+ * @param {Array<HTMLCanvasElement | {data:Float32Array,weights:Float32Array,width:number,height:number}>} frames
  * @param {number} from
  * @param {number} to
  * @param {"horizontal"|"rowBreak"|"vertical"|"seam"} kind
@@ -3528,12 +3738,53 @@ function buildStabilizationGraph(frames) {
   const rows = Math.max(1, alignmentInfo?.rows || Math.ceil(frameCount / cols));
   const edges = [];
   appendHorizontalStabilizationEdges(edges, frames, cols, rows);
+  // Row-break edges keep the solver aware of the scan order jump between the end of one printed
+  // row and the start of the next, but they stay weak enough not to dominate the sheet topology.
   appendRowBreakStabilizationEdges(edges, frames, cols, rows);
   appendVerticalStabilizationEdges(edges, frames, cols, rows);
   if (frameCount > 1) {
     appendSeamStabilizationEdge(edges, frames);
   }
   return edges;
+}
+
+/**
+ * Build or reuse the average-frame grayscale reference used by the alternate stabilization method.
+ *
+ * The reference is the pixelwise mean of all pre-stabilization sampled frames. It intentionally
+ * does not use any stabilized output, so the average template never feeds back on prior results.
+ *
+ * @returns {{data:Float32Array,weights:Float32Array,width:number,height:number} | null}
+ */
+function getAverageReferenceMatchData() {
+  const matchFrames = getStabilizationMatchDataFrames();
+  if (!matchFrames?.length) return null;
+  if (state.frames.stabilizationAverageReference) {
+    return state.frames.stabilizationAverageReference;
+  }
+
+  const first = matchFrames[0];
+  const averageData = new Float32Array(first.data.length);
+  // Build the template from the sampled grayscale match data so this alternate method shares the
+  // same downsampling and periphery weighting as the pairwise matcher.
+  for (const frame of matchFrames) {
+    for (let i = 0; i < averageData.length; i++) {
+      averageData[i] += frame.data[i];
+    }
+  }
+  const divisor = matchFrames.length;
+  for (let i = 0; i < averageData.length; i++) {
+    averageData[i] /= divisor;
+  }
+
+  const reference = {
+    data: averageData,
+    weights: first.weights,
+    width: first.width,
+    height: first.height,
+  };
+  state.frames.stabilizationAverageReference = reference;
+  return reference;
 }
 
 /**
@@ -3561,7 +3812,7 @@ function getStabilizationPairwiseMeasurements() {
     return state.frames.stabilizationPairwise;
   }
 
-  const frames = collectStabilizationSourceFrames();
+  const frames = getStabilizationMatchDataFrames();
   if (!frames) return null;
   const edges = buildStabilizationGraph(frames);
   state.frames.stabilizationPairwise = edges;
@@ -3628,13 +3879,28 @@ function getStabilizationOffsets() {
   if (state.frames.stabilizationOffsets?.length === frameCount) {
     return state.frames.stabilizationOffsets;
   }
-
-  const edges = getStabilizationPairwiseMeasurements();
-  if (!edges?.length) return null;
   const sampleFrame = getStabilizationSourceFrameCanvas(0);
   if (!sampleFrame) return null;
-
-  const offsets = solveStabilizationOffsetField(edges, frameCount);
+  const method = readConfig().stabilizationMethod;
+  let offsets = null;
+  if (method === "difference-from-average") {
+    // The alternate method aligns every frame independently against one shared blurry template
+    // instead of solving a coupled graph over neighbor-to-neighbor comparisons.
+    const reference = getAverageReferenceMatchData();
+    const matchFrames = getStabilizationMatchDataFrames();
+    if (!reference || !matchFrames?.length) return null;
+    offsets = matchFrames.map((frame) => {
+      const shift = estimateLoopPairShift(reference, frame);
+      return { x: shift.dx, y: shift.dy };
+    });
+    centerOffsetsAroundZero(offsets);
+  } else {
+    // The default method keeps the weighted sheet-topology graph and solves one global offset
+    // field, which lets neighboring frames share evidence and regularization.
+    const edges = getStabilizationPairwiseMeasurements();
+    if (!edges?.length) return null;
+    offsets = solveStabilizationOffsetField(edges, frameCount);
+  }
   const { capX, capY } = getStabilizationOffsetCaps(sampleFrame);
   clampOffsetsInPlace(offsets, capX, capY);
   centerOffsetsAroundZero(offsets);
@@ -3652,11 +3918,28 @@ function getStabilizationOffsets() {
 function scheduleMarkerlessStabilizationWarmup(requestId) {
   window.setTimeout(() => {
     if (requestId !== state.processing.requestId) return;
+    scheduleCurrentStabilizationWarmup();
+  }, 0);
+}
+
+/**
+ * Warm whichever markerless stabilization method is currently selected without forcing a full solve.
+ *
+ * This avoids the first stabilization-strength movement from zero having to build all matcher state
+ * synchronously on the slider path.
+ *
+ * @returns {void}
+ */
+function scheduleCurrentStabilizationWarmup() {
+  window.setTimeout(() => {
     if (readConfig().alignmentPipeline !== "markerless") return;
     if (state.processing.active) return;
-    if (state.frames.stabilizationPairwise?.length) return;
     try {
-      getStabilizationPairwiseMeasurements();
+      if (readConfig().stabilizationMethod === "difference-from-average") {
+        getAverageReferenceMatchData();
+      } else if (!state.frames.stabilizationPairwise?.length) {
+        getStabilizationPairwiseMeasurements();
+      }
     } catch (error) {
       console.error(error);
     }
@@ -3698,8 +3981,19 @@ function getStabilizedFrameCanvas(index) {
   const baseFrame = getBaseFrameCanvas(index);
   if (!baseFrame) return null;
   const strength = readConfig().stabilizationStrength;
-  if (strength <= 0) return baseFrame;
+  const isMarkerless = readConfig().alignmentPipeline === "markerless";
+  if (strength <= 0 && !isMarkerless) return baseFrame;
   if (state.frames.stabilizedCache.has(index)) return state.frames.stabilizedCache.get(index);
+
+  if (strength <= 0) {
+    // Keep markerless preview continuous at exactly 0% strength by using the same extraction path
+    // as the stabilized branch, just with a zero translation. Otherwise 0% can jump to the older
+    // precomputed pipeline frame instead of smoothly converging to the same result.
+    const unstabilized = extractProcessedFrameCanvas(index, { x: 0, y: 0 });
+    if (!unstabilized) return baseFrame;
+    state.frames.stabilizedCache.set(index, unstabilized);
+    return unstabilized;
+  }
 
   const offsets = getStabilizationOffsets();
   if (!offsets || !offsets[index]) return baseFrame;
@@ -3896,13 +4190,13 @@ function getAdjustedFrameCanvas(index) {
  * is perimeter-weighted so relatively static border content influences the match more than the
  * animated center of the frame.
  *
- * @param {HTMLCanvasElement} currentFrame
- * @param {HTMLCanvasElement} nextFrame
+ * @param {HTMLCanvasElement | {data:Float32Array,weights:Float32Array,width:number,height:number}} currentFrame
+ * @param {HTMLCanvasElement | {data:Float32Array,weights:Float32Array,width:number,height:number}} nextFrame
  * @returns {{dx:number, dy:number}}
  */
 function estimateLoopPairShift(currentFrame, nextFrame) {
-  const currentData = getFrameMatchData(currentFrame);
-  const nextData = getFrameMatchData(nextFrame);
+  const currentData = currentFrame?.data instanceof Float32Array ? currentFrame : getFrameMatchData(currentFrame);
+  const nextData = nextFrame?.data instanceof Float32Array ? nextFrame : getFrameMatchData(nextFrame);
   const maxShiftX = Math.min(10, Math.floor(currentData.width / 2));
   const maxShiftY = Math.min(10, Math.floor(currentData.height / 2));
   let bestDx = 0;
@@ -4561,7 +4855,7 @@ function renderRawPreview() {
   const offsetY = (targetCanvas.height - drawH) * 0.5;
   ctx.save();
   ctx.strokeStyle = "rgba(0, 255, 0, 0.8)";
-  ctx.lineWidth = 3;
+  ctx.lineWidth = getPanelOverlayStrokeWidth(3);
   ctx.beginPath();
   for (let i = 0; i < state.source.rawPageContour.length; i++) {
     const pt = state.source.rawPageContour[i];
@@ -4624,6 +4918,7 @@ function applyMarkerOverride(tile, local, finalize) {
   } else {
     state.geometry.manualMarkerOverrides.set(key, { x: detectedX, y: detectedY });
   }
+  state.preview.activeEditedMarker = finalize ? null : { col: tile.col, row: tile.row };
   if (state.geometry.alignmentInfo && !isMarkerless) {
     // Manual overrides patch the already-detected alignment object in place, which lets preview/extraction
     // update lazily from the edited marker positions without another CV pass.
@@ -4667,6 +4962,7 @@ function applyMarkerOverride(tile, local, finalize) {
 function restoreMarkerOverride(tile) {
   const key = getMarkerKey(tile.col, tile.row);
   state.geometry.manualMarkerOverrides.delete(key);
+  state.preview.activeEditedMarker = null;
   const isMarkerless = readConfig().alignmentPipeline === "markerless";
   if (state.geometry.alignmentInfo && !isMarkerless) {
     const marker = state.geometry.alignmentInfo.markerLookup.get(key);

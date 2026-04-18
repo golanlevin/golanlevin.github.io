@@ -103,6 +103,41 @@ function attachAlignmentPipelineControls({
   });
 }
 
+function attachStabilizationMethodControls({
+  dom,
+  revokeGifUrl,
+  updateSliderReadouts,
+  invalidateStabilizationCache,
+  scheduleStabilizationPreviewUpdate,
+  syncAlignmentMarkerUi,
+  warmCurrentStabilizationMethod,
+}) {
+  const alignmentDom = dom.alignment;
+  [alignmentDom.stabilizationMethodPairwise, alignmentDom.stabilizationMethodAverage].forEach((input) => {
+    if (!input) return;
+    input.addEventListener("input", () => {
+      // Switching methods changes which stabilization caches are valid, so invalidate them
+      // immediately and warm the newly selected path before the user starts dragging strength.
+      syncAlignmentMarkerUi();
+      revokeGifUrl();
+      updateSliderReadouts();
+      invalidateStabilizationCache();
+      warmCurrentStabilizationMethod();
+      scheduleStabilizationPreviewUpdate();
+    });
+    input.addEventListener("change", () => {
+      // Mirror the input-path invalidation on committed changes so keyboard and pointer flows stay
+      // consistent.
+      syncAlignmentMarkerUi();
+      revokeGifUrl();
+      updateSliderReadouts();
+      invalidateStabilizationCache();
+      warmCurrentStabilizationMethod();
+      scheduleStabilizationPreviewUpdate();
+    });
+  });
+}
+
 function attachAlignmentMarkerTypeControls({
   dom,
   state,
@@ -328,6 +363,7 @@ function attachMarkerlessPhaseMetricToggles({
  *   scheduleAppearancePreviewUpdate: (includeRectified?: boolean) => void,
  *   scheduleStabilizationPreviewUpdate: () => void,
  *   scheduleMarkerlessPhasePreviewUpdate: () => void,
+ *   warmCurrentStabilizationMethod: () => void,
  *   beginStabilizationStrengthScrub: () => void,
  *   endStabilizationStrengthScrub: () => void,
  *   beginMarkerlessPhaseScrub: () => void,
@@ -380,6 +416,7 @@ export function attachUi({
   scheduleAppearancePreviewUpdate,
   scheduleStabilizationPreviewUpdate,
   scheduleMarkerlessPhasePreviewUpdate,
+  warmCurrentStabilizationMethod,
   beginStabilizationStrengthScrub,
   endStabilizationStrengthScrub,
   beginMarkerlessPhaseScrub,
@@ -526,6 +563,15 @@ export function attachUi({
     updateSliderReadouts,
     scheduleProcess,
     syncAlignmentMarkerUi,
+  });
+  attachStabilizationMethodControls({
+    dom,
+    revokeGifUrl,
+    updateSliderReadouts,
+    invalidateStabilizationCache,
+    scheduleStabilizationPreviewUpdate,
+    syncAlignmentMarkerUi,
+    warmCurrentStabilizationMethod,
   });
   attachAlignmentMarkerTypeControls({
     dom,

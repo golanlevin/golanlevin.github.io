@@ -22,6 +22,7 @@ export const SETTINGS_DEFAULTS = {
   },
   detection: {
     alignmentPipeline: "markers",
+    stabilizationMethod: "pairwise-cyclic",
     thresholdMethod: "offset-peak",
     thresholdOffset: -20,
     lightOnDarkDesign: false,
@@ -110,6 +111,12 @@ export function applyCropGeometryDefaults(dom) {
 export function applyNonLayoutDefaults(dom) {
   dom.alignmentPipelineMarkers.checked = SETTINGS_DEFAULTS.detection.alignmentPipeline === "markers";
   dom.alignmentPipelineMarkerless.checked = SETTINGS_DEFAULTS.detection.alignmentPipeline === "markerless";
+  if (dom.stabilizationMethodPairwise) {
+    dom.stabilizationMethodPairwise.checked = SETTINGS_DEFAULTS.detection.stabilizationMethod === "pairwise-cyclic";
+  }
+  if (dom.stabilizationMethodAverage) {
+    dom.stabilizationMethodAverage.checked = SETTINGS_DEFAULTS.detection.stabilizationMethod === "difference-from-average";
+  }
   dom.thresholdMethod.value = SETTINGS_DEFAULTS.detection.thresholdMethod;
   dom.thresholdOffset.value = String(SETTINGS_DEFAULTS.detection.thresholdOffset);
   if (dom.lightOnDarkDesign) {

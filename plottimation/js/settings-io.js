@@ -129,6 +129,12 @@ export function applyLoadedSettingsText({
     (pipeline !== "markers" && markerType === "none");
   dom.alignmentPipelineMarkerless.checked = useMarkerlessPipeline;
   dom.alignmentPipelineMarkers.checked = !useMarkerlessPipeline;
+  const stabilizationMethod = entries.get("stabilization_method");
+  if (dom.stabilizationMethodAverage && dom.stabilizationMethodPairwise) {
+    const useAverageMethod = stabilizationMethod === "difference-from-average";
+    dom.stabilizationMethodAverage.checked = useAverageMethod;
+    dom.stabilizationMethodPairwise.checked = !useAverageMethod;
+  }
   dom.alignmentMarkerType.value =
     markerType === "auto" || markerType === "circles" || markerType === "crosses"
       ? markerType
@@ -232,6 +238,7 @@ export function buildSettingsTsv({
     ["boundary_threshold", String(config.boundarySensitivity)],
     ["boundary_persistence_px", String(config.boundaryPersistencePx)],
     ["alignment_pipeline", String(config.alignmentPipeline)],
+    ["stabilization_method", String(config.stabilizationMethod)],
     ["alignment_marker_type", config.alignmentMarkerType],
     ["alignment_marker_region_scale_pct", String(config.crossRoiScalePct)],
     ["stabilization_strength", String(config.stabilizationStrength)],

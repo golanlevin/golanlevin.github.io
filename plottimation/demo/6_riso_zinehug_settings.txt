@@ -7,13 +7,15 @@ frame_cols	5
 frame_rows	6
 threshold_method	offset-peak
 threshold_offset	-20
+light_on_dark_design	false
 search_inset_margin_px	0
 boundary_threshold	8
 boundary_persistence_px	7
 alignment_pipeline	markerless
+stabilization_method	difference-from-average
 alignment_marker_type	auto
 alignment_marker_region_scale_pct	52
-stabilization_strength	100
+stabilization_strength	140
 stabilization_lambda	0.006
 markerless_phase_x	0.015
 markerless_phase_y	0.005

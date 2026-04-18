@@ -1,7 +1,7 @@
 # Plottimation Tool
 
 [This free tool](https://golanlevin.github.io/plottimation/) builds a looping animation from a photograph of a plotted frame-sheet.<br/>
-Version 1.11 • By @GolanLevin, Spring 2026.
+Version 1.12 • By @GolanLevin, Spring 2026.
 
 * [**Plottimation Tool Online Here**](https://golanlevin.github.io/plottimation/)
 * [**Quickstart Instructions**](#quickstart-instructions) (below)

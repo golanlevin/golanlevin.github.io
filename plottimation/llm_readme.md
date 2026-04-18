@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`plottimation_webtool/` is a browser-based tool for turning a photo or scan of a plotted frame-sheet into:
+`plottimation_webtool/` is a browser-based tool for turning a photo or scan of a frame-sheet into:
 
 - a live animated preview
 - an exported animated GIF
@@ -73,11 +73,11 @@ the markers system above plus the separate markerless branch.
 
 - `demo/index.json`
   Demo-image manifest for the `Load Demo` pulldown.
-- `js/opencv.js`
+- `js/vendor/opencv.js`
   Local OpenCV runtime.
-- `js/gif.js`
+- `js/vendor/gif.js`
   Local GIF encoder frontend.
-- `js/gif.worker.js`
+- `js/vendor/gif.worker.js`
   Local GIF worker.
 - `js/vendor/mp4-muxer.esm.js`
   Vendored MP4 muxer used with `WebCodecs` for offline MP4 export.
@@ -395,14 +395,27 @@ Stabilization:
 
 - translation only
 - no rotation / scale / shear / perspective correction
-- solved from a small graph of pairwise frame comparisons:
-  - horizontal neighbors within each row
-  - row-break neighbors between rows
-  - vertical neighbors between rows
-  - one weak loop seam from `N-1 -> 0`
-- pairwise shifts are measured on sampled grayscale frames, not full-resolution outputs
-- matching is perimeter-weighted so border content contributes more than the animated center
-- the final per-frame offsets are solved with a regularized least-squares system
+- the UI now exposes two markerless stabilization methods:
+  - `Neighbor Comparison`
+    - internal id: `pairwise-cyclic`
+    - solves one regularized global offset field from a small graph of frame comparisons:
+      - horizontal neighbors within each row
+      - row-break neighbors between rows
+      - vertical neighbors between rows
+      - one weak loop seam from `N-1 -> 0`
+  - `Average-Frame Comparison`
+    - internal id: `difference-from-average`
+    - builds one blurry grayscale average frame from all pre-stabilization sampled frames
+    - aligns each frame independently against that shared reference
+- both methods reuse the same sampled grayscale matcher:
+  - comparisons run on reduced grayscale frames, not full-resolution outputs
+  - matching is perimeter-weighted so border content contributes more than the animated center
+- both methods zero-center their solved offsets and then clamp them before final extraction
+- `Stabilization Rigidity` only affects `Neighbor Comparison`; it is not used by
+  `Average-Frame Comparison`
+- settings files now persist the selected method as:
+  - `stabilization_method\tpairwise-cyclic`
+  - or `stabilization_method\tdifference-from-average`
 
 Markerless extraction adjustments currently stack in this order:
 
@@ -610,7 +623,7 @@ Interpretation:
 
 ## GIF export
 
-GIF export still uses local `gif.js` + `gif.worker.js`.
+GIF export still uses local `js/vendor/gif.js` + `js/vendor/gif.worker.js`.
 
 Notes:
 
@@ -804,22 +817,5 @@ The refactor into:
 
 was done partly to make this future work easier.
 
-## Likely future work (To do)
+---
 
-- Handle removal of blue-pencil guides
-- Handle light-on-dark source images
-- Add a markerless frame-alignment branch
-  - intended use case: sheets with no cross/dot registration marks, only known `rows` and `cols`
-  - proposed approach:
-    - rectify the page as usual
-    - build a low-resolution blurred working image
-    - estimate `pitchX` and `pitchY` from seeded horizontal/vertical autocorrelation near the nominal cell spacing
-    - estimate `phaseX` and `phaseY` from low-energy row/column profiles near the nominal boundary locations
-    - construct a straight rectangular grid from that pitch/phase solution
-  - rationale:
-    - does not require visible gutters
-    - assumes neighboring animation frames are approximately correlated
-    - avoids the current marker-localization path entirely
-  - cautions:
-    - constrain lag search tightly around the user-seeded nominal spacing to avoid locking onto harmonics or repeated internal motifs
-    - treat this as a separate alignment mode, not a small variation of the marker pipeline

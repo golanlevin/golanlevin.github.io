@@ -325,7 +325,7 @@ export async function exportGif(deps) {
     repeat: 0,
     dither: config.exportOptions.dither,
     globalPalette: config.exportOptions.globalPalette,
-    workerScript: "js/gif.worker.js",
+    workerScript: "js/vendor/gif.worker.js",
   });
 
   const delay = Math.max(1, Math.round(1000 / config.fps));

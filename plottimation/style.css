@@ -295,6 +295,12 @@ html[lang]:not([lang="en"]) #statusText {
   font-size: 0.86rem;
 }
 
+.slider-stack label.is-disabled,
+.stack-label.is-disabled,
+.toggle.is-disabled {
+  opacity: 0.45;
+}
+
 .stack-label {
   display: grid;
   gap: 7px;

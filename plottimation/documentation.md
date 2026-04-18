@@ -16,7 +16,6 @@
 * [Sibling Settings Files](#sibling-settings-files)
 * [Language Selection](#language-selection)
 
-
 ---
 
 ## Layout
@@ -147,16 +146,22 @@ The markerless pipeline estimates a nominal grid automatically, then lets you re
 
 - `Search Inset Margin`
   In markerless mode, this also defines the inset ROI used to seed the autocorrelation search. Large empty page margins can confuse pitch estimation, so increasing this value can help the app ignore blank borders.
+- `Stabilization Method`
+  Chooses between the two translation-only stabilization strategies:
+  - `Neighbor Comparison`
+    Compares frames against neighboring frames in the sheet/loop and solves one weighted global offset field.
+  - `Average-Frame Comparison`
+    Compares each frame independently against a single blurry average frame built from the whole animation.
 - `Stabilization Strength`
-  Applies translation-only loop stabilization after extraction.
+  Applies more or less of the solved translation correction after extraction. This now ranges from `0%` to `150%`, so values above `100%` deliberately overshoot the solved correction.
 - `Stabilization Rigidity`
-  Controls how resistant the stabilization solver is to large per-frame corrections.
+  Controls how resistant the neighbor-comparison solver is to large per-frame corrections. This control is inactive when `Average-Frame Comparison` is selected.
 - `Horizontal Phase Offset`
   Shifts the extracted grid left or right relative to the automatically estimated phase.
 - `Vertical Phase Offset`
   Shifts the extracted grid up or down relative to the automatically estimated phase.
 - `Vertical Drift Compensation`
-  Applies a post-stabilization vertical correction distributed over the animation to counter slow top-to-bottom drift.
+  Applies a post-stabilization vertical correction distributed smoothly over the full animation to counter slow top-to-bottom drift.
 - `Frame Corner Region Size`
   Sets the size of the square tiles shown in the corner editor. This does not change the extracted frame size.
 
@@ -164,7 +169,8 @@ In markerless mode:
 
 - `Boundary Threshold` and `Boundary Persistence` are hidden
 - the `Rectified Sheet` shows a blue inset rectangle for the current markerless search ROI
-- panel `3` is renamed `Frame Alignment Centers` on desktop and `Centers` on mobile
+- panel `3` is renamed `Frame Alignment Centers` on desktop and `Corners` on mobile
+- the mobile `Markers` control tab is renamed `Stabilize`
 
 The `Frame Alignment Centers` viewer shows the current corner locations used for extraction. In markerless mode, these are the stabilized corner positions, not raw marker detections.
 
@@ -180,6 +186,16 @@ Desktop markerless editing:
   Removes all saved corner overrides.
 
 Markerless overrides are post-stabilization nudges, so they do not feed back into the stabilization solve itself.
+
+Technical summary:
+
+- markerless pitch is estimated from a reduced blurred grayscale version of the rectified sheet
+- phase is estimated from a gutter-support metric built from:
+  - darkness
+  - texture / edge energy
+  - variance
+- the gutter-support cues are currently combined multiplicatively, which helps emphasize positions where all cues agree on a likely gutter
+- stabilization remains translation-only throughout; no rotation, scale, shear, or perspective correction is applied
 
 ---
 
@@ -328,38 +344,6 @@ It also surfaces page-detection failures and other diagnostic information.
 
 The `Enable Tooltips` / `Disable Tooltips` button in the panel header toggles explanatory tooltips for the interface, including pipeline-specific controls in both `Markers` and `Markerless` modes.
 
----
-
-## Language Selection
-
-The app supports automatic localization.
-
-- By default, it uses the language preferences reported by your browser.
-- If the browser prefers a supported language, the interface will switch automatically.
-- If no supported language is detected, the app falls back to English.
-
-You can also force a specific language with the page URL:
-
-- `?lang=en` for English
-- `?lang=fr` for French
-- `?lang=es` for Spanish
-- `?lang=it` for Italian
-- `?lang=ja` for Japanese
-- `?lang=zh` for Simplified Chinese
-- `?lang=zh-hant` for Traditional Chinese
-- `?lang=ko` for Korean
-- `?lang=pt` for Portuguese
-- `?lang=de` for German
-- `?lang=pl` for Polish
-- `?lang=nb` for Norwegian Bokmal
-- `?lang=uk` for Ukrainian
-
-The `?lang=` query parameter overrides browser-language detection.
-
-Examples:
-
-- `.../plottimation_webtool/?lang=en`
-- `.../plottimation_webtool/?lang=fr`
 
 ---
 
@@ -384,7 +368,8 @@ Desktop notes:
 
 Mobile notes:
 
-- the interface switches to a single-column layout with tabs for `Raw`, `Rectified`, `Markers`, and `Preview`
+- the interface switches to a single-column layout with tabs for `Raw`, `Rectified`, `Markers`/`Corners`, and `Preview`
+- in markerless mode, the third mobile control tab is renamed `Stabilize`
 - some advanced controls are hidden
 - the marker panel is read-only
 - the `Status` panel moves to the bottom
@@ -423,3 +408,38 @@ Important:
 
 - pressing `Reset` restores built-in defaults, not values from a loaded settings file
 - if you choose a lone local image file from the browser file picker, the browser does not let the app inspect the rest of that directory automatically, so a sibling settings file may need to be provided separately
+
+---
+
+## Language Selection
+
+The app supports automatic localization.
+
+- By default, it uses the language preferences reported by your browser.
+- If the browser prefers a supported language, the interface will switch automatically.
+- If no supported language is detected, the app falls back to English.
+
+You can also force a specific language with the page URL:
+
+- `?lang=en` for English
+- `?lang=fr` for French
+- `?lang=es` for Spanish
+- `?lang=it` for Italian
+- `?lang=ja` for Japanese
+- `?lang=zh` for Simplified Chinese
+- `?lang=zh-hant` for Traditional Chinese
+- `?lang=ko` for Korean
+- `?lang=pt` for Portuguese
+- `?lang=de` for German
+- `?lang=pl` for Polish
+- `?lang=nb` for Norwegian Bokmal
+- `?lang=uk` for Ukrainian
+
+The `?lang=` query parameter overrides browser-language detection.
+
+Examples:
+
+- `.../plottimation_webtool/?lang=en`
+- `.../plottimation_webtool/?lang=fr`
+
+---
