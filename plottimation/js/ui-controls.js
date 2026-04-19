@@ -267,6 +267,7 @@ function attachMarkerlessPhaseControls({
   dom,
   beginMarkerlessPhaseScrub,
   endMarkerlessPhaseScrub,
+  setGeometryProcessingCursor,
   revokeGifUrl,
   updateSliderReadouts,
   invalidateCurrentPreviewFrameCaches,
@@ -294,9 +295,13 @@ function attachMarkerlessPhaseControls({
     input.addEventListener("change", () => {
       revokeGifUrl();
       updateSliderReadouts();
-      invalidateFrameCaches();
-      drawCurrentGifPreview();
-      endMarkerlessPhaseScrub();
+      setGeometryProcessingCursor(true);
+      requestAnimationFrame(() => {
+        invalidateFrameCaches();
+        drawCurrentGifPreview();
+        endMarkerlessPhaseScrub();
+        setGeometryProcessingCursor(false);
+      });
     });
   });
 }
@@ -368,6 +373,7 @@ function attachMarkerlessPhaseMetricToggles({
  *   endStabilizationStrengthScrub: () => void,
  *   beginMarkerlessPhaseScrub: () => void,
  *   endMarkerlessPhaseScrub: () => void,
+ *   setGeometryProcessingCursor: (active:boolean) => void,
  *   cancelInFlightProcessing: () => void,
  *   invalidateFrameCaches: () => void,
  *   drawCurrentGifPreview: () => void,
@@ -422,6 +428,7 @@ export function attachUi({
   endStabilizationStrengthScrub,
   beginMarkerlessPhaseScrub,
   endMarkerlessPhaseScrub,
+  setGeometryProcessingCursor,
   cancelInFlightProcessing,
   invalidateFrameCaches,
   drawCurrentGifPreview,
@@ -687,6 +694,7 @@ export function attachUi({
     dom,
     beginMarkerlessPhaseScrub,
     endMarkerlessPhaseScrub,
+    setGeometryProcessingCursor,
     revokeGifUrl,
     updateSliderReadouts,
     invalidateCurrentPreviewFrameCaches,

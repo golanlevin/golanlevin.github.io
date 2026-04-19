@@ -1239,6 +1239,7 @@ function attachUi() {
     endStabilizationStrengthScrub,
     beginMarkerlessPhaseScrub,
     endMarkerlessPhaseScrub,
+    setGeometryProcessingCursor,
     cancelInFlightProcessing,
     invalidateFrameCaches,
     drawCurrentGifPreview,
