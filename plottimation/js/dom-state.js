@@ -159,6 +159,7 @@ const domGroups = {
   exportOptions: {
     fps: q("#fps"),
     loopCount: q("#loopCount"),
+    frameCountToExport: q("#frameCountToExport"),
     outputWidth: q("#outputWidth"),
     outputHeight: q("#outputHeight"),
     gifQuality: q("#gifQuality"),
@@ -241,6 +242,7 @@ export const state = {
     outputSizeAuto: true,
     outputSizeAnchor: "auto",
     pendingOutputScale: null,
+    lastFrameExportCountMax: 20,
     mp4ExportSupported: false,
     mp4Codec: "avc1.42001f",
     mobileSingleViewerMode: false,

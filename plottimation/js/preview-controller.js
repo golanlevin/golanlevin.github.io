@@ -41,7 +41,7 @@ export function updatePreviewPlayPauseButton(dom, state) {
  * @returns {number}
  */
 export function getOrderedFrameCount(state, readConfig) {
-  const frameCount = state.geometry.frameCount;
+  const frameCount = getIncludedSourceFrameCount(state, readConfig);
   if (frameCount <= 0) return 0;
   if (readConfig().exportOptions.pingPong) {
     return (frameCount <= 1) ? frameCount : ((frameCount * 2) - 2);
@@ -59,10 +59,10 @@ export function getOrderedFrameCount(state, readConfig) {
  * @returns {number}
  */
 export function getOrderedFrameIndex(previewIndex, state, readConfig) {
-  const frameCount = state.geometry.frameCount;
+  const orderedSources = getBaseOrderedSourceFrameIndices(state, readConfig);
+  const frameCount = orderedSources.length;
   if (frameCount <= 0) return 0;
   const exportOptions = readConfig().exportOptions;
-  const cols = Math.max(1, state.geometry.alignmentInfo?.cols || 1);
   const orderedFrameCount = getOrderedFrameCount(state, readConfig);
   const clamped = ((previewIndex % orderedFrameCount) + orderedFrameCount) % orderedFrameCount;
   let sequencePosition = clamped;
@@ -71,16 +71,58 @@ export function getOrderedFrameIndex(previewIndex, state, readConfig) {
       ? clamped
       : ((frameCount - 2) - (clamped - frameCount));
   }
-  const orderedPosition = exportOptions.reverseOrder
-    ? (frameCount - 1 - sequencePosition)
-    : sequencePosition;
-  if (!exportOptions.boustrophedonOrder) {
-    return orderedPosition;
+  return orderedSources[sequencePosition] ?? 0;
+}
+
+/**
+ * Clamp the user-requested export/playback frame count to the number of extracted source cells.
+ *
+ * @param {import("./dom-state.js").state} state
+ * @param {() => ReturnType<import("./app.js")["readConfig"]>} readConfig
+ * @returns {number}
+ */
+function getIncludedSourceFrameCount(state, readConfig) {
+  const sourceFrameCount = Math.max(0, state.geometry.frameCount || 0);
+  if (sourceFrameCount <= 0) return 0;
+  const requested = Math.round(Number(readConfig().exportOptions.frameCountToExport) || sourceFrameCount);
+  return Math.max(1, Math.min(sourceFrameCount, requested));
+}
+
+/**
+ * Build the one-loop ordered list of source-frame indices after omission, boustrophedon ordering,
+ * and reverse order have been applied.
+ *
+ * @param {import("./dom-state.js").state} state
+ * @param {() => ReturnType<import("./app.js")["readConfig"]>} readConfig
+ * @returns {number[]}
+ */
+function getBaseOrderedSourceFrameIndices(state, readConfig) {
+  const exportOptions = readConfig().exportOptions;
+  const frameCount = getIncludedSourceFrameCount(state, readConfig);
+  if (frameCount <= 0) return [];
+  const cols = Math.max(1, state.geometry.alignmentInfo?.cols || 1);
+  const ordered = [];
+  if (exportOptions.boustrophedonOrder) {
+    for (let rowStart = 0, row = 0; rowStart < frameCount; rowStart += cols, row += 1) {
+      const rowEnd = Math.min(frameCount, rowStart + cols);
+      const rowIndices = [];
+      for (let index = rowStart; index < rowEnd; index += 1) {
+        rowIndices.push(index);
+      }
+      if (row % 2 === 1) {
+        rowIndices.reverse();
+      }
+      ordered.push(...rowIndices);
+    }
+  } else {
+    for (let index = 0; index < frameCount; index += 1) {
+      ordered.push(index);
+    }
   }
-  const row = Math.floor(orderedPosition / cols);
-  const col = orderedPosition % cols;
-  const sourceCol = (row % 2 === 1) ? (cols - 1 - col) : col;
-  return (row * cols) + sourceCol;
+  if (exportOptions.reverseOrder) {
+    ordered.reverse();
+  }
+  return ordered;
 }
 
 /**

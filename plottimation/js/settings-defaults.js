@@ -60,6 +60,7 @@ export const SETTINGS_DEFAULTS = {
   gifExport: {
     fps: 20,
     loopCount: 1,
+    frameCountToExport: 0,
     reverseOrder: false,
     boustrophedonOrder: false,
     pingPong: false,
@@ -142,6 +143,9 @@ export function applyNonLayoutDefaults(dom) {
 
   dom.fps.value = String(SETTINGS_DEFAULTS.gifExport.fps);
   dom.loopCount.value = String(SETTINGS_DEFAULTS.gifExport.loopCount);
+  if (dom.frameCountToExport) {
+    dom.frameCountToExport.value = "";
+  }
   dom.reverseOrder.checked = SETTINGS_DEFAULTS.gifExport.reverseOrder;
   dom.boustrophedonOrder.checked = SETTINGS_DEFAULTS.gifExport.boustrophedonOrder;
   dom.pingPong.checked = SETTINGS_DEFAULTS.gifExport.pingPong;

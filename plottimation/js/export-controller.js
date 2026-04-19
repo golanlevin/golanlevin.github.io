@@ -363,7 +363,7 @@ export async function exportGif(deps) {
       } else if (delivery === "canceled") {
         setStatus(t("status.gifReadyCanceled"));
       } else {
-        setStatus(t("status.gifReadyFrameCount", { count: state.geometry.frameCount }));
+        setStatus(t("status.gifReadyFrameCount", { count: orderedFrameCount }));
       }
     })();
   });

@@ -324,6 +324,10 @@ separated by small crosses or dots.</span>
             <span data-i18n="export.summary">Export Options</span>
             <button id="resetExportButton" class="summary-button" type="button" data-i18n="export.reset">Reset</button>
           </summary>
+          <label id="fpsRow" class="stack-label">
+            <span data-i18n="export.frameRate">Frame Rate</span>
+            <input id="fps" type="number" min="1" max="60" step="1" value="20" />
+          </label>
           <div class="field-grid">
             <label>
               <span data-i18n="export.outputWidth">Output Width</span>
@@ -335,9 +339,9 @@ separated by small crosses or dots.</span>
             </label>
           </div>
           <div class="field-grid">
-            <label>
-              <span data-i18n="export.frameRate">Frame Rate</span>
-              <input id="fps" type="number" min="1" max="60" step="1" value="20" />
+            <label id="frameCountToExportRow">
+              <span data-i18n="export.frameCountToExport">Frames in Export</span>
+              <input id="frameCountToExport" type="number" min="1" max="20" step="1" value="20" />
             </label>
             <label id="loopCountRow">
               <span data-i18n="export.loopCount">Loops in Export</span>

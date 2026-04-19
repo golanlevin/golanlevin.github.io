@@ -1,22 +1,23 @@
 # Plottimation Tool
 
-[This free tool](https://golanlevin.github.io/plottimation/) builds a looping animation from a photograph of a plotted frame-sheet.<br/>
+[This free tool](https://golanlevin.github.io/plottimation/) builds a looping animation from a scan or photograph of a frame-sheet.<br/>
 Version 1.12 • By @GolanLevin, Spring 2026.
 
 * [**Plottimation Tool Online Here**](https://golanlevin.github.io/plottimation/)
 * [**Quickstart Instructions**](#quickstart-instructions) (below)
-* [p5.js Code](https://editor.p5js.org/golan/sketches/_ZMbagYFc) • [Design Templates](templates/README.md) • [Demo Video](https://www.youtube.com/watch?v=MOXB63DgItQ) • [Documentation](documentation.md) 
-• [Gallery](#plottimation-gif-gallery)
+* [**Documentation**](documentation.md)
+* [p5.js Design Templates](templates/README.md)
+* [Demonstration Video](https://www.youtube.com/watch?v=MOXB63DgItQ)
+* [GIF Gallery](#plottimation-gif-gallery)
 
 [![plottimation_ui.png](doc/plottimation_spinnyrect.gif)](https://golanlevin.github.io/plottimation/)
 
 ## Quickstart Instructions
 
-1. **Create** a "frame sheet" of your animation. You can now work in either of two ways:
-   - a marker-based sheet, with frames separated by small crosses `+` or filled circular dots `●`
-   - a markerless sheet, with frames separated by empty gutters
-   [Here's a p5.js sketch](https://editor.p5js.org/golan/sketches/_ZMbagYFc) you can get started with.
-2. **Photograph** or scan your frame sheet. It's ok to use a casual photo — but your sheet should be completely surrounded by a uniform dark background, as shown in [this example](demo/1_dmawer_crosses.jpg).
+1. **Create** a "frame sheet" of your animation. You can work in either of two ways:
+   - a marker-based sheet, with frames separated by small crosses (`+`) or filled circular dots (`●`). <br/>To make a design, [here's a p5.js sketch](https://editor.p5js.org/golan/sketches/_ZMbagYFc) you could get started with.
+   - a markerless sheet, with frames separated by empty gutters.
+2. **Photograph** or scan your frame sheet. It's ok to use a casual photo — but a light-colored sheet should be completely surrounded by a uniform dark background (or vice-versa), as shown in [this example](demo/1_dmawer_crosses.jpg).
 3. **Open** the [**Plottimation Tool**](https://golanlevin.github.io/plottimation/) in a browser, from [here](https://golanlevin.github.io/plottimation).
 4. **Load** the image of your frame sheet into the Plottimation Tool. You can do this by dragging your image file onto the Tool's load target (where it says "Drop a photo or scan here"), or by clicking the target to load a file. As an alternative, you can click `Load Demo` instead.
 5. Under the *Layout* tab, **set** `Frame Columns` and `Frame Rows` to match the layout of your sheet's grid of frames. You should also set your sheet's orientation (landscape or portrait) and page size (11×8.5, etc.).
@@ -25,12 +26,14 @@ Version 1.12 • By @GolanLevin, Spring 2026.
    - `Markers (crosses, dots)` for marker-separated sheets
    - `Markerless (gutters, frames)` for gutter-separated sheets without registration marks
 8. According to your taste, **adjust** the settings under the *Appearance* and *Crop & Geometry* tabs. Changes to these settings are reflected in the animation shown in the *Preview & Export* panel.
-9. To generate and download your GIF animation, **click** `↓GIF`. You can also download your animation as an MP4 movie or a folder of frames. There are advanced settings in the *Export Options* tab for adjusting output dimensions, compression quality, and playback modes.
+9. To generate and download your GIF animation, **click** `↓GIF`. You can also download your animation as an MP4 movie or a zipped folder of frames. There are advanced settings in the *Export Options* tab for adjusting output dimensions, compression quality, and playback modes.
+10. Consider saving out your animations' settings file. You can find a button for doing this at the bottom of the "Export Options" panel.
 
 ---
 
 ## Plottimation GIF Gallery
 
-<img src="doc/plotti_demo_2.gif" alt="By Golan Levin" height="200"> Golan Levin
+<img src="doc/plotti_demo_2.gif" alt="By Golan Levin" height="200"> By Golan Levin
 
-<img src="doc/plotti_demo_4.gif" alt="By Julian Gachadoat" height="200"> Julian Gachadoat
+<img src="doc/plotti_demo_4.gif" alt="By Julian Gachadoat" height="200"> By Julian Gachadoat
+

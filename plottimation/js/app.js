@@ -534,6 +534,19 @@ function getOrderedFrameCount() {
 }
 
 /**
+ * Return the number of source cells currently included in preview/export before ordering expands
+ * them into ping-pong playback.
+ *
+ * @returns {number}
+ */
+function getIncludedSourceFrameCount() {
+  const total = Math.max(0, state.geometry.frameCount || 0);
+  if (total <= 0) return 0;
+  const requested = Math.round(Number(readConfig().exportOptions.frameCountToExport) || total);
+  return Math.max(1, Math.min(total, requested));
+}
+
+/**
  * Small local wrapper around the preview module's frame-order mapping.
  *
  * @param {number} previewIndex
@@ -552,7 +565,7 @@ function getOrderedFrameIndex(previewIndex) {
  * @returns {number}
  */
 function getCurrentDisplayedFrameSourceIndex() {
-  const frameCount = state.geometry.frameCount;
+  const frameCount = getIncludedSourceFrameCount();
   if (frameCount <= 0) return 0;
   if (state.preview.paused && state.preview.inspectingRawFrame) {
     return ((state.preview.frameIndex % frameCount) + frameCount) % frameCount;
@@ -584,6 +597,37 @@ function getExportOrderedFrameIndex(exportIndex) {
   if (singleLoopCount <= 0) return 0;
   const localIndex = ((exportIndex % singleLoopCount) + singleLoopCount) % singleLoopCount;
   return getOrderedFrameIndex(localIndex);
+}
+
+/**
+ * Step up or down within the valid source cells of the current physical column.
+ *
+ * When `Frames in Export` omits highest-indexed cells, the last physical row may be incomplete.
+ * Vertical paused-grid inspection should wrap only across the valid cells that remain in the
+ * current column, rather than wrapping modulo the truncated linear frame count.
+ *
+ * @param {number} sourceIndex
+ * @param {number} rowStep
+ * @returns {number}
+ */
+function getVerticallySteppedSourceIndex(sourceIndex, rowStep) {
+  const frameCount = getIncludedSourceFrameCount();
+  const cols = Math.max(1, state.geometry.alignmentInfo?.cols || 1);
+  if (frameCount <= 0) return 0;
+  if (cols <= 1) {
+    return ((sourceIndex + rowStep + frameCount) % frameCount + frameCount) % frameCount;
+  }
+  const col = ((sourceIndex % cols) + cols) % cols;
+  const columnIndices = [];
+  for (let index = col; index < frameCount; index += cols) {
+    columnIndices.push(index);
+  }
+  if (columnIndices.length <= 1) {
+    return columnIndices[0] ?? sourceIndex;
+  }
+  const currentPos = Math.max(0, columnIndices.indexOf(sourceIndex));
+  const nextPos = ((currentPos + rowStep) % columnIndices.length + columnIndices.length) % columnIndices.length;
+  return columnIndices[nextPos];
 }
 
 /**
@@ -1124,6 +1168,7 @@ function attachUi() {
   wireUiControls({
     dom,
     state,
+    getPaperGeometrySignature,
     makeCanvasDraggable,
     makeRectifiedFilename,
     makeLivePreviewDragCue,
@@ -1155,11 +1200,16 @@ function attachUi() {
       drawCurrentGifPreview();
     },
     stepPausedPreviewFrame: (direction) => {
-      const frameCount = state.geometry.frameCount;
+      const frameCount = getIncludedSourceFrameCount();
       if (!state.preview.paused || frameCount <= 0) return;
       const currentSourceIndex = getCurrentDisplayedFrameSourceIndex();
+      const cols = Math.max(1, state.geometry.alignmentInfo?.cols || 1);
       state.preview.inspectingRawFrame = true;
-      state.preview.frameIndex = (currentSourceIndex + direction + frameCount) % frameCount;
+      if (Math.abs(direction) === cols) {
+        state.preview.frameIndex = getVerticallySteppedSourceIndex(currentSourceIndex, Math.sign(direction) || 1);
+      } else {
+        state.preview.frameIndex = (currentSourceIndex + direction + frameCount) % frameCount;
+      }
       drawCurrentGifPreview();
     },
     toggleMarkerBlobView,
@@ -1368,9 +1418,15 @@ function resetTrimControls() {
  */
 function resetExportControls() {
   const previousOutputSize = getRequestedOutputSize();
+  const maxFrameCount = Math.max(
+    1,
+    Math.max(1, Math.round(Number(dom.frameCols.value) || SETTINGS_DEFAULTS.layout.frameCols)) *
+    Math.max(1, Math.round(Number(dom.frameRows.value) || SETTINGS_DEFAULTS.layout.frameRows))
+  );
   const alreadyReset =
     (Number(dom.fps.value) || SETTINGS_DEFAULTS.gifExport.fps) === SETTINGS_DEFAULTS.gifExport.fps &&
     (Number(dom.loopCount.value) || SETTINGS_DEFAULTS.gifExport.loopCount) === SETTINGS_DEFAULTS.gifExport.loopCount &&
+    (Number(dom.frameCountToExport?.value) || maxFrameCount) === maxFrameCount &&
     !dom.reverseOrder.checked &&
     !dom.boustrophedonOrder.checked &&
     !dom.pingPong.checked &&
@@ -1383,6 +1439,9 @@ function resetExportControls() {
   }
   dom.fps.value = String(SETTINGS_DEFAULTS.gifExport.fps);
   dom.loopCount.value = String(SETTINGS_DEFAULTS.gifExport.loopCount);
+  if (dom.frameCountToExport) {
+    dom.frameCountToExport.value = String(maxFrameCount);
+  }
   dom.reverseOrder.checked = SETTINGS_DEFAULTS.gifExport.reverseOrder;
   dom.boustrophedonOrder.checked = SETTINGS_DEFAULTS.gifExport.boustrophedonOrder;
   dom.pingPong.checked = SETTINGS_DEFAULTS.gifExport.pingPong;
@@ -1784,9 +1843,10 @@ async function loadImageSource(src, filename = "", mimeType = "image/jpeg", sett
 /**
  * Debounce a geometry-affecting reprocess so multiple control edits collapse into one run.
  *
+ * @param {number} [delayMs=220]
  * @returns {void}
  */
-function scheduleProcess() {
+function scheduleProcess(delayMs = 220) {
   if (!state.source.image) return;
   state.processing.requestId += 1;
   const requestId = state.processing.requestId;
@@ -1794,7 +1854,7 @@ function scheduleProcess() {
   setGeometryProcessingCursor(true);
   state.processing.timer = window.setTimeout(() => {
     void processCurrentImage(requestId);
-  }, 220);
+  }, Math.max(0, delayMs));
 }
 
 /**
@@ -1832,7 +1892,7 @@ function scheduleProcess() {
  *   postCropGeometry:{flipHorizontal:boolean,flipVertical:boolean,rotate90Cw:boolean},
  *   filters:{brightness:number,contrast:number,vibrance:number,temperature:number,unsharpRadius:number,unsharpAmount:number,invert:boolean},
  *   fps:number,
- *   exportOptions:{encodingQuality:number,quality:number,mp4Quality:number,dither:string|false,resampling:string,globalPalette:boolean,outputWidthPx:number,outputHeightPx:number,outputScale:number,reverseOrder:boolean,boustrophedonOrder:boolean,pingPong:boolean,loopCount:number}
+ *   exportOptions:{encodingQuality:number,quality:number,mp4Quality:number,dither:string|false,resampling:string,globalPalette:boolean,outputWidthPx:number,outputHeightPx:number,outputScale:number,reverseOrder:boolean,boustrophedonOrder:boolean,pingPong:boolean,loopCount:number,frameCountToExport:number}
  * }}
  */
 function readConfig() {
@@ -1853,6 +1913,9 @@ function readConfig() {
     ? (Number(dom.paperHeight.value) || SETTINGS_DEFAULTS.layout.paperHeight)
     : orientedPresetHeight;
   const paperAspect = clampPaperAspect(paperWidth, paperHeight);
+  const frameCols = Math.max(1, Math.min(20, Math.round(Number(dom.frameCols.value) || SETTINGS_DEFAULTS.layout.frameCols)));
+  const frameRows = Math.max(1, Math.min(20, Math.round(Number(dom.frameRows.value) || SETTINGS_DEFAULTS.layout.frameRows)));
+  const sourceFrameCount = Math.max(1, frameCols * frameRows);
   const encodingQuality = getEncodingQualityValue();
   return {
     paperOrientation,
@@ -1860,8 +1923,8 @@ function readConfig() {
     paperWidthIn: Math.max(1, paperWidth),
     paperHeightIn: Math.max(1, paperHeight),
     paperAspect,
-    frameCols: Math.max(1, Math.min(20, Math.round(Number(dom.frameCols.value) || SETTINGS_DEFAULTS.layout.frameCols))),
-    frameRows: Math.max(1, Math.min(20, Math.round(Number(dom.frameRows.value) || SETTINGS_DEFAULTS.layout.frameRows))),
+    frameCols,
+    frameRows,
     thresholdMethod: dom.thresholdMethod.value || SETTINGS_DEFAULTS.detection.thresholdMethod,
     thresholdOffset: Math.max(-128, Math.min(128, Math.round(Number(dom.thresholdOffset.value) || SETTINGS_DEFAULTS.detection.thresholdOffset))),
     paperMarginPx: Math.max(
@@ -1937,6 +2000,13 @@ function readConfig() {
       reverseOrder: dom.reverseOrder.checked,
       boustrophedonOrder: dom.boustrophedonOrder.checked,
       pingPong: dom.pingPong.checked,
+      frameCountToExport: Math.max(
+        1,
+        Math.min(
+          sourceFrameCount,
+          Math.round(Number(dom.frameCountToExport?.value) || sourceFrameCount)
+        )
+      ),
     },
   };
 }
@@ -1953,6 +2023,19 @@ function clampPaperAspect(width, height) {
   const safeWidth = Math.max(1e-6, Number(width) || SETTINGS_DEFAULTS.layout.paperWidth);
   const safeHeight = Math.max(1e-6, Number(height) || SETTINGS_DEFAULTS.layout.paperHeight);
   return Math.max(0.25, Math.min(4.0, safeWidth / safeHeight));
+}
+
+/**
+ * Return a compact signature for the effective paper geometry currently implied by the UI.
+ *
+ * This is used to avoid unnecessary reprocessing when the user switches between a preset and
+ * `Custom` without actually changing the sheet dimensions.
+ *
+ * @returns {string}
+ */
+function getPaperGeometrySignature() {
+  const config = readConfig();
+  return `${config.paperWidthIn}x${config.paperHeightIn}`;
 }
 
 /**
@@ -2460,6 +2543,7 @@ function applyLoadedSettingsText(settingsText) {
  * @returns {void}
  */
 function updateSliderReadouts() {
+  syncFrameCountToExportUi();
   dom.brightnessValue.textContent = formatSignedValue(dom.brightness.value);
   dom.contrastValue.textContent = formatSignedValue(dom.contrast.value);
   dom.vibranceValue.textContent = formatSignedValue(dom.vibrance.value);
@@ -2513,6 +2597,32 @@ function updateSliderReadouts() {
     config.paperHeightIn * 100
   );
   dom.crossRoiScaleValue.textContent = `${roiSizePx}×${roiSizePx} px`;
+}
+
+/**
+ * Clamp the export-frame-count control to the current grid size. If the control was still at the
+ * previous maximum, treat it as "use all cells" and advance it to the new maximum automatically.
+ *
+ * @returns {number}
+ */
+function syncFrameCountToExportUi() {
+  if (!dom.frameCountToExport) return 0;
+  const cols = Math.max(1, Math.min(20, Math.round(Number(dom.frameCols.value) || SETTINGS_DEFAULTS.layout.frameCols)));
+  const rows = Math.max(1, Math.min(20, Math.round(Number(dom.frameRows.value) || SETTINGS_DEFAULTS.layout.frameRows)));
+  const maxFrameCount = Math.max(1, cols * rows);
+  const previousMax = Math.max(1, state.runtime.lastFrameExportCountMax || maxFrameCount);
+  const rawText = String(dom.frameCountToExport.value || "").trim();
+  const rawValue = Number(rawText);
+  let nextValue = rawValue;
+  if (!rawText || !Number.isFinite(rawValue) || rawValue === previousMax) {
+    nextValue = maxFrameCount;
+  }
+  nextValue = Math.max(1, Math.min(maxFrameCount, Math.round(nextValue)));
+  dom.frameCountToExport.min = "1";
+  dom.frameCountToExport.max = String(maxFrameCount);
+  dom.frameCountToExport.value = String(nextValue);
+  state.runtime.lastFrameExportCountMax = maxFrameCount;
+  return nextValue;
 }
 
 /**
@@ -2862,6 +2972,7 @@ function renderRectifiedPreview(rectifiedCanvas) {
       Math.max(1, drawH - (2 * insetPx * scale))
     );
   }
+  drawOmittedFrameQuads(ctx, offsetX, offsetY, scale);
   const currentFrameQuad = getCurrentPreviewFrameQuad();
   if (currentFrameQuad) {
     // Draw the current frame directly in rectified-sheet pixel coordinates.
@@ -3054,10 +3165,9 @@ function resolveFrameQuadForPreview(extractionInfo, col, row) {
  *
  * @returns {{tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}} | null}
  */
-function getCurrentPreviewFrameQuad() {
+function getPreviewFrameQuadForSourceIndex(sourceIndex) {
   const alignmentInfo = state.geometry.alignmentInfo;
   if (!alignmentInfo || state.geometry.frameCount <= 0) return null;
-  const sourceIndex = getCurrentDisplayedFrameSourceIndex();
   const cols = alignmentInfo.cols;
   const col = sourceIndex % cols;
   const row = Math.floor(sourceIndex / cols);
@@ -3083,6 +3193,50 @@ function getCurrentPreviewFrameQuad() {
     br: { x: quad.br.x + offset.x, y: quad.br.y + offset.y },
     bl: { x: quad.bl.x + offset.x, y: quad.bl.y + offset.y },
   };
+}
+
+/**
+ * Return the frame quad corresponding to the frame currently shown in Animation Preview.
+ *
+ * @returns {{tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}} | null}
+ */
+function getCurrentPreviewFrameQuad() {
+  return getPreviewFrameQuadForSourceIndex(getCurrentDisplayedFrameSourceIndex());
+}
+
+/**
+ * Draw omitted source cells on the Rectified Sheet so users can see which highest-indexed frames
+ * have been excluded from playback/export by Number of Frames to Export.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} offsetX
+ * @param {number} offsetY
+ * @param {number} scale
+ * @returns {void}
+ */
+function drawOmittedFrameQuads(ctx, offsetX, offsetY, scale) {
+  const totalFrameCount = Math.max(0, state.geometry.frameCount || 0);
+  const includedFrameCount = getIncludedSourceFrameCount();
+  if (!state.geometry.alignmentInfo || includedFrameCount >= totalFrameCount) return;
+  ctx.save();
+  ctx.strokeStyle = "rgb(200, 0, 0)";
+  ctx.lineWidth = getPanelOverlayStrokeWidth(1);
+  for (let sourceIndex = includedFrameCount; sourceIndex < totalFrameCount; sourceIndex += 1) {
+    const quad = getPreviewFrameQuadForSourceIndex(sourceIndex);
+    if (!quad) continue;
+    ctx.beginPath();
+    ctx.moveTo(offsetX + quad.tl.x * scale, offsetY + quad.tl.y * scale);
+    ctx.lineTo(offsetX + quad.tr.x * scale, offsetY + quad.tr.y * scale);
+    ctx.lineTo(offsetX + quad.br.x * scale, offsetY + quad.br.y * scale);
+    ctx.lineTo(offsetX + quad.bl.x * scale, offsetY + quad.bl.y * scale);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(offsetX + quad.tr.x * scale, offsetY + quad.tr.y * scale);
+    ctx.lineTo(offsetX + quad.bl.x * scale, offsetY + quad.bl.y * scale);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /**

@@ -381,6 +381,7 @@ function attachMarkerlessPhaseMetricToggles({
 export function attachUi({
   dom,
   state,
+  getPaperGeometrySignature,
   makeCanvasDraggable,
   makeRectifiedFilename,
   makeLivePreviewDragCue,
@@ -536,24 +537,28 @@ export function attachUi({
     }
   });
 
-  dom.paperPreset.addEventListener("input", () => {
+  const maybeProcessPaperGeometryChange = () => {
+    const before = getPaperGeometrySignature();
     syncPaperPresetUi();
     updateSliderReadouts();
-    scheduleProcess();
+    const after = getPaperGeometrySignature();
+    if (before !== after) {
+      scheduleProcess();
+    }
+  };
+
+  dom.paperPreset.addEventListener("input", () => {
+    maybeProcessPaperGeometryChange();
   });
   dom.paperPreset.addEventListener("change", () => {
-    syncPaperPresetUi();
-    scheduleProcess();
+    maybeProcessPaperGeometryChange();
   });
   [dom.paperOrientationLandscape, dom.paperOrientationPortrait].forEach((input) => {
     input.addEventListener("input", () => {
-      syncPaperPresetUi();
-      updateSliderReadouts();
-      scheduleProcess();
+      maybeProcessPaperGeometryChange();
     });
     input.addEventListener("change", () => {
-      syncPaperPresetUi();
-      scheduleProcess();
+      maybeProcessPaperGeometryChange();
     });
   });
 
@@ -622,11 +627,28 @@ export function attachUi({
     input.addEventListener("input", () => {
       revokeGifUrl();
       updateSliderReadouts();
-      scheduleProcess();
+      if (input === dom.paperWidth || input === dom.paperHeight) {
+        scheduleProcess(380);
+      } else {
+        scheduleProcess();
+      }
     });
     input.addEventListener("change", () => {
       revokeGifUrl();
-      scheduleProcess();
+      if (input === dom.paperWidth || input === dom.paperHeight) {
+        scheduleProcess(0);
+      } else {
+        scheduleProcess();
+      }
+    });
+  });
+
+  [dom.paperWidth, dom.paperHeight].forEach((input) => {
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      revokeGifUrl();
+      updateSliderReadouts();
+      scheduleProcess(0);
     });
   });
 
@@ -703,6 +725,7 @@ export function attachUi({
     dom.rotate90Cw,
     dom.fps,
     dom.loopCount,
+    dom.frameCountToExport,
     dom.gifQuality,
     dom.gifDither,
     dom.gifGlobalPalette,

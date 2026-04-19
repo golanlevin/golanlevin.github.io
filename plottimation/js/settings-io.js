@@ -163,6 +163,7 @@ export function applyLoadedSettingsText({
   setCheckedIfPresent("invert", dom.invert);
   setIfPresent("fps", dom.fps);
   setIfPresent("loop_count", dom.loopCount);
+  setIfPresent("frame_count_to_export", dom.frameCountToExport);
   setCheckedIfPresent("reverse_order", dom.reverseOrder);
   setCheckedIfPresent("boustrophedon_order", dom.boustrophedonOrder);
   setCheckedIfPresent("ping_pong", dom.pingPong);
@@ -264,6 +265,7 @@ export function buildSettingsTsv({
     ["invert", String(config.filters.invert)],
     ["fps", String(config.fps)],
     ["loop_count", String(config.exportOptions.loopCount)],
+    ["frame_count_to_export", String(config.exportOptions.frameCountToExport)],
     ["reverse_order", String(config.exportOptions.reverseOrder)],
     ["boustrophedon_order", String(config.exportOptions.boustrophedonOrder)],
     ["ping_pong", String(config.exportOptions.pingPong)],
