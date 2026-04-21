@@ -6,7 +6,7 @@
 
 * [Layout](#layout)
 * [Page & Grid Detection](#page--grid-detection)
-* [Automatic Frame Alignment](#automatic-frame-alignment)
+* [Automatic Frame Alignment / Stabilization](#automatic-frame-alignment--stabilization)
 * [Appearance](#appearance)
 * [Crop & Geometry](#crop--geometry)
 * [Export Options](#export-options)
@@ -79,7 +79,7 @@ and the `Page & Grid Detection` header will display a warning mark.
 
 ---
 
-## Automatic Frame Alignment
+## Automatic Frame Alignment / Stabilization
 
 Plottimation now supports two different alignment pipelines:
 
@@ -261,8 +261,10 @@ Cropping and geometry changes affect preview and all export formats.
 
 ## Export Options
 
-Use `Export Options` to control the size, timing, and encoding of the exported animation.
+Use `Export Options` to control the size, timing, ordering, and encoding of the exported animation.
 
+- `Frame Rate (fps)`
+  Playback rate for the live preview and for exported animation files.
 - `Output Width`
   Final export width in pixels.
 - `Output Height`
@@ -270,17 +272,19 @@ Use `Export Options` to control the size, timing, and encoding of the exported a
 - These two fields stay proportional:
   - typing one updates the other
   - values are clamped to `1...1999`
-
-Furthermore: 
-
-- `Frame Rate`
-  Playback rate for preview and exported animation files.
+- `Frames in Export`
+  Limits how many source cells are included in preview and export. If this is smaller than
+  `Frame Columns × Frame Rows`, the highest-indexed frames are omitted.
 - `Loops in Export`
   Repeats the frame sequence in exported files only. It does not change the live preview.
+
 - `Reverse Order`
-  Reverses frame order in exported files.
+  Reverses frame order in both preview playback and exported files.
+- `Boustrophedon Order`
+  Reads each printed row alternately left-to-right, then right-to-left, before any reverse or
+  ping-pong expansion is applied.
 - `Ping-Pong (doubles file size)`
-  Exports the sequence forward and backward without duplicating the turnaround endpoints.
+  Plays or exports the sequence forward and backward without duplicating the turnaround endpoints.
 - `Encoding Quality`
   Shared `1...100` quality control.
   - for GIF export, this is mapped internally onto gif.js's inverse quality scale
@@ -355,7 +359,9 @@ The four main viewer panels are:
   Shows the source photo, with the detected page outline drawn in green.
 - `2. Rectified Sheet`
   Shows the rectified page used for frame extraction, along with the current frame quad.
-- `3. Frame Alignment Markers` or `3. Frame Corners`
+  In markerless mode it can also show the blue inset ROI rectangle used for the markerless search.
+  If `Frames in Export` omits cells, those omitted source cells are shown here as red slashed quads.
+- `3. Frame Alignment Markers` or `3. Frame Alignment Centers`
   In `Markers` mode, this panel shows the marker ROI tiles used for frame alignment.
   In `Markerless` mode, it shows the extracted corner tiles used for corner nudging.
 - `4. Preview & Export`
@@ -368,7 +374,7 @@ Desktop notes:
 
 Mobile notes:
 
-- the interface switches to a single-column layout with tabs for `Raw`, `Rectified`, `Markers`/`Corners`, and `Preview`
+- the interface switches to a single-column layout with tabs for `Raw`, `Rectified`, `Markers` or `Corners`, and `Preview`
 - in markerless mode, the third mobile control tab is renamed `Stabilize`
 - some advanced controls are hidden
 - the marker panel is read-only

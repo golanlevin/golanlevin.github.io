@@ -163,6 +163,10 @@ Current behavior:
 - `Reverse Order`, `Boustrophedon Order`, and `Ping-Pong` apply to that ordered source list
 - `Frames in Export` limits the included source frames before those order modifiers are applied
 - omitted frames are always the highest-indexed source cells
+- paused raw-grid inspection still respects `Frames in Export`, but it intentionally ignores
+  playback ordering so arrow-key stepping can inspect the physical printed grid directly
+- vertical paused stepping wraps within the valid cells of the current column, which matters when
+  the last printed row is incomplete because `Frames in Export` omits trailing cells
 
 The rectified-sheet overlays must stay consistent with this ordering logic:
 
@@ -210,6 +214,31 @@ Backward-compatibility note:
 
 - legacy settings files may omit newer fields
 - UI sync helpers are expected to supply correct defaults in that case
+- in particular, a missing `frame_count_to_export` field should resolve to the full grid size, not
+  to a one-frame export
+
+## Layout UI Notes
+
+- Switching `Paper Size` between a preset and `Custom` should not trigger reprocessing if the
+  effective sheet width/height did not actually change.
+- `Sheet Width` and `Sheet Height` typing is intentionally debounced in the UI, while pressing
+  `Enter` commits immediately.
+
+These are interaction expectations, not just implementation details. Regressions here make the app
+feel frozen because page processing is expensive.
+
+## Busy-Cursor Expectations
+
+Some controls deliberately defer full recomputation until release, but they should still show the
+geometry-processing cursor before the synchronous rebuild begins. Current examples:
+
+- `Horizontal Phase Offset`
+- `Vertical Phase Offset`
+- `Vertical Drift Compensation`
+- `Stabilization Method`
+
+If these controls are touched, preserve the "show busy cursor, yield one paint, then recompute"
+behavior.
 
 ## Current Module Roles
 

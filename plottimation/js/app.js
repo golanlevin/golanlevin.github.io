@@ -560,7 +560,9 @@ function getOrderedFrameIndex(previewIndex) {
  * Resolve the source-frame index currently shown in Preview.
  *
  * During paused arrow-key inspection, this deliberately ignores export/playback ordering so the
- * user can examine the physical frame grid directly.
+ * user can examine the physical frame grid directly. It still respects `Frames in Export`, since
+ * omitted highest-indexed cells should disappear consistently from preview, exports, and rectified
+ * sheet overlays.
  *
  * @returns {number}
  */
@@ -653,14 +655,11 @@ function clearMarkerlessPaperBackdropColor() {
 }
 
 /**
- * Estimate the rectified sheet's paper color from a thin border sample and use a slightly darker
- * version of that color behind Markerless Frame Corners / Preview panels.
+ * Estimate a representative paper color from a thin border sample.
  *
- * Sampled pixels:
- * - top two rows
- * - bottom two rows
- * - left two columns
- * - right two columns
+ * This helper is intentionally retained from an earlier backdrop-color experiment even though it
+ * is no longer called at runtime. Keeping it around preserves the paper-sampling logic in case
+ * that UI treatment is revisited later.
  *
  * @param {HTMLCanvasElement | null} canvas
  * @returns {void}
@@ -1844,6 +1843,9 @@ async function loadImageSource(src, filename = "", mimeType = "image/jpeg", sett
 /**
  * Debounce a geometry-affecting reprocess so multiple control edits collapse into one run.
  *
+ * The busy cursor is enabled immediately so synchronous-looking pauses still read as "working"
+ * rather than "frozen" while the debounce timer is counting down.
+ *
  * @param {number} [delayMs=220]
  * @returns {void}
  */
@@ -2603,6 +2605,9 @@ function updateSliderReadouts() {
 /**
  * Clamp the export-frame-count control to the current grid size. If the control was still at the
  * previous maximum, treat it as "use all cells" and advance it to the new maximum automatically.
+ *
+ * This also covers legacy settings files that predate `Frames in Export`: an empty field is
+ * interpreted as "export the whole grid", not as a literal zero or one-frame request.
  *
  * @returns {number}
  */

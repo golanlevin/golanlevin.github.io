@@ -5,6 +5,7 @@
  * can supply callbacks without carrying the full DOM-listener implementation inline.
  */
 import { t } from "./i18n.js";
+
 /**
  * Wire a small header reset button without toggling the parent details element.
  *
@@ -80,6 +81,21 @@ export function initializeTooltips({ tooltipText, state, dom, applyTooltipState 
   applyTooltipState(false);
 }
 
+/**
+ * Wire the top-level marker/markerless pipeline switch.
+ *
+ * The listeners update labels/visibility on `input` so the UI feels immediate, then let the
+ * normal processing path rerun because changing pipelines affects alignment semantics broadly.
+ *
+ * @param {{
+ *   dom: import("./dom-state.js").dom,
+ *   revokeGifUrl: () => void,
+ *   updateSliderReadouts: () => void,
+ *   scheduleProcess: (delayMs?: number) => void,
+ *   syncAlignmentMarkerUi: () => void
+ * }} deps
+ * @returns {void}
+ */
 function attachAlignmentPipelineControls({
   dom,
   revokeGifUrl,
@@ -103,8 +119,28 @@ function attachAlignmentPipelineControls({
   });
 }
 
+/**
+ * Wire the markerless stabilization-method radio group.
+ *
+ * Switching methods invalidates different caches from the same frame set, so the handler warms
+ * the newly selected path before clearing the busy cursor. That keeps the first strength drag from
+ * paying the full matcher setup cost on the interaction path.
+ *
+ * @param {{
+ *   dom: import("./dom-state.js").dom,
+ *   setGeometryProcessingCursor: (active: boolean) => void,
+ *   revokeGifUrl: () => void,
+ *   updateSliderReadouts: () => void,
+ *   invalidateStabilizationCache: () => void,
+ *   scheduleStabilizationPreviewUpdate: () => void,
+ *   syncAlignmentMarkerUi: () => void,
+ *   warmCurrentStabilizationMethod: () => void
+ * }} deps
+ * @returns {void}
+ */
 function attachStabilizationMethodControls({
   dom,
+  setGeometryProcessingCursor,
   revokeGifUrl,
   updateSliderReadouts,
   invalidateStabilizationCache,
@@ -115,29 +151,41 @@ function attachStabilizationMethodControls({
   const alignmentDom = dom.alignment;
   [alignmentDom.stabilizationMethodPairwise, alignmentDom.stabilizationMethodAverage].forEach((input) => {
     if (!input) return;
-    input.addEventListener("input", () => {
+    const applyMethodChange = () => {
       // Switching methods changes which stabilization caches are valid, so invalidate them
       // immediately and warm the newly selected path before the user starts dragging strength.
+      setGeometryProcessingCursor(true);
       syncAlignmentMarkerUi();
       revokeGifUrl();
       updateSliderReadouts();
       invalidateStabilizationCache();
-      warmCurrentStabilizationMethod();
-      scheduleStabilizationPreviewUpdate();
-    });
-    input.addEventListener("change", () => {
-      // Mirror the input-path invalidation on committed changes so keyboard and pointer flows stay
-      // consistent.
-      syncAlignmentMarkerUi();
-      revokeGifUrl();
-      updateSliderReadouts();
-      invalidateStabilizationCache();
-      warmCurrentStabilizationMethod();
-      scheduleStabilizationPreviewUpdate();
-    });
+      requestAnimationFrame(() => {
+        warmCurrentStabilizationMethod();
+        scheduleStabilizationPreviewUpdate();
+        setGeometryProcessingCursor(false);
+      });
+    };
+    input.addEventListener("input", applyMethodChange);
+    input.addEventListener("change", applyMethodChange);
   });
 }
 
+/**
+ * Wire the marker-type selector used only by the marker pipeline.
+ *
+ * The helper intentionally skips reprocessing when the requested marker type merely matches the
+ * already-resolved `Auto` result from the current alignment data.
+ *
+ * @param {{
+ *   dom: import("./dom-state.js").dom,
+ *   state: import("./dom-state.js").state,
+ *   revokeGifUrl: () => void,
+ *   updateSliderReadouts: () => void,
+ *   scheduleProcess: (delayMs?: number) => void,
+ *   syncAlignmentMarkerUi: () => void
+ * }} deps
+ * @returns {void}
+ */
 function attachAlignmentMarkerTypeControls({
   dom,
   state,
@@ -174,6 +222,25 @@ function attachAlignmentMarkerTypeControls({
   });
 }
 
+/**
+ * Wire `Search Inset Margin`.
+ *
+ * In markerless mode this slider behaves like a scrubbed preview control: dragging updates only
+ * the rectified-sheet ROI overlay immediately, while the expensive reprocess waits until release.
+ * In marker mode it stays a regular geometry-affecting control.
+ *
+ * @param {{
+ *   dom: import("./dom-state.js").dom,
+ *   state: import("./dom-state.js").state,
+ *   beginMarkerlessPhaseScrub: () => void,
+ *   endMarkerlessPhaseScrub: () => void,
+ *   revokeGifUrl: () => void,
+ *   updateSliderReadouts: () => void,
+ *   renderRectifiedPreview: (canvas: HTMLCanvasElement) => void,
+ *   scheduleProcess: (delayMs?: number) => void
+ * }} deps
+ * @returns {void}
+ */
 function attachMarkerlessSearchInsetControls({
   dom,
   state,
@@ -226,6 +293,25 @@ function attachMarkerlessSearchInsetControls({
   });
 }
 
+/**
+ * Wire the markerless stabilization sliders.
+ *
+ * Both sliders scrub against already-computed matcher state. `Strength` only changes how much of
+ * the solved offset field is applied, while `Rigidity` invalidates the offset solve itself.
+ *
+ * @param {{
+ *   dom: import("./dom-state.js").dom,
+ *   beginStabilizationStrengthScrub: () => void,
+ *   endStabilizationStrengthScrub: () => void,
+ *   revokeGifUrl: () => void,
+ *   updateSliderReadouts: () => void,
+ *   invalidateCurrentPreviewStabilizationCaches: () => void,
+ *   invalidateStabilizedOutputCaches: () => void,
+ *   invalidateStabilizationOffsetsCache: () => void,
+ *   scheduleStabilizationPreviewUpdate: () => void
+ * }} deps
+ * @returns {void}
+ */
 function attachStabilizationControls({
   dom,
   beginStabilizationStrengthScrub,
@@ -263,6 +349,26 @@ function attachStabilizationControls({
   bindSlider(alignmentDom.stabilizationLambda, invalidateStabilizationOffsetsCache);
 }
 
+/**
+ * Wire the markerless post-lattice adjustment sliders.
+ *
+ * Dragging uses the fast current-frame path; release promotes the change to a full frame-cache
+ * rebuild because phase and drift alter the extraction geometry seen by all frames.
+ *
+ * @param {{
+ *   dom: import("./dom-state.js").dom,
+ *   beginMarkerlessPhaseScrub: () => void,
+ *   endMarkerlessPhaseScrub: () => void,
+ *   setGeometryProcessingCursor: (active: boolean) => void,
+ *   revokeGifUrl: () => void,
+ *   updateSliderReadouts: () => void,
+ *   invalidateCurrentPreviewFrameCaches: () => void,
+ *   invalidateFrameCaches: () => void,
+ *   scheduleMarkerlessPhasePreviewUpdate: () => void,
+ *   drawCurrentGifPreview: () => void
+ * }} deps
+ * @returns {void}
+ */
 function attachMarkerlessPhaseControls({
   dom,
   beginMarkerlessPhaseScrub,
@@ -306,6 +412,19 @@ function attachMarkerlessPhaseControls({
   });
 }
 
+/**
+ * Wire the temporary markerless gutter-metric toggles plus the shared light-on-dark switch.
+ *
+ * These switches change the lattice-estimation signals themselves, so they still require a full
+ * processing rerun rather than any preview-only cache path.
+ *
+ * @param {{
+ *   dom: import("./dom-state.js").dom,
+ *   revokeGifUrl: () => void,
+ *   scheduleProcess: (delayMs?: number) => void
+ * }} deps
+ * @returns {void}
+ */
 function attachMarkerlessPhaseMetricToggles({
   dom,
   revokeGifUrl,
@@ -357,6 +476,7 @@ function attachMarkerlessPhaseMetricToggles({
  *   syncAlignmentMarkerUi: () => void,
  *   setActiveViewerTab: (view:string) => void,
  *   updateSliderReadouts: () => void,
+ *   setGeometryProcessingCursor: (active:boolean) => void,
  *   scheduleProcess: () => void,
  *   revokeGifUrl: () => void,
  *   invalidateAppearanceCache: () => void,
@@ -412,6 +532,7 @@ export function attachUi({
   syncAlignmentMarkerUi,
   setActiveViewerTab,
   updateSliderReadouts,
+  setGeometryProcessingCursor,
   scheduleProcess,
   revokeGifUrl,
   invalidateAppearanceCache,
@@ -428,7 +549,6 @@ export function attachUi({
   endStabilizationStrengthScrub,
   beginMarkerlessPhaseScrub,
   endMarkerlessPhaseScrub,
-  setGeometryProcessingCursor,
   cancelInFlightProcessing,
   invalidateFrameCaches,
   drawCurrentGifPreview,
@@ -578,6 +698,7 @@ export function attachUi({
   });
   attachStabilizationMethodControls({
     dom,
+    setGeometryProcessingCursor,
     revokeGifUrl,
     updateSliderReadouts,
     invalidateStabilizationCache,

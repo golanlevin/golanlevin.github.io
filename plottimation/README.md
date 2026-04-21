@@ -1,7 +1,7 @@
 # Plottimation Tool
 
-[This free tool](https://golanlevin.github.io/plottimation/) builds a looping animation from a scan or photograph of a frame-sheet.<br/>
-Version 1.12 • By @GolanLevin, Spring 2026.
+[This free tool](https://golanlevin.github.io/plottimation/) builds a looping animation from a scan or photograph of a contact-sheet. It automatically aligns the frames; works with or without alignment markers; and can even work with casual photographs. You can find the tool [**here**](https://golanlevin.github.io/plottimation/).<br/>
+Version 1.13 • By @GolanLevin, Spring 2026.
 
 * [**Plottimation Tool Online Here**](https://golanlevin.github.io/plottimation/)
 * [**Quickstart Instructions**](#quickstart-instructions) (below)
@@ -37,3 +37,8 @@ Version 1.12 • By @GolanLevin, Spring 2026.
 
 <img src="doc/plotti_demo_4.gif" alt="By Julian Gachadoat" height="200"> By Julian Gachadoat
 
+---
+
+References: 
+
+* [Spectrolite Riso Animation](https://spectrolite.app/how-to/art-and-animation/riso-animation)

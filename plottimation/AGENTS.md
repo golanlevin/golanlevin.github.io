@@ -33,9 +33,12 @@
 - Markerless corner overrides are post-stabilization extraction nudges.
 - `Light-on-dark design` affects both pipelines.
 - Saved settings should remain backward-compatible when practical.
+- `Frames in Export` limits preview and export from the same source-cell subset.
 - Preview/export ordering changes must stay consistent with:
   - preview playback
+  - paused arrow-key stepping
   - rectified-sheet green current-frame overlay
+  - rectified-sheet red omitted-frame overlays
   - exported GIF/MP4/ZIP frame ordering
 
 ## Markerless Notes
@@ -52,6 +55,7 @@
 - Preview/export frame-order logic
 - Settings load/save for newly added controls
 - Markerless UI scrubbing behavior for responsive controls
+- Layout controls that debounce or suppress redundant reprocessing
 
 ## Workflow Expectations
 - Use `apply_patch` for manual file edits.
@@ -70,6 +74,10 @@
 - If shared UI changes, check both pipelines.
 - If viewer-tab or mobile-control naming changes, check mobile mode behavior.
 - If settings-bearing controls change, check settings round-trip behavior.
+- If paper-size / custom-sheet behavior changes, check:
+  - preset -> custom with unchanged dimensions
+  - debounced width/height typing
+  - Enter-to-commit behavior
 - If preview/export ordering changes, check:
   - reverse order
   - boustrophedon order

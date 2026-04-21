@@ -1860,6 +1860,10 @@ function estimateAutocorrelationPitch(grayMat, axis, nominalPitch) {
  * Build a 1D gutter-likelihood profile by combining darkness, edge energy, and variance over a
  * centered stripe rather than a single pixel row or column.
  *
+ * Each enabled cue contributes multiplicatively to the final gutter support. That makes the
+ * combined profile act like a soft logical AND: candidate gutters are strongest where all enabled
+ * metrics agree that the stripe looks empty and uniform.
+ *
  * @param {cv.Mat} grayMat
  * @param {"x"|"y"} axis
  * @param {number} [bandWidth=1]
@@ -1939,6 +1943,8 @@ function computeMarkerlessGutterProfile(grayMat, axis, bandWidth = 1, flags = {}
   const textureSupport = new Float64Array(length);
   const gutter = new Float64Array(length);
   for (let i = 0; i < length; i++) {
+    // In normal mode gutters should be lighter than the artwork. For light ink on dark paper the
+    // interpretation flips, so darker stripes become stronger gutter candidates instead.
     darknessSupport[i] = lightOnDark ? darknessNorm[i] : (1 - darknessNorm[i]);
     varianceSupport[i] = 1 - varianceNorm[i];
     textureSupport[i] = 1 - edgeNorm[i];
@@ -1980,6 +1986,9 @@ function normalizeProfile(profile) {
 /**
  * Estimate the starting boundary position for a periodic grid by sampling the gutter profile at
  * each candidate series of boundary locations near the nominal centered layout.
+ *
+ * This is intentionally not a local-peak detector. The solver scores whole boundary lattices, so
+ * a start position only wins if the expected series of gutters aligns well across the full sheet.
  *
  * @param {Float64Array} profile
  * @param {number} pitch
