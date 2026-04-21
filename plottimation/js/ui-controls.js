@@ -665,10 +665,13 @@ export function attachUi({
   });
 
   const maybeProcessPaperGeometryChange = () => {
-    const before = getPaperGeometrySignature();
+    // Use the currently displayed width/height fields as the "before" snapshot. By the time these
+    // events fire, the preset radio/select value has already changed, so `readConfig()` would see
+    // the new preset too early and incorrectly conclude that nothing changed.
+    const before = `${String(dom.paperWidth.value || "").trim()}x${String(dom.paperHeight.value || "").trim()}`;
     syncPaperPresetUi();
     updateSliderReadouts();
-    const after = getPaperGeometrySignature();
+    const after = `${String(dom.paperWidth.value || "").trim()}x${String(dom.paperHeight.value || "").trim()}`;
     if (before !== after) {
       scheduleProcess();
     }
