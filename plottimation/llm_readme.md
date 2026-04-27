@@ -118,7 +118,7 @@ Behavior:
 - solves a weighted global offset field
 - `Stabilization Rigidity` affects this method only
 
-### Average-Frame Comparison
+### Median-Frame Comparison
 
 Internal id:
 
@@ -126,7 +126,7 @@ Internal id:
 
 Behavior:
 
-- builds one blurry grayscale average frame from all pre-stabilization sampled frames
+- builds one grayscale median reference frame from all pre-stabilization sampled frames
 - aligns each frame independently against that reference
 - does not use `Stabilization Rigidity`
 
@@ -136,7 +136,10 @@ Both methods reuse the same sampled grayscale matcher:
 
 - reduced grayscale frames
 - translation search window
-- periphery-weighted absolute-difference metric
+- uniform-weight absolute-difference metric
+
+The older radial/periphery weighting code is still retained in `js/app.js`, but it is currently
+unused.
 
 ### Post-lattice adjustment stack
 
@@ -185,6 +188,18 @@ This is a fragile integration point. If playback/export order changes, check:
 
 The `Rectified Sheet` panel renders the extraction-space rectified page directly.
 
+For large images, the visible panel image may be a downscaled preview canvas while extraction still
+uses the full-resolution `state.geometry.baseRectifiedMat`. Overlay geometry therefore has to be
+mapped from full rectified coordinates into the displayed preview size.
+
+The `Rectified Sheet` header link is sourced from the full-resolution rectified image, not from the
+display preview:
+
+- if the rectified sheet long edge is `<= 3000 px`, a full-resolution download URL may be prepared
+  eagerly
+- otherwise the full-resolution asset is generated on demand from `state.geometry.baseRectifiedMat`
+- the visible panel preview and the downloadable asset are intentionally different representations
+
 Overlays currently include:
 
 - blue inset ROI rectangle in markerless mode
@@ -206,9 +221,15 @@ Recent important keys:
 
 - `alignment_pipeline`
 - `stabilization_method`
+- `stabilization_strength`
 - `light_on_dark_design`
+- `post_rotation_deg`
 - `vertical_drift_compensation`
 - `frame_count_to_export`
+- `output_width`
+- `output_height`
+- `source_credit`
+- `stabilization_enabled`
 
 Backward-compatibility note:
 
@@ -216,13 +237,43 @@ Backward-compatibility note:
 - UI sync helpers are expected to supply correct defaults in that case
 - in particular, a missing `frame_count_to_export` field should resolve to the full grid size, not
   to a one-frame export
+- `source_credit` is optional metadata shown in the Raw Photo header when present
+- if `source_credit` is absent, the Raw Photo header falls back to the loaded source filename
+- when a settings file supplies both `output_width` and `output_height`, treat them as an exact
+  stored pair during restore instead of recalculating one dimension from the other
+
+## Memory Notes
+
+Recent large-image work changed the internal image model:
+
+- the `styled` CV branch is now BGR, not RGBA
+- the `vision` CV branch is now grayscale, not color
+- the lightweight Thresholding Offset preview keeps only grayscale caches; the old persistent raw
+  `source.cvMat` cache was removed
+
+To reduce peak memory during consecutive large reprocesses:
+
+- `trimCachesBeforeReprocess()` drops old rectified Mats and large frame/stabilization caches
+  before the next `runPipeline()` begins
+- the `Rectified Sheet` panel uses a bounded preview canvas instead of materializing another
+  full-size RGBA display copy for very large rectified pages
 
 ## Layout UI Notes
 
-- Switching `Paper Size` between a preset and `Custom` should not trigger reprocessing if the
+- Switching `Paper Aspect` between a preset and `Custom` should not trigger reprocessing if the
   effective sheet width/height did not actually change.
 - `Sheet Width` and `Sheet Height` typing is intentionally debounced in the UI, while pressing
   `Enter` commits immediately.
+- `Post-Rotation` is a page-detection-stage control: it rotates the rectified sheet after page
+  rectification and before marker detection or markerless autocorrelation.
+- `Post-Rotation` positive values are intentionally clockwise in both the scrub preview and the
+  final processed result.
+- While scrubbing `Post-Rotation`, playback pauses and the app shows a preview-only rotated
+  `Rectified Sheet` plus preview-only Panel 3 tile updates. The expensive CV pipeline still runs
+  only on release.
+- The scrub preview is delta-based relative to the last processed rotation, not an absolute redraw
+  from zero. This avoids double-applying an already-committed rotation when dragging from a
+  nonzero starting value.
 
 These are interaction expectations, not just implementation details. Regressions here make the app
 feel frozen because page processing is expensive.
@@ -235,6 +286,8 @@ geometry-processing cursor before the synchronous rebuild begins. Current exampl
 - `Horizontal Phase Offset`
 - `Vertical Phase Offset`
 - `Vertical Drift Compensation`
+- `Post-Rotation`
+- `Enable Stabilization`
 - `Stabilization Method`
 
 If these controls are touched, preserve the "show busy cursor, yield one paint, then recompute"
@@ -293,3 +346,23 @@ Third-party runtime assets live in:
 - [js/vendor/gif.js](/Users/gl/Desktop/plottimation/plottimation_webtool/js/vendor/gif.js)
 - [js/vendor/gif.worker.js](/Users/gl/Desktop/plottimation/plottimation_webtool/js/vendor/gif.worker.js)
 - [js/vendor/mp4-muxer.esm.js](/Users/gl/Desktop/plottimation/plottimation_webtool/js/vendor/mp4-muxer.esm.js)
+
+## TODO
+
+- Consider a later refactor that extracts the source/rectified image-buffer ownership code from
+  `js/app.js` into `js/image-buffer-lifecycle.js`.
+  - Purpose:
+    - make large-image memory policy easier to reason about
+    - keep OpenCV Mat lifetime / deletion rules in one place
+    - reduce how much `js/app.js` has to know about source/rectified buffer ownership
+  - Likely contents:
+    - `releaseSourceCvCaches()`
+    - `ensureSourceCvCaches()`
+    - `releaseRectifiedCvCache()`
+    - `ensureBaseRectifiedMat()`
+    - `ensureRectifiedGrayMat()`
+    - `trimCachesBeforeReprocess()`
+  - Scope note:
+    - keep this focused on source and rectified image buffers, grayscale derivatives, and
+      pre-reprocess memory trimming
+    - do not move frame-output, stabilization, preview-order, or export logic into that file

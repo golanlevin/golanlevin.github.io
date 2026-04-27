@@ -23,15 +23,17 @@ export const SETTINGS_DEFAULTS = {
   detection: {
     alignmentPipeline: "markers",
     stabilizationMethod: "pairwise-cyclic",
+    stabilizationEnabled: false,
+    stabilizationStrengthPct: 100,
     thresholdMethod: "offset-peak",
     thresholdOffset: -20,
     lightOnDarkDesign: false,
     paperMarginPx: 80,
     boundarySensitivity: 8.0,
     boundaryPersistencePx: 7,
+    postRotationDeg: 0,
     alignmentMarkerType: "auto",
     crossRoiScalePct: 52,
-    stabilizationStrength: 0,
     stabilizationLambda: 0.01,
     markerlessPhaseX: 0,
     markerlessPhaseY: 0,
@@ -118,6 +120,12 @@ export function applyNonLayoutDefaults(dom) {
   if (dom.stabilizationMethodAverage) {
     dom.stabilizationMethodAverage.checked = SETTINGS_DEFAULTS.detection.stabilizationMethod === "difference-from-average";
   }
+  if (dom.stabilizationEnabled) {
+    dom.stabilizationEnabled.checked = SETTINGS_DEFAULTS.detection.stabilizationEnabled;
+  }
+  if (dom.stabilizationStrength) {
+    dom.stabilizationStrength.value = String(SETTINGS_DEFAULTS.detection.stabilizationStrengthPct);
+  }
   dom.thresholdMethod.value = SETTINGS_DEFAULTS.detection.thresholdMethod;
   dom.thresholdOffset.value = String(SETTINGS_DEFAULTS.detection.thresholdOffset);
   if (dom.lightOnDarkDesign) {
@@ -126,9 +134,11 @@ export function applyNonLayoutDefaults(dom) {
   dom.paperMargin.value = String(SETTINGS_DEFAULTS.detection.paperMarginPx);
   dom.boundarySensitivity.value = SETTINGS_DEFAULTS.detection.boundarySensitivity.toFixed(1);
   dom.boundaryPersistence.value = String(SETTINGS_DEFAULTS.detection.boundaryPersistencePx);
+  if (dom.postRotation) {
+    dom.postRotation.value = String(SETTINGS_DEFAULTS.detection.postRotationDeg);
+  }
   dom.alignmentMarkerType.value = SETTINGS_DEFAULTS.detection.alignmentMarkerType;
   dom.crossRoiScale.value = String(SETTINGS_DEFAULTS.detection.crossRoiScalePct);
-  dom.stabilizationStrength.value = String(SETTINGS_DEFAULTS.detection.stabilizationStrength);
   dom.stabilizationLambda.value = SETTINGS_DEFAULTS.detection.stabilizationLambda.toFixed(3);
   dom.markerlessPhaseX.value = String(SETTINGS_DEFAULTS.detection.markerlessPhaseX);
   dom.markerlessPhaseY.value = String(SETTINGS_DEFAULTS.detection.markerlessPhaseY);

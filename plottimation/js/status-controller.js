@@ -14,9 +14,15 @@ import { t } from "./i18n.js";
  * @returns {void}
  */
 export function updateRectifiedSheetHeading(dom, state) {
-  dom.rectifiedSheetHeading.textContent = state.preview.showRectifiedDiagnostic
+  const translatedTitle = state.preview.showRectifiedDiagnostic
     ? t("panels.convolutionDebugView")
     : t("panels.rectifiedSheet");
+  if (dom.rectifiedSheetHeadingText) {
+    dom.rectifiedSheetHeadingText.textContent =
+      String(translatedTitle || "").replace(/^\s*\d+\s*[\.\):\-–—]?\s*/, "") || "Rectified Sheet";
+  } else {
+    dom.rectifiedSheetHeading.textContent = translatedTitle;
+  }
 }
 
 /**

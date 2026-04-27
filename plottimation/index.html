@@ -34,9 +34,9 @@
           </p>
           <p id="appLedeMobileNote" class="lede mobile-header-note" data-i18n="app.mobileNote">(Please use desktop version for advanced controls.)</p>
           <p id="appLedeSecondary" class="lede">
-            <span data-app-version>v1.13</span> • <a href="https://github.com/golanlevin/plottimation/tree/main/README.md" target="_blank" rel="noopener noreferrer" data-i18n="app.documentation">Instructions</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer" data-i18n="app.demoVideo">Demo Video</a> • <a href="templates/index.html" target="_blank" rel="noopener noreferrer" data-i18n="app.templates">Templates</a>
+            <span data-app-version>v1.14</span> • <a href="https://github.com/golanlevin/plottimation/tree/main/README.md" target="_blank" rel="noopener noreferrer" data-i18n="app.documentation">Instructions</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer" data-i18n="app.demoVideo">Demo Video</a> • <a href="templates/index.html" target="_blank" rel="noopener noreferrer" data-i18n="app.templates">Templates</a>
           </p>
-          <p id="appLedeTertiary" class="lede"><span data-i18n="app.bylinePrefix">By @golanlevin •</span> <a href="https://github.com/golanlevin/plottimation" target="_blank" rel="noopener noreferrer">Source</a> • <a href="https://buymeacoffee.com/golanlevin" target="_blank" rel="noopener noreferrer" data-i18n="app.buyMeCoffee">Buy me a coffee</a> :)</p>
+          <p id="appLedeTertiary" class="lede"><span data-i18n="app.bylinePrefix">By @golanlevin, 2026 •</span> <a href="https://github.com/golanlevin/plottimation" target="_blank" rel="noopener noreferrer">Source</a></p>
         </div>
 
         <section class="control-group">
@@ -99,8 +99,9 @@ separated by small crosses or dots.</span>
               </label>
             </fieldset>
             <label id="paperPresetRow" class="stack-label">
-              <span id="paperPresetLabel" data-i18n="layout.paperSize">Paper Size</span>
+              <span id="paperPresetLabel" data-i18n="layout.paperSize">Paper Aspect</span>
               <select id="paperPreset">
+                <option value="source">Source</option>
                 <option value="letter" selected>Letter (11×8.5 in)</option>
                 <option value="legal">Legal (14×8.5 in)</option>
                 <option value="tabloid">Tabloid (17×11 in)</option>
@@ -160,11 +161,19 @@ separated by small crosses or dots.</span>
               <span><span data-i18n="detection.boundaryPersistence">Boundary Persistence</span> <output id="boundaryPersistenceValue">7</output></span>
               <input id="boundaryPersistence" type="range" min="1" max="15" step="1" value="7" />
             </label>
+            <label id="postRotationRow">
+              <span><span data-i18n="detection.postRotation">Post-Rotation</span> <output id="postRotationValue">+0.00°</output></span>
+              <input id="postRotation" type="range" min="-1.1" max="1.1" step="0.01" value="0" />
+            </label>
           </div>
         </details>
 
         <details id="frameAlignmentGroup" class="control-group collapsible" data-mobile-control="alignment">
           <summary id="frameAlignmentSummary"><span data-i18n="alignment.summary">Automatic Frame Alignment</span></summary>
+          <label id="stabilizationEnabledRow" class="toggle" hidden>
+            <input id="stabilizationEnabled" type="checkbox" />
+            <span data-i18n="alignment.stabilizationEnabled">Enable Stabilization</span>
+          </label>
           <section id="stabilizationMethodGroup" class="control-group" hidden>
             <fieldset id="stabilizationMethodField" class="radio-group">
               <legend data-i18n="alignment.stabilizationMethod">Stabilization Method</legend>
@@ -174,10 +183,14 @@ separated by small crosses or dots.</span>
               </label>
               <label class="toggle">
                 <input id="stabilizationMethodAverage" name="stabilizationMethod" type="radio" value="difference-from-average" />
-                <span data-i18n="alignment.stabilizationMethodOptions.average">Average-Frame Comparison</span>
+                <span data-i18n="alignment.stabilizationMethodOptions.average">Median-Frame Comparison</span>
               </label>
             </fieldset>
           </section>
+          <label id="stabilizationStrengthRow" class="stack-label" hidden>
+            <span><span data-i18n="alignment.stabilizationStrength">Stabilization Strength</span> <output id="stabilizationStrengthValue">100%</output></span>
+            <input id="stabilizationStrength" type="range" min="0" max="125" step="1" value="100" />
+          </label>
           <label id="alignmentMarkerTypeField" class="stack-label">
             <span data-i18n="alignment.markerType">Alignment Marker Type</span>
             <select id="alignmentMarkerType">
@@ -190,10 +203,6 @@ separated by small crosses or dots.</span>
             <label id="crossRoiScaleRow">
               <span><span id="crossRoiScaleLabel" data-i18n="alignment.roiSize">Alignment Marker Region Size</span> <output id="crossRoiScaleValue">-- px</output></span>
               <input id="crossRoiScale" type="range" min="18" max="110" step="1" value="52" />
-            </label>
-            <label id="stabilizationStrengthRow" hidden>
-              <span><span data-i18n="alignment.stabilizationStrength">Stabilization Strength</span> <output id="stabilizationStrengthValue">0%</output></span>
-              <input id="stabilizationStrength" type="range" min="0" max="150" step="1" value="0" />
             </label>
             <label id="stabilizationLambdaRow" hidden>
               <span><span data-i18n="alignment.stabilizationLambda">Lambda</span> <output id="stabilizationLambdaValue">0.010</output></span>
@@ -215,17 +224,13 @@ separated by small crosses or dots.</span>
               <input id="markerlessUseVariance" type="checkbox" checked />
               <span>Use variance</span>
             </label>
-            <label id="emphasizePeripheryRow" class="toggle" hidden style="display:none;">
-              <input id="emphasizePeriphery" type="checkbox" checked />
-              <span>Emphasize periphery</span>
-            </label>
             <label id="markerlessPhaseXRow" hidden>
               <span><span data-i18n="alignment.markerlessPhaseX">Horizontal Phase</span> <output id="markerlessPhaseXValue">+0.000</output></span>
-              <input id="markerlessPhaseX" type="range" min="-0.4" max="0.4" step="0.005" value="0" />
+              <input id="markerlessPhaseX" type="range" min="-0.25" max="0.25" step="0.005" value="0" />
             </label>
             <label id="markerlessPhaseYRow" hidden>
               <span><span data-i18n="alignment.markerlessPhaseY">Vertical Phase</span> <output id="markerlessPhaseYValue">+0.000</output></span>
-              <input id="markerlessPhaseY" type="range" min="-0.4" max="0.4" step="0.005" value="0" />
+              <input id="markerlessPhaseY" type="range" min="-0.25" max="0.25" step="0.005" value="0" />
             </label>
             <label id="verticalDriftCompensationRow" hidden>
               <span><span data-i18n="alignment.verticalDriftCompensation">Vertical Drift Compensation</span> <output id="verticalDriftCompensationValue">+0.0%</output></span>
@@ -399,6 +404,10 @@ separated by small crosses or dots.</span>
             </div>
             <button id="tooltipToggleButton" class="summary-button" type="button" data-i18n="panels.enableTooltips">Enable Tooltips</button>
           </summary>
+          <div id="statusStabilizationProgress" class="status-progress-stack" hidden>
+            <div id="statusStabilizationProgressLabel" class="status-progress-label">Measuring stabilization comparisons 0/0</div>
+            <progress id="statusStabilizationProgressBar" max="1" value="0"></progress>
+          </div>
           <pre id="statusText" data-i18n="panels.waitingForOpenCv">Waiting for OpenCV…</pre>
         </details>
       </aside>
@@ -413,9 +422,12 @@ separated by small crosses or dots.</span>
 
         <section id="rawViewerCard" class="viewer-card" data-view="raw">
           <header>
-            <div class="status-headline">
-              <h2 id="rawPhotoHeading"><span id="rawPhotoHeadingText" data-i18n="panels.rawPhoto">1. Raw Photo</span> <span id="rawPhotoNameWrap" class="header-note" hidden>(<a id="rawPhotoName" target="_blank" rel="noopener noreferrer"></a>)</span><span id="rawPhotoWarning" class="header-note" hidden> ⚠️</span></h2>
-              <span id="rawBusy" class="status-busy" hidden aria-hidden="true"></span>
+            <div class="viewer-header-copy">
+              <div class="status-headline">
+                <h2 id="rawPhotoHeading"><span id="rawPhotoHeadingNumber">1.</span> <a id="rawPhotoHeadingText" target="_blank" rel="noopener noreferrer">Raw Photo</a><span id="rawPhotoWarning" class="header-note" hidden> ⚠️</span></h2>
+                <span id="rawPhotoCredit" class="lede viewer-subnote viewer-inline-subnote" hidden></span>
+                <span id="rawBusy" class="status-busy" hidden aria-hidden="true"></span>
+              </div>
             </div>
           </header>
           <div class="viewer-stage">
@@ -425,7 +437,12 @@ separated by small crosses or dots.</span>
 
         <section id="rectifiedViewerCard" class="viewer-card" data-view="rectified">
           <header>
-            <h2 id="rectifiedSheetHeading" data-i18n="panels.rectifiedSheet">2. Rectified Sheet</h2>
+            <div class="viewer-header-copy">
+              <div class="status-headline">
+                <h2 id="rectifiedSheetHeading"><span id="rectifiedSheetHeadingNumber">2.</span> <a id="rectifiedSheetHeadingText" target="_blank" rel="noopener noreferrer">Rectified Sheet</a></h2>
+                <span id="rectifiedSheetProgress" class="lede viewer-subnote viewer-inline-subnote" hidden></span>
+              </div>
+            </div>
           </header>
           <div class="viewer-stage">
             <canvas id="rectifiedCanvas"></canvas>
@@ -448,7 +465,10 @@ separated by small crosses or dots.</span>
 
         <section id="previewViewerCard" class="viewer-card" data-view="preview">
           <header>
-            <h2 id="animationPreviewHeading" data-i18n="panels.preview">4. Preview &amp; Export</h2>
+            <div class="status-headline">
+              <h2 id="animationPreviewHeading" data-i18n="panels.preview">4. Preview &amp; Export</h2>
+              <span id="previewBusy" class="status-busy" hidden aria-hidden="true"></span>
+            </div>
             <div class="header-actions">
               <button id="previewPlayPauseButton" class="header-button icon-button" type="button" data-i18n-aria-label="aria.pauseAnimation">⏸</button>
               <button id="exportZipButton" class="header-button" type="button" disabled data-i18n="export.exportZip">↓ZIP</button>
@@ -474,7 +494,6 @@ separated by small crosses or dots.</span>
         </div>
       </div>
     </div>
-
     <script type="module" src="js/app.js"></script>
   </body>
 </html>

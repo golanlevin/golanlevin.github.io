@@ -1,4 +1,5 @@
-source_filename	4_julienv3ga.jpg
+source_filename	4_plot_julienv3ga.jpg
+source_credit	Plot by Julien Gachadoat (@julienv3ga)
 paper_preset	custom
 paper_orientation	landscape
 paper_width	35

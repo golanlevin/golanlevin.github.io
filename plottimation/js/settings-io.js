@@ -62,11 +62,13 @@ export async function loadCompanionSettingsText({
  *   state: import("./dom-state.js").state,
  *   settingsDefaults: import("./settings-defaults.js").SETTINGS_DEFAULTS,
  *   getMarkerKey: (col:number, row:number) => string,
+ *   syncOutputSizeFromLoadedValues?: (width:number, height:number) => void,
  *   syncOutputSizeFromWidthInput: () => void,
  *   syncOutputSizeFromHeightInput: () => void,
  *   syncPaperPresetUi: () => void,
  *   syncAlignmentMarkerUi: () => void,
  *   syncMarkerEditingUi: () => void,
+ *   syncRawPhotoCreditDisplay?: () => void,
  *   updateSliderReadouts: () => void,
  * }} deps
  * @returns {void}
@@ -77,11 +79,13 @@ export function applyLoadedSettingsText({
   state,
   settingsDefaults,
   getMarkerKey,
+  syncOutputSizeFromLoadedValues,
   syncOutputSizeFromWidthInput,
   syncOutputSizeFromHeightInput,
   syncPaperPresetUi,
   syncAlignmentMarkerUi,
   syncMarkerEditingUi,
+  syncRawPhotoCreditDisplay,
   updateSliderReadouts,
 }) {
   if (!settingsText.trim()) return;
@@ -106,6 +110,8 @@ export function applyLoadedSettingsText({
     element.checked = entries.get(key) === "true";
   };
 
+  state.source.sourceCredit = entries.get("source_credit") || "";
+
   setIfPresent("paper_preset", dom.paperPreset);
   if (entries.get("paper_orientation") === "portrait") {
     dom.paperOrientationPortrait.checked = true;
@@ -122,6 +128,7 @@ export function applyLoadedSettingsText({
   setIfPresent("search_inset_margin_px", dom.paperMargin);
   setIfPresent("boundary_threshold", dom.boundarySensitivity);
   setIfPresent("boundary_persistence_px", dom.boundaryPersistence);
+  setIfPresent("post_rotation_deg", dom.postRotation);
   const pipeline = entries.get("alignment_pipeline");
   const markerType = entries.get("alignment_marker_type");
   const useMarkerlessPipeline =
@@ -135,12 +142,13 @@ export function applyLoadedSettingsText({
     dom.stabilizationMethodAverage.checked = useAverageMethod;
     dom.stabilizationMethodPairwise.checked = !useAverageMethod;
   }
+  setCheckedIfPresent("stabilization_enabled", dom.stabilizationEnabled);
+  setIfPresent("stabilization_strength", dom.stabilizationStrength);
   dom.alignmentMarkerType.value =
     markerType === "auto" || markerType === "circles" || markerType === "crosses"
       ? markerType
       : settingsDefaults.alignmentMarkerType;
   setIfPresent("alignment_marker_region_scale_pct", dom.crossRoiScale);
-  setIfPresent("stabilization_strength", dom.stabilizationStrength);
   setIfPresent("stabilization_lambda", dom.stabilizationLambda);
   setIfPresent("markerless_phase_x", dom.markerlessPhaseX);
   setIfPresent("markerless_phase_y", dom.markerlessPhaseY);
@@ -164,16 +172,33 @@ export function applyLoadedSettingsText({
   setIfPresent("fps", dom.fps);
   setIfPresent("loop_count", dom.loopCount);
   setIfPresent("frame_count_to_export", dom.frameCountToExport);
+  if (!entries.has("frame_count_to_export") && dom.frameCountToExport) {
+    // Legacy settings files may omit this key. Clear any stale previous-grid value so the later
+    // sync treats the field as "use all cells" for the newly loaded frame rows/cols.
+    dom.frameCountToExport.value = "";
+  }
   setCheckedIfPresent("reverse_order", dom.reverseOrder);
   setCheckedIfPresent("boustrophedon_order", dom.boustrophedonOrder);
   setCheckedIfPresent("ping_pong", dom.pingPong);
-  if (entries.has("output_width")) {
+  const hasOutputWidth = entries.has("output_width");
+  const hasOutputHeight = entries.has("output_height");
+  if (hasOutputWidth) {
     dom.outputWidth.value = String(entries.get("output_width"));
+  }
+  if (hasOutputHeight) {
+    dom.outputHeight.value = String(entries.get("output_height"));
+  }
+  // Restore output sizing into runtime state exactly once. When both dimensions are present, keep
+  // that pair intact until geometry exists instead of forcing one dimension to become the anchor.
+  if (hasOutputWidth && hasOutputHeight && syncOutputSizeFromLoadedValues) {
+    syncOutputSizeFromLoadedValues(
+      Number(entries.get("output_width")),
+      Number(entries.get("output_height")),
+    );
+  } else if (hasOutputWidth) {
     syncOutputSizeFromWidthInput();
-    if (entries.has("output_height")) {
-      dom.outputHeight.value = String(entries.get("output_height"));
-      syncOutputSizeFromHeightInput();
-    }
+  } else if (hasOutputHeight) {
+    syncOutputSizeFromHeightInput();
   }
   if (entries.has("encoding_quality")) {
     dom.gifQuality.value = String(
@@ -202,6 +227,15 @@ export function applyLoadedSettingsText({
   syncPaperPresetUi();
   syncAlignmentMarkerUi();
   syncMarkerEditingUi();
+  syncRawPhotoCreditDisplay?.();
+  if (dom.frameCountToExport) {
+    const cols = Math.max(1, Math.min(20, Math.round(Number(dom.frameCols.value) || settingsDefaults.layout.frameCols)));
+    const rows = Math.max(1, Math.min(20, Math.round(Number(dom.frameRows.value) || settingsDefaults.layout.frameRows)));
+    const maxFrameCount = Math.max(1, cols * rows);
+    dom.frameCountToExport.min = "1";
+    dom.frameCountToExport.max = String(maxFrameCount);
+    state.runtime.lastFrameExportCountMax = maxFrameCount;
+  }
   updateSliderReadouts();
 }
 
@@ -213,6 +247,7 @@ export function applyLoadedSettingsText({
  * @param {{
  *   config: object,
  *   sourceFilename: string,
+ *   sourceCredit?: string,
  *   manualMarkerOverrides: Map<string, {x:number, y:number}>,
  *   sanitizeFilenameBase: (filename:string) => string,
  * }} deps
@@ -221,11 +256,13 @@ export function applyLoadedSettingsText({
 export function buildSettingsTsv({
   config,
   sourceFilename,
+  sourceCredit = "",
   manualMarkerOverrides,
   sanitizeFilenameBase,
 }) {
   const rows = [
     ["source_filename", sourceFilename || ""],
+    ["source_credit", sourceCredit || ""],
     ["paper_preset", config.paperPreset],
     ["paper_orientation", config.paperOrientation],
     ["paper_width", String(config.paperWidthIn)],
@@ -238,11 +275,13 @@ export function buildSettingsTsv({
     ["search_inset_margin_px", String(config.paperMarginPx)],
     ["boundary_threshold", String(config.boundarySensitivity)],
     ["boundary_persistence_px", String(config.boundaryPersistencePx)],
+    ["post_rotation_deg", String(config.postRotationDeg)],
     ["alignment_pipeline", String(config.alignmentPipeline)],
     ["stabilization_method", String(config.stabilizationMethod)],
+    ["stabilization_enabled", String(config.stabilizationEnabled)],
+    ["stabilization_strength", String(config.stabilizationStrengthPct)],
     ["alignment_marker_type", config.alignmentMarkerType],
     ["alignment_marker_region_scale_pct", String(config.crossRoiScalePct)],
-    ["stabilization_strength", String(config.stabilizationStrength)],
     ["stabilization_lambda", String(config.stabilizationLambda)],
     ["markerless_phase_x", String(config.markerlessPhaseX)],
     ["markerless_phase_y", String(config.markerlessPhaseY)],

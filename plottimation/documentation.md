@@ -28,10 +28,13 @@ Use `Layout` to tell the app how your frame-sheet is organized.
   Number of animation frames down the sheet.
 - `Paper Orientation`
   Choose `Landscape` or `Portrait`. This changes the displayed width/height order of the paper presets and the effective aspect ratio used by the page warp.
-- `Paper Size`
+- `Paper Aspect`
   Select a preset paper format such as `Letter`, `Tabloid`, or `A4`.
+- `Source (width:height)`
+  Uses the raw source image dimensions as an aspect-ratio hint. This is still just an aspect
+  guide; it does not request a rectified sheet or export at that literal pixel size.
 - `Custom`
-  If `Paper Size` is set to `Custom`, the `Sheet Width` and `Sheet Height` fields appear.
+  If `Paper Aspect` is set to `Custom`, the `Sheet Width` and `Sheet Height` fields appear.
 - `Sheet Width`
   Custom paper width, used only as an aspect-ratio hint.
 - `Sheet Height`
@@ -39,7 +42,7 @@ Use `Layout` to tell the app how your frame-sheet is organized.
 
 Notes:
 
-- Paper size is not treated as a literal pixel resolution request.
+- Paper aspect is not treated as a literal pixel resolution request.
 - It is used to guide the aspect ratio of the rectified page.
 - `Frame Columns` and `Frame Rows` are clamped to `1...20`.
 
@@ -70,6 +73,13 @@ Use `Page & Grid Detection` to help the app find the paper and the outer boundar
   Sets how strong the boundary signal must be before the grid edge is accepted.
 - `Boundary Persistence`
   Sets how many consecutive pixels must remain above the threshold before that boundary is trusted.
+- `Post-Rotation`
+  Applies a small rotation to the rectified sheet after page rectification and before frame
+  alignment. This affects both marker-based alignment and markerless autocorrelation.
+  - positive values rotate clockwise
+  - negative values rotate counterclockwise
+  - while you drag this slider, the app pauses playback and shows a preview-only rotated view; the
+    expensive full recomputation still happens only when you release the slider
 
 If the app cannot detect the page correctly, the `Status` panel will show:
 
@@ -150,12 +160,14 @@ The markerless pipeline estimates a nominal grid automatically, then lets you re
   Chooses between the two translation-only stabilization strategies:
   - `Neighbor Comparison`
     Compares frames against neighboring frames in the sheet/loop and solves one weighted global offset field.
-  - `Average-Frame Comparison`
-    Compares each frame independently against a single blurry average frame built from the whole animation.
+  - `Median-Frame Comparison`
+    Compares each frame independently against a single grayscale median reference frame built from the whole animation.
+- `Enable Stabilization`
+  Turns translation-only stabilization on or off. When disabled, no stabilization translation is applied.
 - `Stabilization Strength`
-  Applies more or less of the solved translation correction after extraction. This now ranges from `0%` to `150%`, so values above `100%` deliberately overshoot the solved correction.
+  Scales the solved translation-only stabilization offsets from `0%` to `125%`.
 - `Stabilization Rigidity`
-  Controls how resistant the neighbor-comparison solver is to large per-frame corrections. This control is inactive when `Average-Frame Comparison` is selected.
+  Controls how resistant the neighbor-comparison solver is to large per-frame corrections. This control is inactive when `Median-Frame Comparison` is selected.
 - `Horizontal Phase Offset`
   Shifts the extracted grid left or right relative to the automatically estimated phase.
 - `Vertical Phase Offset`
@@ -272,6 +284,8 @@ Use `Export Options` to control the size, timing, ordering, and encoding of the 
 - These two fields stay proportional:
   - typing one updates the other
   - values are clamped to `1...1999`
+- If a settings file loads both values explicitly, that exact pair is preserved until you edit one
+  of the fields manually.
 - `Frames in Export`
   Limits how many source cells are included in preview and export. If this is smaller than
   `Frame Columns × Frame Rows`, the highest-indexed frames are omitted.
@@ -357,8 +371,12 @@ The four main viewer panels are:
 
 - `1. Raw Photo`
   Shows the source photo, with the detected page outline drawn in green.
+  The small line under this header shows `source_credit` from the settings file when present; if
+  no credit is available, it falls back to the loaded source filename.
 - `2. Rectified Sheet`
   Shows the rectified page used for frame extraction, along with the current frame quad.
+  On very large source images, this panel may display a downscaled preview of the rectified sheet
+  even though extraction still uses the full-resolution rectified image internally.
   In markerless mode it can also show the blue inset ROI rectangle used for the markerless search.
   If `Frames in Export` omits cells, those omitted source cells are shown here as red slashed quads.
 - `3. Frame Alignment Markers` or `3. Frame Alignment Centers`
@@ -370,6 +388,9 @@ The four main viewer panels are:
 Desktop notes:
 
 - Clicking `Rectified Sheet` toggles the convolution diagnostic view.
+- Clicking the `Rectified Sheet` header link downloads the full-resolution rectified image.
+  The visible panel image may be downscaled for display, but the download is sourced from the
+  full-resolution rectified sheet.
 - Dragging the `Raw Photo`, `Rectified Sheet`, or exported GIF can download those assets directly.
 
 Mobile notes:
@@ -402,6 +423,8 @@ These settings files store the current UI state, including:
 - appearance settings
 - crop/export settings
 - any manual marker overrides
+- optional metadata such as `source_credit`, which can display a creator credit in the Raw Photo header
+  or fall back to the source filename when no credit text is provided
 
 How they are used:
 
@@ -413,6 +436,8 @@ How they are used:
 Important:
 
 - pressing `Reset` restores built-in defaults, not values from a loaded settings file
+- if a settings file omits `frame_count_to_export`, the app assumes all `Frame Columns × Frame Rows`
+  cells should be included
 - if you choose a lone local image file from the browser file picker, the browser does not let the app inspect the rest of that directory automatically, so a sibling settings file may need to be provided separately
 
 ---

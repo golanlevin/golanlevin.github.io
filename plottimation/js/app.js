@@ -62,6 +62,8 @@ import {
   runPipeline,
   previewPageBoundary,
   estimateCrossRoiSidePx,
+  estimateMarkerlessCornerTileSidePx,
+  capMarkerlessCornerTileSidePx,
   buildCrossConvolutionCanvas,
   getCvInterpolationFlag,
   extractSingleFrameToCanvas,
@@ -72,7 +74,9 @@ import { applyTranslations, getTooltipText, t } from "./i18n.js";
 const bUseOpenCvOutputScaling = true;
 const MOBILE_VIEWER_BREAKPOINT_PX = 960;
 const LIVE_THRESHOLD_PREVIEW_MAX_LONG_EDGE_PX = 512;
+const RECTIFIED_FULL_RES_EAGER_LONG_EDGE_PX = 3000;
 const FRAME_MATCH_WEIGHT_CACHE = new Map();
+const STABILIZATION_MEASUREMENT_CHUNK_SIZE = 4;
 
 const TOOLTIP_TEXT = getTooltipText();
 
@@ -175,6 +179,7 @@ async function populateDemoSelect() {
       select.appendChild(option);
     }
     select.disabled = filenames.length === 0;
+    maybeLoadStartupDemoFromUrl(filenames);
   } catch (error) {
     console.warn("Could not populate demo list.", error);
     select.disabled = true;
@@ -210,6 +215,53 @@ function parseDemoManifest(manifestText) {
 }
 
 /**
+ * Auto-load one bundled demo when the page URL includes `?demo=...`.
+ *
+ * The requested filename must exist in the demo manifest; otherwise this is ignored. This keeps
+ * direct shared links on the supported bundled-demo path instead of probing arbitrary files.
+ *
+ * Example:
+ * - `index.html?demo=9_riso_kellianderson.jpg`
+ *
+ * @param {string[]} manifestFilenames
+ * @returns {void}
+ */
+function maybeLoadStartupDemoFromUrl(manifestFilenames) {
+  const params = new URLSearchParams(globalThis.location?.search || "");
+  const requestedDemo = String(params.get("demo") || "").trim();
+  if (!requestedDemo) return;
+  if (!manifestFilenames.includes(requestedDemo)) {
+    console.warn(`Ignoring unknown demo request: ${requestedDemo}`);
+    return;
+  }
+  if (dom.loadDemoSelect) {
+    dom.loadDemoSelect.value = requestedDemo;
+  }
+  void loadImageSource(`demo/${requestedDemo}`, requestedDemo);
+}
+
+/**
+ * Remove the `?demo=` URL parameter once the user starts loading some different image.
+ *
+ * This keeps shared demo links stable on first open, but prevents the location bar from
+ * continuing to advertise the old demo after the user switches to another file or demo.
+ *
+ * @param {string} nextFilename
+ * @returns {void}
+ */
+function clearDemoQueryIfLoadingDifferentFile(nextFilename) {
+  const url = new URL(globalThis.location?.href || "", globalThis.location?.href || window.location.href);
+  const currentDemo = String(url.searchParams.get("demo") || "").trim();
+  if (!currentDemo) return;
+  if (currentDemo === String(nextFilename || "").trim()) return;
+  url.searchParams.delete("demo");
+  history.replaceState(null, "", url.toString());
+  if (dom.loadDemoSelect) {
+    dom.loadDemoSelect.value = "";
+  }
+}
+
+/**
  * Small local wrapper around the preview module's heading sync.
  *
  * @returns {void}
@@ -229,12 +281,13 @@ function updatePreviewPlayPauseButton() {
 
 function updateRectifiedSheetHeading() {
   syncRectifiedSheetHeading(dom, state);
+  syncRectifiedSheetHeadingLink();
 }
 
 function updatePageGridDetectionHeading(showWarning = false) {
   state.runtime.pageBoundaryWarningVisible = showWarning;
   syncPageGridDetectionHeading(dom, showWarning);
-  syncRawPhotoFilenameDisplay();
+  syncRawPhotoHeadingLink();
 }
 
 /**
@@ -284,6 +337,26 @@ function syncMarkerlessPhaseDebugUi() {
   if (dom.markerlessPhaseDebug) {
     dom.markerlessPhaseDebug.checked = !!state.runtime.markerlessPhaseDebugVisible;
   }
+}
+
+/**
+ * Arm or clear the one-shot auto-hide timer for a temporary markerless debug view.
+ *
+ * @param {"markerlessPhaseDebugTimer"|"markerlessWorkingImageTimer"} timerKey
+ * @param {(() => void) | null} [onExpire=null]
+ * @returns {void}
+ */
+function resetMarkerlessDebugTimer(timerKey, onExpire = null) {
+  const existingTimer = state.runtime[timerKey];
+  if (existingTimer) {
+    window.clearTimeout(existingTimer);
+    state.runtime[timerKey] = 0;
+  }
+  if (!onExpire) return;
+  state.runtime[timerKey] = window.setTimeout(() => {
+    state.runtime[timerKey] = 0;
+    onExpire();
+  }, MARKERLESS_DEBUG_AUTOHIDE_MS);
 }
 
 /**
@@ -646,6 +719,139 @@ function drawCurrentGifPreview() {
 }
 
 /**
+ * Return the current temporary scrub delta for the post-rotation slider.
+ *
+ * The displayed rectified preview already includes the last processed Post-Rotation value. During
+ * scrubbing, preview only the difference between the current slider value and that committed
+ * processed rotation so the drag path does not double-apply the effect.
+ *
+ * @returns {number}
+ */
+function getPostRotationPreviewDeg() {
+  const sliderDeg = Math.max(
+    -1.1,
+    Math.min(
+      1.1,
+      Number.isFinite(Number(dom.postRotation?.value))
+        ? Number(dom.postRotation.value)
+        : SETTINGS_DEFAULTS.detection.postRotationDeg
+    )
+  );
+  return sliderDeg - (Number(state.runtime.appliedPostRotationDeg) || 0);
+}
+
+/**
+ * Rotate one canvas-space point around the canvas center.
+ *
+ * @param {{x:number,y:number}} point
+ * @param {number} width
+ * @param {number} height
+ * @param {number} radians
+ * @returns {{x:number,y:number}}
+ */
+function rotateCanvasPointAroundCenter(point, width, height, radians) {
+  const cx = width * 0.5;
+  const cy = height * 0.5;
+  const dx = point.x - cx;
+  const dy = point.y - cy;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return {
+    x: cx + (dx * cos) - (dy * sin),
+    y: cy + (dx * sin) + (dy * cos),
+  };
+}
+
+/**
+ * Estimate a representative border color for preview-only rotation fills.
+ *
+ * @param {HTMLCanvasElement} canvas
+ * @returns {string}
+ */
+function getPreviewCanvasBorderFillStyle(canvas) {
+  if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
+    return "rgb(245, 245, 245)";
+  }
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return "rgb(245, 245, 245)";
+  const width = canvas.width;
+  const height = canvas.height;
+  const bandRows = Math.min(2, height);
+  const bandCols = Math.min(2, width);
+  let rSum = 0;
+  let gSum = 0;
+  let bSum = 0;
+  let count = 0;
+  const accumulateRowBand = (yStart, rows) => {
+    if (rows <= 0) return;
+    const data = ctx.getImageData(0, yStart, width, rows).data;
+    for (let i = 0; i < data.length; i += 4) {
+      rSum += data[i];
+      gSum += data[i + 1];
+      bSum += data[i + 2];
+      count++;
+    }
+  };
+  const accumulateColBand = (xStart, cols) => {
+    if (cols <= 0) return;
+    const data = ctx.getImageData(xStart, 0, cols, height).data;
+    for (let i = 0; i < data.length; i += 4) {
+      rSum += data[i];
+      gSum += data[i + 1];
+      bSum += data[i + 2];
+      count++;
+    }
+  };
+  accumulateRowBand(0, bandRows);
+  accumulateRowBand(Math.max(0, height - bandRows), bandRows);
+  accumulateColBand(0, bandCols);
+  accumulateColBand(Math.max(0, width - bandCols), bandCols);
+  if (count <= 0) return "rgb(245, 245, 245)";
+  return `rgb(${Math.round(rSum / count)}, ${Math.round(gSum / count)}, ${Math.round(bSum / count)})`;
+}
+
+/**
+ * Build or reuse the preview-scale rotated rectified canvas used only while scrubbing Post-Rotation.
+ *
+ * `rotationDeg` is the live scrub delta relative to the last processed rectified image, not an
+ * absolute replacement rotation. That keeps the preview aligned with whatever Post-Rotation value
+ * has already been committed by the last full pipeline run.
+ *
+ * @param {HTMLCanvasElement} sourceCanvas
+ * @param {number} rotationDeg
+ * @returns {HTMLCanvasElement}
+ */
+function getPostRotationPreviewCanvas(sourceCanvas, rotationDeg) {
+  if (
+    state.preview.postRotationPreviewCanvas &&
+    state.preview.postRotationPreviewSourceCanvas === sourceCanvas &&
+    Math.abs(state.preview.postRotationPreviewDeg - rotationDeg) < 1e-9
+  ) {
+    return state.preview.postRotationPreviewCanvas;
+  }
+  const previewCanvas = document.createElement("canvas");
+  previewCanvas.width = sourceCanvas.width;
+  previewCanvas.height = sourceCanvas.height;
+  const ctx = previewCanvas.getContext("2d");
+  // Positive canvas rotation now matches the UI convention: positive Post-Rotation feels clockwise.
+  const radians = rotationDeg * (Math.PI / 180);
+  ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+  ctx.fillStyle = getPreviewCanvasBorderFillStyle(sourceCanvas);
+  ctx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+  ctx.save();
+  ctx.translate(previewCanvas.width * 0.5, previewCanvas.height * 0.5);
+  ctx.rotate(radians);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(sourceCanvas, -sourceCanvas.width * 0.5, -sourceCanvas.height * 0.5);
+  ctx.restore();
+  state.preview.postRotationPreviewCanvas = previewCanvas;
+  state.preview.postRotationPreviewSourceCanvas = sourceCanvas;
+  state.preview.postRotationPreviewDeg = rotationDeg;
+  return previewCanvas;
+}
+
+/**
  * Clear the markerless paper-backdrop CSS variable so fallback styling applies again.
  *
  * @returns {void}
@@ -738,10 +944,6 @@ function updateMarkerlessPaperBackdropColor(canvas) {
  * @returns {void}
  */
 function releaseSourceCvCaches() {
-  if (state.source.cvMat) {
-    state.source.cvMat.delete();
-    state.source.cvMat = null;
-  }
   if (state.source.grayMat) {
     state.source.grayMat.delete();
     state.source.grayMat = null;
@@ -757,16 +959,22 @@ function releaseSourceCvCaches() {
  * Ensure that the raw source image has cached OpenCV mats ready for lightweight page-boundary
  * previewing while the threshold-offset slider is dragged.
  *
- * @returns {{cvMat: cv.Mat, grayMat: cv.Mat, previewGrayMat: cv.Mat, previewScale: number} | null}
+ * Keep only grayscale caches here. The old persistent `state.source.cvMat` raw RGBA mat was
+ * removed to lower peak memory on large scans; if some future feature truly needs a reusable
+ * color source mat again, this helper is the right place to restore it.
+ *
+ * @returns {{grayMat: cv.Mat, previewGrayMat: cv.Mat, previewScale: number} | null}
  */
 function ensureSourceCvCaches() {
   if (!state.runtime.cvReady || !state.source.image) return null;
-  if (!state.source.cvMat) {
-    state.source.cvMat = cv.imread(state.source.canvas);
-  }
   if (!state.source.grayMat) {
+    const sourceCvMat = cv.imread(state.source.canvas);
     state.source.grayMat = new cv.Mat();
-    cv.cvtColor(state.source.cvMat, state.source.grayMat, cv.COLOR_RGBA2GRAY);
+    try {
+      cv.cvtColor(sourceCvMat, state.source.grayMat, cv.COLOR_RGBA2GRAY);
+    } finally {
+      sourceCvMat.delete();
+    }
   }
   if (!state.source.previewGrayMat) {
     const sourceWidth = state.source.canvas.width;
@@ -794,7 +1002,6 @@ function ensureSourceCvCaches() {
     }
   }
   return {
-    cvMat: state.source.cvMat,
     grayMat: state.source.grayMat,
     previewGrayMat: state.source.previewGrayMat,
     previewScale: state.source.previewScale,
@@ -883,6 +1090,8 @@ function setTooltipsEnabled(enabled) {
     enabled,
     previewTooltipText: TOOLTIP_TEXT["#gifPreviewCanvas"] || "",
   });
+  syncRawPhotoHeadingLink();
+  syncRectifiedSheetHeadingLink();
   if (state.geometry.alignmentInfo) {
     renderCrossRoiGrid(state.geometry.alignmentInfo);
   }
@@ -906,6 +1115,188 @@ function setBusyState(busy) {
  */
 function setGeometryProcessingCursor(active) {
   document.body.classList.toggle("geometry-processing", !!active);
+  syncPreviewBusyIndicator();
+}
+
+/**
+ * Keep the Preview header spinner aligned with any busy state that can stall or delay playback.
+ *
+ * This includes source-image loading, geometry-processing rebuilds, and the chunked stabilization
+ * comparison job whose own progress UI lives in Status.
+ *
+ * @returns {void}
+ */
+function syncPreviewBusyIndicator() {
+  if (!dom.previewBusy) return;
+  document.body.classList.toggle("stabilization-processing", !!state.processing.stabilizationMeasurementActive);
+  dom.previewBusy.hidden = !(
+    !!state.runtime.busy ||
+    document.body.classList.contains("geometry-processing") ||
+    document.body.classList.contains("stabilization-processing") ||
+    !!state.processing.stabilizationMeasurementActive
+  );
+}
+
+const ENABLE_TEMP_PROCESS_TIMING = false;
+const MARKERLESS_DEBUG_AUTOHIDE_MS = 20_000;
+let activeTimingProfile = null;
+let lastBaseStatusText = "";
+let lastProcessTimingSummary = "";
+let lastWarmupTimingSummary = "";
+let lastHeavyPathTimingSummary = "";
+
+/**
+ * Begin collecting temporary timing stats for one synchronous processing phase.
+ *
+ * @param {string} label
+ * @returns {{label:string,start:number,sections:Map<string,{total:number,count:number,max:number}>}|null}
+ */
+function beginTimingProfile(label) {
+  if (!ENABLE_TEMP_PROCESS_TIMING) return null;
+  const profile = {
+    label,
+    start: performance.now(),
+    sections: new Map(),
+  };
+  activeTimingProfile = profile;
+  return profile;
+}
+
+/**
+ * Record one measured sub-step inside the currently active temporary timing profile.
+ *
+ * @param {string} key
+ * @param {number} durationMs
+ * @returns {void}
+ */
+function recordTimingSample(key, durationMs) {
+  if (!activeTimingProfile) return;
+  const entry = activeTimingProfile.sections.get(key) || { total: 0, count: 0, max: 0 };
+  entry.total += durationMs;
+  entry.count += 1;
+  entry.max = Math.max(entry.max, durationMs);
+  activeTimingProfile.sections.set(key, entry);
+}
+
+/**
+ * Time one synchronous helper only while a temporary timing profile is active.
+ *
+ * @template T
+ * @param {string} key
+ * @param {() => T} fn
+ * @returns {T}
+ */
+function timeProfiled(key, fn) {
+  if (!activeTimingProfile) return fn();
+  const start = performance.now();
+  try {
+    return fn();
+  } finally {
+    recordTimingSample(key, performance.now() - start);
+  }
+}
+
+/**
+ * Finish a temporary timing profile and return a compact multiline summary for Status.
+ *
+ * @param {{label:string,start:number,sections:Map<string,{total:number,count:number,max:number}>}|null} profile
+ * @returns {string}
+ */
+function finishTimingProfile(profile) {
+  if (!profile) return "";
+  const totalMs = performance.now() - profile.start;
+  if (activeTimingProfile === profile) {
+    activeTimingProfile = null;
+  }
+  const lines = [`${profile.label}: ${totalMs.toFixed(0)} ms`];
+  const sectionEntries = [...profile.sections.entries()]
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 8);
+  for (const [key, entry] of sectionEntries) {
+    const detail = entry.count > 1
+      ? `${entry.total.toFixed(0)} ms (${entry.count}×, max ${entry.max.toFixed(0)} ms)`
+      : `${entry.total.toFixed(0)} ms`;
+    lines.push(`- ${key}: ${detail}`);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Combine the base localized status text with the current temporary timing summaries.
+ *
+ * @param {string} baseText
+ * @returns {string}
+ */
+function buildStatusWithTiming(baseText) {
+  if (!ENABLE_TEMP_PROCESS_TIMING) return baseText;
+  const extras = [lastProcessTimingSummary, lastWarmupTimingSummary, lastHeavyPathTimingSummary].filter(Boolean);
+  if (!extras.length) return baseText;
+  return `${baseText}\n\nTiming (temporary):\n${extras.join("\n")}`;
+}
+
+/**
+ * Keep the temporary pairwise-measurement progress bar in sync with current work.
+ *
+ * @returns {void}
+ */
+function updateStabilizationProgressUi() {
+  const container = dom.statusStabilizationProgress;
+  const label = dom.statusStabilizationProgressLabel;
+  const bar = dom.statusStabilizationProgressBar;
+  const rectifiedProgress = dom.rectifiedSheetProgress;
+  if (!container || !label || !bar) return;
+  const active = !!state.processing.stabilizationMeasurementActive;
+  syncPreviewBusyIndicator();
+  container.hidden = !active;
+  if (rectifiedProgress) {
+    rectifiedProgress.hidden = !active;
+  }
+  if (!active) return;
+  const completed = state.processing.stabilizationMeasurementProgressCompleted || 0;
+  const total = Math.max(1, state.processing.stabilizationMeasurementProgressTotal || 1);
+  const progressText = t("status.computingStabilizationProgress", { completed, total });
+  label.textContent = progressText;
+  if (rectifiedProgress) {
+    rectifiedProgress.textContent = progressText;
+  }
+  bar.max = total;
+  bar.value = Math.max(0, Math.min(total, completed));
+}
+
+/**
+ * Refresh the Status panel so the temporary stabilization progress text and bar stay visible.
+ *
+ * @returns {void}
+ */
+function refreshStatusDisplay() {
+  updateStabilizationProgressUi();
+  if (lastBaseStatusText) {
+    setStatus(buildStatusWithTiming(lastBaseStatusText));
+  }
+}
+
+/**
+ * Time one shared heavy rebuild path and append its summary to Status.
+ *
+ * This is used for expensive cache-rebuild/redraw paths that do not flow through
+ * `processCurrentImage()`, such as markerless phase release and crop/resampling frame rebuilds.
+ *
+ * @template T
+ * @param {string} label
+ * @param {() => T} fn
+ * @returns {T}
+ */
+function runTimedHeavyPath(label, fn) {
+  if (!ENABLE_TEMP_PROCESS_TIMING) return fn();
+  const profile = beginTimingProfile(label);
+  try {
+    return fn();
+  } finally {
+    lastHeavyPathTimingSummary = finishTimingProfile(profile);
+    if (lastBaseStatusText) {
+      setStatus(buildStatusWithTiming(lastBaseStatusText));
+    }
+  }
 }
 
 /**
@@ -918,12 +1309,38 @@ async function waitForNextPaint() {
 }
 
 /**
+ * Cancel any in-flight chunked pairwise stabilization measurement and hide its temporary UI.
+ *
+ * @returns {void}
+ */
+function cancelStabilizationMeasurement() {
+  state.processing.stabilizationMeasurementToken += 1;
+  state.processing.stabilizationMeasurementActive = false;
+  state.processing.stabilizationMeasurementProgressCompleted = 0;
+  state.processing.stabilizationMeasurementProgressTotal = 0;
+  state.processing.stabilizationMeasurementRedrawPending = false;
+  state.processing.stabilizationMeasurementPromise = null;
+  updateStabilizationProgressUi();
+}
+
+/**
  * Small local wrapper around the drag-assets module's rectified drag-URL cleanup.
  *
  * @returns {void}
  */
 function releaseRectifiedDragUrl() {
   releaseRectifiedDragAsset(state);
+}
+
+/**
+ * Revoke the cached full-resolution rectified-sheet URL used by the heading link.
+ *
+ * @returns {void}
+ */
+function releaseRectifiedFullResUrl() {
+  if (!state.preview.rectifiedFullResUrl) return;
+  URL.revokeObjectURL(state.preview.rectifiedFullResUrl);
+  state.preview.rectifiedFullResUrl = "";
 }
 
 /**
@@ -972,13 +1389,20 @@ function makeLivePreviewDragCue() {
  */
 function clearDerivedPreviews() {
   releaseRectifiedCvCache();
+  state.runtime.appliedPostRotationDeg = 0;
   state.preview.rectifiedCanvas = null;
   state.preview.rectifiedDiagnosticSourceCanvas = null;
   state.preview.rectifiedDiagnosticDirty = true;
+  state.preview.postRotationPreviewCanvas = null;
+  state.preview.postRotationPreviewSourceCanvas = null;
+  state.preview.postRotationPreviewDeg = 0;
   releaseRectifiedDragUrl();
+  releaseRectifiedFullResUrl();
+  state.preview.rectifiedFullResBuildId += 1;
   state.preview.rectifiedDragBuildId += 1;
   state.geometry.baseRectifiedCanvas = null;
   state.geometry.baseRectifiedPageCanvas = null;
+  state.geometry.rectifiedDownloadUsesRawSource = false;
   state.geometry.pagePreviewGridQuad = null;
   state.geometry.alignmentInfo = null;
   state.geometry.frameCount = 0;
@@ -987,12 +1411,17 @@ function clearDerivedPreviews() {
   state.runtime.markerEditingEnabled = false;
   state.runtime.markerBlobDebugVisible = false;
   state.frames.base = [];
+  state.frames.baseOutputEpoch = [];
   state.frames.stabilizedCache.clear();
+  state.frames.stabilizedOutputEpoch.clear();
+  state.frames.phaseAdjustedCache.clear();
   state.frames.stabilizationMatchData = null;
   state.frames.stabilizationPairwise = null;
   state.frames.stabilizationAverageReference = null;
   state.frames.stabilizationOffsets = null;
   state.frames.adjustedCache.clear();
+  state.frames.adjustedOutputEpoch.clear();
+  state.frames.outputEpoch = 0;
   state.preview.frameIndex = 0;
   state.preview.inspectingRawFrame = false;
   state.preview.showRectifiedDiagnostic = false;
@@ -1051,25 +1480,37 @@ function clearAllPreviews() {
  */
 function clearDerivedOutputsForDetectionFailure() {
   releaseRectifiedCvCache();
+  state.runtime.appliedPostRotationDeg = 0;
   state.preview.rectifiedCanvas = null;
   state.preview.rectifiedDiagnosticSourceCanvas = null;
   state.preview.rectifiedDiagnosticDirty = true;
+  state.preview.postRotationPreviewCanvas = null;
+  state.preview.postRotationPreviewSourceCanvas = null;
+  state.preview.postRotationPreviewDeg = 0;
   releaseRectifiedDragUrl();
+  releaseRectifiedFullResUrl();
+  state.preview.rectifiedFullResBuildId += 1;
   state.preview.rectifiedDragBuildId += 1;
   state.geometry.baseRectifiedCanvas = null;
   state.geometry.baseRectifiedPageCanvas = null;
+  state.geometry.rectifiedDownloadUsesRawSource = false;
   state.geometry.pagePreviewGridQuad = null;
   state.geometry.alignmentInfo = null;
   state.geometry.frameCount = 0;
   state.runtime.markerEditingEnabled = false;
   state.runtime.markerBlobDebugVisible = false;
   state.frames.base = [];
+  state.frames.baseOutputEpoch = [];
   state.frames.stabilizedCache.clear();
+  state.frames.stabilizedOutputEpoch.clear();
+  state.frames.phaseAdjustedCache.clear();
   state.frames.stabilizationMatchData = null;
   state.frames.stabilizationPairwise = null;
   state.frames.stabilizationAverageReference = null;
   state.frames.stabilizationOffsets = null;
   state.frames.adjustedCache.clear();
+  state.frames.adjustedOutputEpoch.clear();
+  state.frames.outputEpoch = 0;
   state.preview.frameIndex = 0;
   state.preview.inspectingRawFrame = false;
   state.preview.showRectifiedDiagnostic = false;
@@ -1134,7 +1575,16 @@ function init() {
   syncMarkerEditingUi();
   updatePageGridDetectionHeading(false);
   updateRectifiedSheetHeading();
-  dom.gifPreviewCanvas.title = TOOLTIP_TEXT["#gifPreviewCanvas"] || "";
+  dom.rectifiedSheetHeadingText?.addEventListener("click", (event) => {
+    if (state.preview.showRectifiedDiagnostic) {
+      event.preventDefault();
+      return;
+    }
+    if (state.geometry.rectifiedDownloadUsesRawSource) return;
+    if (state.preview.rectifiedFullResUrl) return;
+    event.preventDefault();
+    downloadFullResRectifiedSheet();
+  });
   dom.gifImage.classList.add("hidden");
   dom.gifImage.hidden = true;
   dom.gifImage.removeAttribute("src");
@@ -1213,6 +1663,7 @@ function attachUi() {
     },
     toggleMarkerBlobView,
     toggleMarkerlessPhaseDebug,
+    toggleMarkerlessWorkingImage,
     toggleMarkerEditing,
     clearMarkerEdits,
     syncOutputSizeFromWidthInput,
@@ -1233,14 +1684,22 @@ function attachUi() {
     scheduleAppearancePreviewUpdate,
     scheduleStabilizationPreviewUpdate,
     scheduleMarkerlessPhasePreviewUpdate,
+    schedulePostRotationPreviewUpdate,
+    runTimedHeavyPath,
     warmCurrentStabilizationMethod: scheduleCurrentStabilizationWarmup,
     beginStabilizationStrengthScrub,
     endStabilizationStrengthScrub,
     beginMarkerlessPhaseScrub,
     endMarkerlessPhaseScrub,
+    beginPostRotationScrub,
+    endPostRotationScrub,
+    finishPostRotationScrubIfUnchanged,
+    bumpFrameOutputEpoch,
     setGeometryProcessingCursor,
     cancelInFlightProcessing,
     invalidateFrameCaches,
+    invalidateFrameOutputCaches,
+    rebuildAllFrameOutputCaches,
     drawCurrentGifPreview,
     exportGif,
     exportMp4,
@@ -1381,7 +1840,6 @@ function resetAppearanceControls() {
   applyAppearanceDefaults(dom);
   revokeGifUrl();
   updateSliderReadouts();
-  invalidateFrameCaches();
   invalidateAppearanceCache();
   refreshAppearanceOutputs();
   drawCurrentGifPreview();
@@ -1407,7 +1865,7 @@ function resetTrimControls() {
   applyCropGeometryDefaults(dom);
   revokeGifUrl();
   updateSliderReadouts();
-  invalidateFrameCaches();
+  invalidateFrameOutputCaches();
   drawCurrentGifPreview();
 }
 
@@ -1462,7 +1920,7 @@ function resetExportControls() {
     previousOutputSize.width !== nextOutputSize.width ||
     previousOutputSize.height !== nextOutputSize.height
   ) {
-    invalidateFrameCaches();
+    invalidateFrameOutputCaches();
   }
   drawCurrentGifPreview();
 }
@@ -1544,13 +2002,34 @@ function scheduleMarkerlessPhasePreviewUpdate() {
   if (state.preview.markerlessPhasePreviewRaf) return;
   state.preview.markerlessPhasePreviewRaf = requestAnimationFrame(() => {
     state.preview.markerlessPhasePreviewRaf = 0;
-    renderCrossRoiGrid(state.geometry.alignmentInfo);
-    drawCurrentGifPreview();
+    runTimedHeavyPath("Heavy path: markerless-phase-preview", () => {
+      renderCrossRoiGrid(state.geometry.alignmentInfo);
+      drawCurrentGifPreview();
+    });
   });
 }
 
 /**
- * Coalesce stabilization-strength preview updates into one animation-frame redraw.
+ * Coalesce post-rotation scrub preview updates into one animation-frame redraw.
+ *
+ * This is intentionally preview-only work: it redraws Rectified Sheet and Panel 3 from the
+ * current preview-scale buffers without rerunning the full OpenCV pipeline on every slider tick.
+ *
+ * @returns {void}
+ */
+function schedulePostRotationPreviewUpdate() {
+  if (state.preview.postRotationPreviewRaf) return;
+  state.preview.postRotationPreviewRaf = requestAnimationFrame(() => {
+    state.preview.postRotationPreviewRaf = 0;
+    runTimedHeavyPath("Heavy path: post-rotation-preview", () => {
+      renderCrossRoiGrid(state.geometry.alignmentInfo);
+      drawCurrentGifPreview();
+    });
+  });
+}
+
+/**
+ * Coalesce stabilization preview updates into one animation-frame redraw.
  *
  * @returns {void}
  */
@@ -1558,15 +2037,17 @@ function scheduleStabilizationPreviewUpdate() {
   if (state.preview.stabilizationPreviewRaf) return;
   state.preview.stabilizationPreviewRaf = requestAnimationFrame(() => {
     state.preview.stabilizationPreviewRaf = 0;
-    if (!state.preview.markerOverrideScrubbing) {
-      renderCrossRoiGrid(state.geometry.alignmentInfo);
-    }
-    drawCurrentGifPreview();
+    runTimedHeavyPath("Heavy path: stabilization-preview", () => {
+      if (!state.preview.markerOverrideScrubbing) {
+        renderCrossRoiGrid(state.geometry.alignmentInfo);
+      }
+      drawCurrentGifPreview();
+    });
   });
 }
 
 /**
- * Pause Preview playback while the stabilization-strength slider is actively scrubbed.
+ * Pause Preview playback while the stabilization rigidity slider is actively scrubbed.
  *
  * @returns {void}
  */
@@ -1586,7 +2067,7 @@ function beginStabilizationStrengthScrub() {
 }
 
 /**
- * Restore Preview playback after stabilization-strength scrubbing if the scrub initiated the pause.
+ * Restore Preview playback after stabilization-rigidity scrubbing if the scrub initiated the pause.
  *
  * @returns {void}
  */
@@ -1662,6 +2143,59 @@ function endMarkerlessPhaseScrub() {
 }
 
 /**
+ * Pause Preview playback while the post-rotation slider is actively scrubbed.
+ *
+ * @returns {void}
+ */
+function beginPostRotationScrub() {
+  if (state.preview.postRotationScrubbing) return;
+  state.preview.postRotationScrubbing = true;
+  if (state.preview.paused) {
+    state.preview.postRotationResumePlayback = false;
+    return;
+  }
+  state.preview.postRotationResumePlayback = true;
+  state.preview.paused = true;
+  updatePreviewPlayPauseButton();
+}
+
+/**
+ * Restore Preview playback after a post-rotation scrub if the scrub initiated the pause.
+ *
+ * @returns {void}
+ */
+function endPostRotationScrub() {
+  if (!state.preview.postRotationScrubbing) return;
+  state.preview.postRotationScrubbing = false;
+  state.preview.postRotationPreviewCanvas = null;
+  state.preview.postRotationPreviewSourceCanvas = null;
+  state.preview.postRotationPreviewDeg = 0;
+  if (!state.preview.postRotationResumePlayback) return;
+  state.preview.postRotationResumePlayback = false;
+  state.preview.paused = false;
+  updatePreviewPlayPauseButton();
+}
+
+/**
+ * End Post-Rotation scrub mode immediately when the slider returns to the already-processed value.
+ *
+ * In that case there is no net geometry change to process, so keeping the low-resolution scrub
+ * preview alive only leaves playback paused and Panel 3 blurry for no reason.
+ *
+ * @returns {boolean}
+ */
+function finishPostRotationScrubIfUnchanged() {
+  if (!state.preview.postRotationScrubbing) return false;
+  if (Math.abs(getPostRotationPreviewDeg()) > 1e-9) return false;
+  endPostRotationScrub();
+  if (state.geometry.alignmentInfo) {
+    renderCrossRoiGrid(state.geometry.alignmentInfo);
+  }
+  drawCurrentGifPreview();
+  return true;
+}
+
+/**
  * Populate the resampling dropdown with only the interpolation modes available in this OpenCV build.
  *
  * @returns {void}
@@ -1701,7 +2235,7 @@ function attachResizeHandler() {
     state.preview.resizeTimer = window.setTimeout(() => {
       syncResponsiveViewerUi();
       window.requestAnimationFrame(() => {
-        syncRawPhotoFilenameDisplay();
+        syncRawPhotoHeadingLink();
         rerenderPreviews();
       });
     }, 40);
@@ -1709,93 +2243,204 @@ function attachResizeHandler() {
 }
 
 /**
- * Truncate a filename with a middle ellipsis so the start and extension remain visible.
- *
- * @param {string} text
- * @param {number} maxWidthPx
- * @param {string} font
- * @returns {string}
- */
-function truncateMiddleTextToFit(text, maxWidthPx, font) {
-  if (!text || maxWidthPx <= 0) return text;
-  const canvas = truncateMiddleTextToFit.canvas || (truncateMiddleTextToFit.canvas = document.createElement("canvas"));
-  const ctx = canvas.getContext("2d");
-  ctx.font = font;
-  if (ctx.measureText(text).width <= maxWidthPx) return text;
-
-  const ellipsis = "…";
-  const extensionIndex = text.lastIndexOf(".");
-  const extensionLength = extensionIndex >= 0 ? (text.length - extensionIndex) : 0;
-  const suffixFloor = Math.max(
-    4,
-    extensionLength > 0 ? Math.min(text.length - 1, extensionLength + 2) : 4
-  );
-  let best = text;
-
-  for (let prefixLen = Math.min(text.length - suffixFloor - 1, 12); prefixLen >= 1; prefixLen--) {
-    for (let suffixLen = suffixFloor; suffixLen < text.length - prefixLen; suffixLen++) {
-      const suffixStart = text.length - suffixLen;
-      const safeSuffixStart = (extensionIndex >= 0 && suffixStart >= extensionIndex)
-        ? Math.max(0, extensionIndex - 2)
-        : suffixStart;
-      const candidate = `${text.slice(0, prefixLen)}${ellipsis}${text.slice(safeSuffixStart)}`;
-      if (ctx.measureText(candidate).width <= maxWidthPx) {
-        return candidate;
-      }
-      best = candidate;
-      if (suffixLen > 12) break;
-    }
-  }
-
-  return best;
-}
-
-/**
- * Decide whether the Raw Photo filename is long enough to warrant middle truncation.
- *
- * This keeps ordinary filenames unchanged even if the header layout has a little slack jitter,
- * and only engages ellipsis for genuinely long names.
- *
- * @param {string} text
- * @param {number} availableWidthPx
- * @param {string} font
- * @returns {boolean}
- */
-function shouldEllipsizeRawFilename(text, availableWidthPx, font) {
-  if (!text) return false;
-  if (text.length <= 24) return false;
-  const canvas = shouldEllipsizeRawFilename.canvas || (shouldEllipsizeRawFilename.canvas = document.createElement("canvas"));
-  const ctx = canvas.getContext("2d");
-  ctx.font = font;
-  const measuredWidth = ctx.measureText(text).width;
-  return measuredWidth > Math.max(availableWidthPx, 0) + 24;
-}
-
-/**
- * Fit the Raw Photo filename link into the header using a middle ellipsis when needed.
+ * Keep the Raw Photo title link synchronized with the currently loaded source image.
  *
  * @returns {void}
  */
-function syncRawPhotoFilenameDisplay() {
-  if (!dom.rawPhotoName || !dom.rawPhotoNameWrap || dom.rawPhotoNameWrap.hidden) return;
-  const fullFilename = dom.rawPhotoName.dataset.fullFilename || state.source.filename || "";
-  if (!fullFilename) {
-    dom.rawPhotoName.textContent = "";
+function syncRawPhotoHeadingLink() {
+  if (!dom.rawPhotoHeadingText) return;
+  const translatedTitle = String(t("panels.rawPhoto") || "").trim();
+  dom.rawPhotoHeadingText.textContent = translatedTitle.replace(/^\s*\d+\s*[\.\):\-–—]?\s*/, "") || "Raw Photo";
+  const href = state.source.dragUrl ? new URL(state.source.dragUrl, window.location.href).href : "";
+  if (href) {
+    dom.rawPhotoHeadingText.href = href;
+  } else {
+    dom.rawPhotoHeadingText.removeAttribute("href");
+  }
+  dom.rawPhotoHeadingText.title = state.runtime.tooltipsEnabled ? t("tooltip.rawPhotoName") : "";
+}
+
+/**
+ * Keep the Rectified Sheet title link synchronized with the currently available full-resolution
+ * download strategy.
+ *
+ * Small rectified sheets can keep a prebuilt object URL on hand. Large ones are generated lazily
+ * on click from the authoritative OpenCV mat so the preview canvas can stay downscaled. In the
+ * markerless near-identity fast path, this link can point straight at the raw source asset instead.
+ *
+ * @returns {void}
+ */
+function syncRectifiedSheetHeadingLink() {
+  if (!dom.rectifiedSheetHeadingText) return;
+  const translatedTitle = String(
+    state.preview.showRectifiedDiagnostic ? t("panels.convolutionDebugView") : t("panels.rectifiedSheet")
+  ).trim();
+  dom.rectifiedSheetHeadingText.textContent =
+    translatedTitle.replace(/^\s*\d+\s*[\.\):\-–—]?\s*/, "") || "Rectified Sheet";
+  dom.rectifiedSheetHeadingText.title = state.runtime.tooltipsEnabled ? t("tooltip.rectifiedSheetHeading") : "";
+  if (state.preview.showRectifiedDiagnostic) {
+    dom.rectifiedSheetHeadingText.removeAttribute("href");
+    dom.rectifiedSheetHeadingText.removeAttribute("download");
     return;
   }
+  if (state.geometry.rectifiedDownloadUsesRawSource && state.source.dragUrl) {
+    dom.rectifiedSheetHeadingText.href = new URL(state.source.dragUrl, window.location.href).href;
+    dom.rectifiedSheetHeadingText.download = makeRectifiedFilename(state.source.filename);
+    return;
+  }
+  if (state.preview.rectifiedFullResUrl) {
+    dom.rectifiedSheetHeadingText.href = state.preview.rectifiedFullResUrl;
+    dom.rectifiedSheetHeadingText.download = makeRectifiedFilename(state.source.filename);
+    return;
+  }
+  const hasRectifiedSource =
+    !!state.geometry.baseRectifiedMat ||
+    !!state.geometry.baseRectifiedCanvas ||
+    !!state.preview.rectifiedCanvas;
+  if (hasRectifiedSource) {
+    dom.rectifiedSheetHeadingText.href = "#";
+  } else {
+    dom.rectifiedSheetHeadingText.removeAttribute("href");
+  }
+  dom.rectifiedSheetHeadingText.removeAttribute("download");
+}
 
-  const headingRowWidth = dom.rawPhotoHeading?.parentElement?.clientWidth || 0;
-  const titleWidth = dom.rawPhotoHeadingText?.getBoundingClientRect().width || 0;
-  const warningWidth = dom.rawPhotoWarning?.hidden ? 0 : (dom.rawPhotoWarning.getBoundingClientRect().width || 0);
-  const busyWidth = dom.rawBusy?.hidden ? 0 : (dom.rawBusy.getBoundingClientRect().width || 0);
-  const availableWrapWidth = Math.max(40, headingRowWidth - titleWidth - warningWidth - busyWidth - 20);
-  const availableLinkWidth = Math.max(32, availableWrapWidth - 12);
-  const computed = window.getComputedStyle(dom.rawPhotoName);
-  const font = computed.font || `${computed.fontSize} ${computed.fontFamily}`;
-  dom.rawPhotoName.textContent = shouldEllipsizeRawFilename(fullFilename, availableLinkWidth, font)
-    ? truncateMiddleTextToFit(fullFilename, availableLinkWidth, font)
-    : fullFilename;
-  dom.rawPhotoName.title = state.runtime.tooltipsEnabled ? t("tooltip.rawPhotoName") : "";
+/**
+ * Encode the authoritative full-resolution rectified mat into a blob URL.
+ *
+ * The visible Rectified Sheet panel may be downscaled for large sources, so download generation
+ * must come from the OpenCV mat instead of the preview canvas.
+ *
+ * @param {cv.Mat} rectifiedMat
+ * @param {(url:string | null) => void} onReady
+ * @returns {void}
+ */
+function encodeRectifiedMatToBlobUrl(rectifiedMat, onReady) {
+  const rgba = new cv.Mat();
+  const exportCanvas = document.createElement("canvas");
+  try {
+    if (rectifiedMat.type() === cv.CV_8UC4) {
+      rectifiedMat.copyTo(rgba);
+    } else if (rectifiedMat.type() === cv.CV_8UC3) {
+      cv.cvtColor(rectifiedMat, rgba, cv.COLOR_BGR2RGBA);
+    } else if (rectifiedMat.type() === cv.CV_8UC1) {
+      cv.cvtColor(rectifiedMat, rgba, cv.COLOR_GRAY2RGBA);
+    } else {
+      throw new Error(`Unsupported rectified Mat type: ${rectifiedMat.type()}`);
+    }
+    exportCanvas.width = rgba.cols;
+    exportCanvas.height = rgba.rows;
+    const ctx = exportCanvas.getContext("2d");
+    const imageData = new ImageData(new Uint8ClampedArray(rgba.data), rgba.cols, rgba.rows);
+    ctx.putImageData(imageData, 0, 0);
+    exportCanvas.toBlob((blob) => {
+      exportCanvas.width = 0;
+      exportCanvas.height = 0;
+      if (!blob) {
+        onReady(null);
+        return;
+      }
+      onReady(URL.createObjectURL(blob));
+    });
+  } finally {
+    rgba.delete();
+  }
+}
+
+/**
+ * Prebuild the full-resolution rectified-sheet asset only when the rectified sheet is modest.
+ *
+ * Large rectified sheets are generated lazily on click so the UI does not keep an extra full-size
+ * RGBA canvas/blob resident alongside the OpenCV mat.
+ *
+ * @returns {void}
+ */
+function primeRectifiedFullResAssetIfSmall() {
+  releaseRectifiedFullResUrl();
+  state.preview.rectifiedFullResBuildId += 1;
+  const buildId = state.preview.rectifiedFullResBuildId;
+  if (state.geometry.rectifiedDownloadUsesRawSource) {
+    syncRectifiedSheetHeadingLink();
+    return;
+  }
+  const rectifiedMat = state.geometry.baseRectifiedMat;
+  if (!rectifiedMat) {
+    syncRectifiedSheetHeadingLink();
+    return;
+  }
+  const longEdge = Math.max(rectifiedMat.cols || 0, rectifiedMat.rows || 0);
+  if (longEdge > RECTIFIED_FULL_RES_EAGER_LONG_EDGE_PX) {
+    syncRectifiedSheetHeadingLink();
+    return;
+  }
+  encodeRectifiedMatToBlobUrl(rectifiedMat, (url) => {
+    if (!url) return;
+    if (buildId !== state.preview.rectifiedFullResBuildId) {
+      URL.revokeObjectURL(url);
+      return;
+    }
+    state.preview.rectifiedFullResUrl = url;
+    syncRectifiedSheetHeadingLink();
+  });
+}
+
+/**
+ * Generate and download the full-resolution rectified sheet on demand.
+ *
+ * @returns {void}
+ */
+function downloadFullResRectifiedSheet() {
+  if (!state.source.image || state.processing.active) return;
+  if (state.geometry.rectifiedDownloadUsesRawSource && state.source.dragUrl) {
+    const anchor = document.createElement("a");
+    anchor.href = new URL(state.source.dragUrl, window.location.href).href;
+    anchor.download = makeRectifiedFilename(state.source.filename);
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.click();
+    return;
+  }
+  const rectifiedMat = ensureBaseRectifiedMat();
+  if (!rectifiedMat) return;
+  setGeometryProcessingCursor(true);
+  window.requestAnimationFrame(() => {
+    try {
+      encodeRectifiedMatToBlobUrl(rectifiedMat, (url) => {
+        try {
+          if (!url) return;
+          const anchor = document.createElement("a");
+          anchor.href = url;
+          anchor.download = makeRectifiedFilename(state.source.filename);
+          anchor.target = "_blank";
+          anchor.rel = "noopener noreferrer";
+          anchor.click();
+          window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        } finally {
+          setGeometryProcessingCursor(false);
+        }
+      });
+    } catch (error) {
+      console.error(error);
+      setGeometryProcessingCursor(false);
+    }
+  });
+}
+
+/**
+ * Show the optional source-credit line in the Raw Photo header.
+ *
+ * Prefer explicit `source_credit` metadata from the settings file. If none is present, fall back
+ * to the loaded source filename using the same inline small-text treatment.
+ *
+ * @returns {void}
+ */
+function syncRawPhotoCreditDisplay() {
+  if (!dom.rawPhotoCredit) return;
+  const credit = String(state.source.sourceCredit || "").trim();
+  const fallbackFilename = String(state.source.filename || "").trim();
+  const displayText = credit || fallbackFilename;
+  dom.rawPhotoCredit.textContent = displayText;
+  dom.rawPhotoCredit.hidden = !displayText;
 }
 
 /**
@@ -1817,6 +2462,7 @@ async function handleFile(file, files = null) {
  * @returns {Promise<void>}
  */
 async function loadImageSource(src, filename = "", mimeType = "image/jpeg", settingsFile = null) {
+  clearDemoQueryIfLoadingDifferentFile(filename);
   await loadImageSourceViaController({
     src,
     filename,
@@ -1831,7 +2477,10 @@ async function loadImageSource(src, filename = "", mimeType = "image/jpeg", sett
     revokeGifUrl,
     clearAllPreviews,
     renderRawPreview,
-    syncRawPhotoFilenameDisplay,
+    setGeometryProcessingCursor,
+    syncRawPhotoHeadingLink,
+    syncRawPhotoCreditDisplay,
+    syncPaperPresetUi,
     loadCompanionSettingsText,
     applyLoadedSettingsText,
     invalidateAppearanceCache,
@@ -1875,12 +2524,14 @@ function scheduleProcess(delayMs = 220) {
  *   paperMarginPx:number,
  *   boundarySensitivity:number,
  *   boundaryPersistencePx:number,
+ *   postRotationDeg:number,
  *   alignmentPipeline:string,
  *   stabilizationMethod:string,
+ *   stabilizationEnabled:boolean,
+ *   stabilizationStrengthPct:number,
  *   alignmentMarkerType:string,
  *   crossRoiScalePct:number,
  *   crossRoiScale:number,
- *   stabilizationStrength:number,
  *   stabilizationLambda:number,
  *   markerlessPhaseX:number,
  *   markerlessPhaseY:number,
@@ -1900,13 +2551,18 @@ function scheduleProcess(delayMs = 220) {
  */
 function readConfig() {
   const paperPreset = dom.paperPreset.value || SETTINGS_DEFAULTS.layout.paperPreset;
-  const presetSize = PAPER_PRESETS[paperPreset];
+  const presetSize = getPaperPresetSize(paperPreset);
   const isCustomPaper = paperPreset === "custom";
+  const isSourcePaper = paperPreset === "source";
   const paperOrientation = dom.paperOrientationPortrait.checked ? "portrait" : "landscape";
-  const orientedPresetWidth = (paperOrientation === "portrait")
+  const orientedPresetWidth = isSourcePaper
+    ? (presetSize?.width || SETTINGS_DEFAULTS.layout.paperWidth)
+    : (paperOrientation === "portrait")
     ? (presetSize?.height || SETTINGS_DEFAULTS.layout.paperHeight)
     : (presetSize?.width || SETTINGS_DEFAULTS.layout.paperWidth);
-  const orientedPresetHeight = (paperOrientation === "portrait")
+  const orientedPresetHeight = isSourcePaper
+    ? (presetSize?.height || SETTINGS_DEFAULTS.layout.paperHeight)
+    : (paperOrientation === "portrait")
     ? (presetSize?.width || SETTINGS_DEFAULTS.layout.paperWidth)
     : (presetSize?.height || SETTINGS_DEFAULTS.layout.paperHeight);
   const paperWidth = isCustomPaper
@@ -1943,17 +2599,36 @@ function readConfig() {
     ),
     boundarySensitivity: Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)),
     boundaryPersistencePx: Math.max(1, Math.min(15, Math.round(Number(dom.boundaryPersistence.value) || SETTINGS_DEFAULTS.detection.boundaryPersistencePx))),
+    postRotationDeg: Math.max(
+      -1.1,
+      Math.min(
+        1.1,
+        Number.isFinite(Number(dom.postRotation?.value))
+          ? Number(dom.postRotation.value)
+          : SETTINGS_DEFAULTS.detection.postRotationDeg
+      )
+    ),
     alignmentPipeline: dom.alignmentPipelineMarkerless.checked ? "markerless" : "markers",
     // The radio group exposes a temporary-friendly UI label, but the config keeps stable internal
     // ids so settings files and solver branching do not depend on user-facing wording.
     stabilizationMethod: dom.stabilizationMethodAverage?.checked ? "difference-from-average" : "pairwise-cyclic",
+    stabilizationEnabled: !!dom.stabilizationEnabled?.checked,
+    stabilizationStrengthPct: Math.max(
+      0,
+      Math.min(
+        125,
+        Number.isFinite(Number(dom.stabilizationStrength?.value))
+          ? Math.round(Number(dom.stabilizationStrength.value))
+          : SETTINGS_DEFAULTS.detection.stabilizationStrengthPct
+      )
+    ),
     alignmentMarkerType: dom.alignmentMarkerType.value || "crosses",
     crossRoiScalePct: Math.max(18, Math.min(110, Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct)),
     crossRoiScale: Math.max(0.18, Math.min(1.1, (Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct) / 100)),
-    stabilizationStrength: Math.max(0, Math.min(150, Math.round(Number(dom.stabilizationStrength.value) || SETTINGS_DEFAULTS.detection.stabilizationStrength))),
     stabilizationLambda: Math.max(0.001, Math.min(0.1, Number(dom.stabilizationLambda.value) || SETTINGS_DEFAULTS.detection.stabilizationLambda)),
-    markerlessPhaseX: Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseX.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseX)),
-    markerlessPhaseY: Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseY.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseY)),
+    markerlessAutocorrelationBlurScale: 1,
+    markerlessPhaseX: Math.max(-0.25, Math.min(0.25, Number(dom.markerlessPhaseX.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseX)),
+    markerlessPhaseY: Math.max(-0.25, Math.min(0.25, Number(dom.markerlessPhaseY.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseY)),
     verticalDriftCompensation: Math.max(
       -0.05,
       Math.min(
@@ -2052,6 +2727,39 @@ function getPaperOrientation() {
 }
 
 /**
+ * Resolve the effective width/height pair for one paper preset.
+ *
+ * Static presets live in `PAPER_PRESETS`; the `source` preset borrows the current raw image
+ * dimensions so the sheet aspect ratio exactly matches the loaded source. These values are
+ * only used for aspect math; choosing `source` does not allocate a canvas of that size.
+ *
+ * @param {string} presetKey
+ * @returns {{width:number,height:number}|undefined}
+ */
+function getPaperPresetSize(presetKey) {
+  if (presetKey === "source") {
+    const width = Math.round(
+      state.source.canvas?.width ||
+      state.source.image?.naturalWidth ||
+      0
+    );
+    const height = Math.round(
+      state.source.canvas?.height ||
+      state.source.image?.naturalHeight ||
+      0
+    );
+    if (width > 0 && height > 0) {
+      return { width, height };
+    }
+    return {
+      width: SETTINGS_DEFAULTS.layout.paperWidth,
+      height: SETTINGS_DEFAULTS.layout.paperHeight,
+    };
+  }
+  return PAPER_PRESETS[presetKey];
+}
+
+/**
  * Format one preset option label using the active paper orientation. Custom stays unchanged.
  *
  * @param {string} presetKey
@@ -2059,6 +2767,14 @@ function getPaperOrientation() {
  */
 function formatPaperPresetLabel(presetKey) {
   if (presetKey === "custom") return t("layout.presetNames.custom");
+  if (presetKey === "source") {
+    if (!(state.source.canvas?.width > 0 && state.source.canvas?.height > 0)) {
+      return t("layout.presetNames.source");
+    }
+    const sourceSize = getPaperPresetSize("source");
+    if (!sourceSize) return t("layout.presetNames.source");
+    return `${t("layout.presetNames.source")} (${sourceSize.width}:${sourceSize.height})`;
+  }
   const preset = PAPER_PRESETS[presetKey];
   if (!preset) return presetKey;
   const orientation = getPaperOrientation();
@@ -2077,7 +2793,8 @@ function formatPaperPresetLabel(presetKey) {
 function syncPaperPresetUi() {
   const presetKey = dom.paperPreset.value || "letter";
   const isCustom = presetKey === "custom";
-  const preset = PAPER_PRESETS[presetKey];
+  const isSource = presetKey === "source";
+  const preset = getPaperPresetSize(presetKey);
   const orientation = getPaperOrientation();
   dom.paperPresetLabel.textContent = t("layout.paperSize");
   Array.from(dom.paperPreset.options).forEach((option) => {
@@ -2086,11 +2803,11 @@ function syncPaperPresetUi() {
   dom.customPaperFields.hidden = !isCustom;
   dom.paperWidth.disabled = !isCustom;
   dom.paperHeight.disabled = !isCustom;
-  dom.paperOrientationLandscape.disabled = isCustom;
-  dom.paperOrientationPortrait.disabled = isCustom;
+  dom.paperOrientationLandscape.disabled = isCustom || isSource;
+  dom.paperOrientationPortrait.disabled = isCustom || isSource;
   if (!isCustom && preset) {
-    const width = orientation === "portrait" ? preset.height : preset.width;
-    const height = orientation === "portrait" ? preset.width : preset.height;
+    const width = isSource ? preset.width : (orientation === "portrait" ? preset.height : preset.width);
+    const height = isSource ? preset.height : (orientation === "portrait" ? preset.width : preset.height);
     dom.paperWidth.value = String(width);
     dom.paperHeight.value = String(height);
   }
@@ -2288,12 +3005,16 @@ function syncAlignmentPipelineVisibility(flags) {
   if (dom.stabilizationMethodGroup) {
     dom.stabilizationMethodGroup.hidden = !showMarkerlessControls;
   }
+  if (dom.stabilizationEnabledRow) {
+    dom.stabilizationEnabledRow.hidden = !showMarkerlessControls;
+  }
+  if (dom.stabilizationStrengthRow) {
+    dom.stabilizationStrengthRow.hidden = !showMarkerlessControls;
+  }
   dom.alignmentMarkerTypeField.hidden = !showMarkersPipelineControls;
   dom.useCrossAlignmentRow.hidden = showMarkerlessControls;
   dom.detectCrossesWithConvolutionRow.hidden = !showCrossOnlyControls;
-  dom.stabilizationStrengthRow.hidden = !showMarkerlessControls;
   dom.stabilizationLambdaRow.hidden = !showMarkerlessControls;
-  dom.emphasizePeripheryRow.hidden = true;
   dom.markerlessPhaseXRow.hidden = !showMarkerlessControls;
   dom.markerlessPhaseYRow.hidden = !showMarkerlessControls;
   if (dom.markerlessPhaseDebugRow) {
@@ -2377,6 +3098,14 @@ function syncAlignmentMarkerUi() {
   resetInactiveAlignmentUiState(flags);
   if (state.runtime.markerlessPhaseDebugVisible) {
     state.runtime.markerlessPhaseDebugVisible = false;
+    resetMarkerlessDebugTimer("markerlessPhaseDebugTimer");
+    if (state.preview.rectifiedCanvas) {
+      renderRectifiedPreview(state.preview.rectifiedCanvas);
+    }
+  }
+  if (state.runtime.markerlessWorkingImageVisible && pipeline !== "markerless") {
+    state.runtime.markerlessWorkingImageVisible = false;
+    resetMarkerlessDebugTimer("markerlessWorkingImageTimer");
     if (state.preview.rectifiedCanvas) {
       renderRectifiedPreview(state.preview.rectifiedCanvas);
     }
@@ -2432,7 +3161,45 @@ function toggleMarkerBlobView() {
 function toggleMarkerlessPhaseDebug() {
   if (readConfig().alignmentPipeline !== "markerless") return;
   state.runtime.markerlessPhaseDebugVisible = !state.runtime.markerlessPhaseDebugVisible;
+  if (state.runtime.markerlessPhaseDebugVisible) {
+    resetMarkerlessDebugTimer("markerlessPhaseDebugTimer", () => {
+      state.runtime.markerlessPhaseDebugVisible = false;
+      syncMarkerlessPhaseDebugUi();
+      if (state.preview.rectifiedCanvas) {
+        renderRectifiedPreview(state.preview.rectifiedCanvas);
+      }
+    });
+  } else {
+    resetMarkerlessDebugTimer("markerlessPhaseDebugTimer");
+  }
   syncMarkerlessPhaseDebugUi();
+  if (state.preview.rectifiedCanvas) {
+    renderRectifiedPreview(state.preview.rectifiedCanvas);
+  }
+}
+
+/**
+ * Toggle display of the reduced blurred markerless working image in Rectified Sheet.
+ *
+ * This temporary debug view shows the reduced, blurred grayscale image used for markerless pitch
+ * and phase estimation. Rectified-sheet overlays are skipped while active because the working
+ * image is not in full rectified-sheet coordinates.
+ *
+ * @returns {void}
+ */
+function toggleMarkerlessWorkingImage() {
+  if (readConfig().alignmentPipeline !== "markerless") return;
+  state.runtime.markerlessWorkingImageVisible = !state.runtime.markerlessWorkingImageVisible;
+  if (state.runtime.markerlessWorkingImageVisible) {
+    resetMarkerlessDebugTimer("markerlessWorkingImageTimer", () => {
+      state.runtime.markerlessWorkingImageVisible = false;
+      if (state.preview.rectifiedCanvas) {
+        renderRectifiedPreview(state.preview.rectifiedCanvas);
+      }
+    });
+  } else {
+    resetMarkerlessDebugTimer("markerlessWorkingImageTimer");
+  }
   if (state.preview.rectifiedCanvas) {
     renderRectifiedPreview(state.preview.rectifiedCanvas);
   }
@@ -2469,8 +3236,12 @@ function clearMarkerEdits() {
   revokeGifUrl();
   if (isMarkerless) {
     state.frames.base = new Array(state.geometry.frameCount);
+    state.frames.baseOutputEpoch = new Array(state.geometry.frameCount);
     state.frames.stabilizedCache.clear();
+    state.frames.stabilizedOutputEpoch.clear();
+    state.frames.phaseAdjustedCache.clear();
     state.frames.adjustedCache.clear();
+    state.frames.adjustedOutputEpoch.clear();
   } else {
     invalidateFrameCaches();
   }
@@ -2531,11 +3302,13 @@ function applyLoadedSettingsText(settingsText) {
     state,
     settingsDefaults: SETTINGS_DEFAULTS,
     getMarkerKey,
+    syncOutputSizeFromLoadedValues,
     syncOutputSizeFromWidthInput,
     syncOutputSizeFromHeightInput,
     syncPaperPresetUi,
     syncAlignmentMarkerUi,
     syncMarkerEditingUi,
+    syncRawPhotoCreditDisplay,
     updateSliderReadouts,
   });
 }
@@ -2546,7 +3319,17 @@ function applyLoadedSettingsText(settingsText) {
  * @returns {void}
  */
 function updateSliderReadouts() {
-  syncFrameCountToExportUi();
+  const frameCountFieldFocused = document.activeElement === dom.frameCountToExport;
+  if (!frameCountFieldFocused) {
+    syncFrameCountToExportUi();
+  } else if (dom.frameCountToExport) {
+    const cols = Math.max(1, Math.min(20, Math.round(Number(dom.frameCols.value) || SETTINGS_DEFAULTS.layout.frameCols)));
+    const rows = Math.max(1, Math.min(20, Math.round(Number(dom.frameRows.value) || SETTINGS_DEFAULTS.layout.frameRows)));
+    const maxFrameCount = Math.max(1, cols * rows);
+    dom.frameCountToExport.min = "1";
+    dom.frameCountToExport.max = String(maxFrameCount);
+    state.runtime.lastFrameExportCountMax = maxFrameCount;
+  }
   dom.brightnessValue.textContent = formatSignedValue(dom.brightness.value);
   dom.contrastValue.textContent = formatSignedValue(dom.contrast.value);
   dom.vibranceValue.textContent = formatSignedValue(dom.vibrance.value);
@@ -2565,10 +3348,33 @@ function updateSliderReadouts() {
   )} px`;
   dom.boundarySensitivityValue.textContent = `${Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)).toFixed(1)}`;
   dom.boundaryPersistenceValue.textContent = String(Math.max(1, Math.min(15, Number(dom.boundaryPersistence.value) || SETTINGS_DEFAULTS.detection.boundaryPersistencePx)));
-  dom.stabilizationStrengthValue.textContent = `${Math.max(0, Math.min(150, Math.round(Number(dom.stabilizationStrength.value) || SETTINGS_DEFAULTS.detection.stabilizationStrength)))}%`;
+  if (dom.postRotationValue) {
+    const postRotationDeg = Math.max(
+      -1.1,
+      Math.min(
+        1.1,
+        Number.isFinite(Number(dom.postRotation?.value))
+          ? Number(dom.postRotation.value)
+          : SETTINGS_DEFAULTS.detection.postRotationDeg
+      )
+    );
+    dom.postRotationValue.textContent = `${postRotationDeg >= 0 ? "+" : ""}${postRotationDeg.toFixed(2)}°`;
+  }
+  if (dom.stabilizationStrengthValue) {
+    const stabilizationStrengthPct = Math.max(
+      0,
+      Math.min(
+        125,
+        Number.isFinite(Number(dom.stabilizationStrength?.value))
+          ? Math.round(Number(dom.stabilizationStrength.value))
+          : SETTINGS_DEFAULTS.detection.stabilizationStrengthPct
+      )
+    );
+    dom.stabilizationStrengthValue.textContent = `${stabilizationStrengthPct}%`;
+  }
   dom.stabilizationLambdaValue.textContent = `${Math.max(0.001, Math.min(0.1, Number(dom.stabilizationLambda.value) || SETTINGS_DEFAULTS.detection.stabilizationLambda)).toFixed(3)}`;
-  dom.markerlessPhaseXValue.textContent = formatSignedDecimal(Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseX.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseX)));
-  dom.markerlessPhaseYValue.textContent = formatSignedDecimal(Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseY.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseY)));
+  dom.markerlessPhaseXValue.textContent = formatSignedDecimal(Math.max(-0.25, Math.min(0.25, Number(dom.markerlessPhaseX.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseX)));
+  dom.markerlessPhaseYValue.textContent = formatSignedDecimal(Math.max(-0.25, Math.min(0.25, Number(dom.markerlessPhaseY.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseY)));
   if (dom.verticalDriftCompensationValue) {
     dom.verticalDriftCompensationValue.textContent = `${formatSignedDecimal(
       Math.max(
@@ -2590,15 +3396,25 @@ function updateSliderReadouts() {
     return;
   }
   const config = readConfig();
-  const roiSizePx = estimateCrossRoiSidePx(
-    state.geometry.alignmentInfo.rectifiedWidth,
-    state.geometry.alignmentInfo.rectifiedHeight,
-    config.frameCols,
-    config.frameRows,
-    config.crossRoiScale,
-    config.paperWidthIn * 100,
-    config.paperHeightIn * 100
-  );
+  const roiSizePx = config.alignmentPipeline === "markerless"
+    ? estimateMarkerlessCornerTileSidePx(
+        state.geometry.alignmentInfo.rectifiedWidth,
+        state.geometry.alignmentInfo.rectifiedHeight,
+        config.frameCols,
+        config.frameRows,
+        config.crossRoiScale,
+        config.paperWidthIn * 100,
+        config.paperHeightIn * 100
+      )
+    : estimateCrossRoiSidePx(
+        state.geometry.alignmentInfo.rectifiedWidth,
+        state.geometry.alignmentInfo.rectifiedHeight,
+        config.frameCols,
+        config.frameRows,
+        config.crossRoiScale,
+        config.paperWidthIn * 100,
+        config.paperHeightIn * 100
+      );
   dom.crossRoiScaleValue.textContent = `${roiSizePx}×${roiSizePx} px`;
 }
 
@@ -2798,6 +3614,24 @@ function syncOutputSizeFromHeightInput() {
 }
 
 /**
+ * Restore an exact output-size pair from a settings file before geometry is available.
+ *
+ * The settings manifest stores resolved width/height, not just one anchor dimension. Keep that
+ * exact pair intact so later UI sync/export does not coerce it through width-only rounding.
+ *
+ * @param {number} width
+ * @param {number} height
+ * @returns {void}
+ */
+function syncOutputSizeFromLoadedValues(width, height) {
+  state.runtime.outputSizeAuto = false;
+  state.runtime.outputSizeAnchor = "exact";
+  state.runtime.outputWidthPx = clampOutputDimension(width);
+  state.runtime.outputHeightPx = clampOutputDimension(height);
+  state.runtime.pendingOutputScale = null;
+}
+
+/**
  * Resolve the current final output size from the auto/manual state and current geometry.
  *
  * @returns {{width:number,height:number,scale:number}}
@@ -2815,6 +3649,17 @@ function getRequestedOutputSize() {
   }
   if (state.runtime.outputSizeAuto) {
     return resolveOutputSizeFromWidth(geometrySize, geometrySize.width);
+  }
+  if (
+    state.runtime.outputSizeAnchor === "exact" &&
+    state.runtime.outputWidthPx > 0 &&
+    state.runtime.outputHeightPx > 0
+  ) {
+    return {
+      width: clampOutputDimension(state.runtime.outputWidthPx),
+      height: clampOutputDimension(state.runtime.outputHeightPx),
+      scale: state.runtime.outputWidthPx / geometrySize.width,
+    };
   }
   if (state.runtime.outputSizeAnchor === "height" && state.runtime.outputHeightPx > 0) {
     return resolveOutputSizeFromHeight(geometrySize, state.runtime.outputHeightPx);
@@ -2848,53 +3693,92 @@ async function processCurrentImage(requestId = state.processing.requestId) {
   }
 
   state.processing.active = true;
+  cancelStabilizationMeasurement();
   setBusyState(true);
   updateExportControlsAvailability(true);
+  trimCachesBeforeReprocess();
+  lastProcessTimingSummary = "";
+  lastWarmupTimingSummary = "";
+  lastHeavyPathTimingSummary = "";
+  const timingProfile = beginTimingProfile("Process");
 
   try {
-    const config = readConfig();
-    const result = runPipeline(state.source.canvas, config, requestId, throwIfProcessAborted);
-    if (requestId !== state.processing.requestId) return;
+    const config = timeProfiled("readConfig", () => readConfig());
+    const result = timeProfiled("runPipeline", () => runPipeline(state.source.canvas, config, requestId, throwIfProcessAborted));
+    if (requestId !== state.processing.requestId) {
+      finishTimingProfile(timingProfile);
+      return;
+    }
 
-    state.frames.base = result.frames;
-    state.frames.stabilizedCache.clear();
-    state.frames.stabilizationMatchData = null;
-    state.frames.stabilizationPairwise = null;
-    state.frames.stabilizationAverageReference = null;
-    state.frames.stabilizationOffsets = null;
-    state.geometry.frameCount = result.frames.length;
-    state.geometry.alignmentInfo = result.alignmentInfo;
-    releaseRectifiedCvCache();
-    state.geometry.baseRectifiedCanvas = result.rectifiedCanvas;
-    state.geometry.baseRectifiedPageCanvas = result.pagePreviewCanvas;
-    state.geometry.pagePreviewGridQuad = result.pagePreviewGridQuad;
-    state.source.rawPageContour = result.pageQuadPoints;
-    stashOriginalMarkerDetections(state.geometry.alignmentInfo);
-    applyManualMarkerOverrides(state.geometry.alignmentInfo);
-    if (state.geometry.manualMarkerOverrides.size > 0) {
+    timeProfiled("applyPipelineResult", () => {
+      // `runPipeline()` returns raw extracted frame canvases at rectified-sheet/crop resolution.
+      // Those are useful for status text (`Animation size`) but they do not yet include output-size
+      // scaling or post-crop flip/rotation. Do not seed the live base-frame cache with them,
+      // otherwise preview/export can incorrectly reuse native-size frames until a later UI change
+      // invalidates the cache.
       state.frames.base = new Array(result.frames.length);
+      state.frames.baseOutputEpoch = new Array(result.frames.length);
       state.frames.stabilizedCache.clear();
+      state.frames.stabilizedOutputEpoch.clear();
+      state.frames.phaseAdjustedCache.clear();
       state.frames.stabilizationMatchData = null;
       state.frames.stabilizationPairwise = null;
       state.frames.stabilizationAverageReference = null;
       state.frames.stabilizationOffsets = null;
+      state.frames.adjustedOutputEpoch.clear();
+      state.geometry.frameCount = result.frames.length;
+      state.geometry.alignmentInfo = result.alignmentInfo;
+      releaseRectifiedCvCache();
+      state.geometry.baseRectifiedCanvas = result.rectifiedCanvas;
+      state.geometry.baseRectifiedMat = result.rectifiedMat;
+      state.geometry.baseRectifiedPageCanvas = result.pagePreviewCanvas;
+      state.geometry.rectifiedDownloadUsesRawSource = !!result.rectifiedDownloadUsesRawSource;
+      state.geometry.pagePreviewGridQuad = result.pagePreviewGridQuad;
+      state.runtime.appliedPostRotationDeg = config.postRotationDeg;
+      state.source.rawPageContour = result.pageQuadPoints;
+      stashOriginalMarkerDetections(state.geometry.alignmentInfo);
+      applyManualMarkerOverrides(state.geometry.alignmentInfo);
+      primeRectifiedFullResAssetIfSmall();
+    });
+    if (state.geometry.manualMarkerOverrides.size > 0) {
+      timeProfiled("applyMarkerOverrides", () => {
+        state.frames.base = new Array(result.frames.length);
+        state.frames.baseOutputEpoch = new Array(result.frames.length);
+        state.frames.stabilizedCache.clear();
+        state.frames.stabilizedOutputEpoch.clear();
+        state.frames.phaseAdjustedCache.clear();
+        state.frames.stabilizationMatchData = null;
+        state.frames.stabilizationPairwise = null;
+        state.frames.stabilizationAverageReference = null;
+        state.frames.stabilizationOffsets = null;
+        state.frames.adjustedOutputEpoch.clear();
+      });
     }
-    syncAlignmentMarkerUi();
-    invalidateAppearanceCache();
-    updateSliderReadouts();
-    renderRawPreview();
-    refreshAppearanceOutputs();
-    renderCrossRoiGrid(result.alignmentInfo);
-    drawCurrentGifPreview();
-    updateExportControlsAvailability();
-    syncMarkerEditingUi();
-    updatePreviewPlayPauseButton();
-    updateExportButtonLabel();
-    setStatus(result.statusText);
+    if (state.preview.postRotationScrubbing) {
+      timeProfiled("endPostRotationScrub", () => endPostRotationScrub());
+    }
+    timeProfiled("syncAlignmentUi", () => syncAlignmentMarkerUi());
+    timeProfiled("invalidateAppearanceCache", () => invalidateAppearanceCache());
+    timeProfiled("updateSliderReadouts", () => updateSliderReadouts());
+    timeProfiled("renderRawPreview", () => renderRawPreview());
+    timeProfiled("refreshAppearanceOutputs", () => refreshAppearanceOutputs());
+    timeProfiled("renderCrossRoiGrid", () => renderCrossRoiGrid(result.alignmentInfo));
+    timeProfiled("drawCurrentGifPreview", () => drawCurrentGifPreview());
+    timeProfiled("updateExportControls", () => updateExportControlsAvailability());
+    timeProfiled("syncMarkerEditingUi", () => syncMarkerEditingUi());
+    timeProfiled("updatePreviewPlayPauseButton", () => updatePreviewPlayPauseButton());
+    timeProfiled("updateExportButtonLabel", () => updateExportButtonLabel());
+    lastBaseStatusText = result.statusText;
+    lastProcessTimingSummary = finishTimingProfile(timingProfile);
+    setStatus(buildStatusWithTiming(result.statusText));
     if (config.alignmentPipeline === "markerless") {
       scheduleMarkerlessStabilizationWarmup(requestId);
     }
   } catch (error) {
+    finishTimingProfile(timingProfile);
+    if (state.preview.postRotationScrubbing) {
+      endPostRotationScrub();
+    }
     if (error?.name !== "ProcessAbortedError") {
       if (error?.partialResult?.pageQuadPoints) {
         state.source.rawPageContour = error.partialResult.pageQuadPoints;
@@ -2903,7 +3787,15 @@ async function processCurrentImage(requestId = state.processing.requestId) {
       clearDerivedOutputsForDetectionFailure();
       console.error(error);
       updateExportButtonLabel();
+      lastBaseStatusText = t("status.pageBoundaryFailure");
+      lastProcessTimingSummary = "";
+      lastWarmupTimingSummary = "";
+      lastHeavyPathTimingSummary = "";
       setStatus(t("status.pageBoundaryFailure"));
+    } else {
+      lastProcessTimingSummary = "";
+      lastWarmupTimingSummary = "";
+      lastHeavyPathTimingSummary = "";
     }
   } finally {
     updateExportControlsAvailability();
@@ -2946,53 +3838,121 @@ function renderRectifiedPreview(rectifiedCanvas) {
   updateRectifiedSheetHeading();
   dom.rectifiedCanvas.parentElement?.classList.remove("is-empty");
   const diagnosticSource = rectifiedCanvas;
-  const displayCanvas = state.preview.showRectifiedDiagnostic
+  const markerlessWorkingCanvas =
+    readConfig().alignmentPipeline === "markerless"
+      ? (state.geometry.alignmentInfo?.markerlessEstimate?.workingBlurCanvas || null)
+      : null;
+  const showingMarkerlessWorkingImage =
+    !!markerlessWorkingCanvas &&
+    !state.preview.showRectifiedDiagnostic &&
+    state.runtime.markerlessWorkingImageVisible;
+  const previewPostRotationDeg = getPostRotationPreviewDeg();
+  const showingPostRotationPreview =
+    state.preview.postRotationScrubbing &&
+    !state.preview.showRectifiedDiagnostic &&
+    !showingMarkerlessWorkingImage &&
+    Math.abs(previewPostRotationDeg) > 1e-9;
+  const baseDisplayCanvas = state.preview.showRectifiedDiagnostic
     ? getRectifiedConvolutionCanvas(diagnosticSource)
-    : rectifiedCanvas;
+    : (showingMarkerlessWorkingImage ? markerlessWorkingCanvas : rectifiedCanvas);
+  const displayCanvas = showingPostRotationPreview
+    ? getPostRotationPreviewCanvas(baseDisplayCanvas, previewPostRotationDeg)
+    : baseDisplayCanvas;
   updateMobileRectifiedAspectRatio(displayCanvas);
-  renderCanvasFit(displayCanvas, dom.rectifiedCanvas);
   const targetCanvas = dom.rectifiedCanvas;
+  if (!showingPostRotationPreview) {
+    renderCanvasFit(displayCanvas, targetCanvas);
+  } else {
+    resizeCanvasToBox(targetCanvas);
+    const previewCtx = targetCanvas.getContext("2d");
+    previewCtx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+    previewCtx.imageSmoothingEnabled = true;
+    previewCtx.imageSmoothingQuality = "high";
+    const previewScale = Math.min(targetCanvas.width / displayCanvas.width, targetCanvas.height / displayCanvas.height);
+    const previewDrawW = displayCanvas.width * previewScale;
+    const previewDrawH = displayCanvas.height * previewScale;
+    const previewOffsetX = (targetCanvas.width - previewDrawW) * 0.5;
+    const previewOffsetY = (targetCanvas.height - previewDrawH) * 0.5;
+    previewCtx.drawImage(displayCanvas, previewOffsetX, previewOffsetY, previewDrawW, previewDrawH);
+  }
   const scale = Math.min(targetCanvas.width / displayCanvas.width, targetCanvas.height / displayCanvas.height);
   const drawW = displayCanvas.width * scale;
   const drawH = displayCanvas.height * scale;
   const offsetX = (targetCanvas.width - drawW) * 0.5;
   const offsetY = (targetCanvas.height - drawH) * 0.5;
+  const fullRectifiedWidth = Math.max(
+    1,
+    Math.round(state.geometry.baseRectifiedMat?.cols || rectifiedCanvas.width || 1),
+  );
+  const fullRectifiedHeight = Math.max(
+    1,
+    Math.round(state.geometry.baseRectifiedMat?.rows || rectifiedCanvas.height || 1),
+  );
+  const overlayScaleX = drawW / fullRectifiedWidth;
+  const overlayScaleY = drawH / fullRectifiedHeight;
   const ctx = targetCanvas.getContext("2d");
   const config = readConfig();
+  const rotationRadians = showingPostRotationPreview ? (previewPostRotationDeg * (Math.PI / 180)) : 0;
+  const mapRectifiedPointToPreview = (point) => {
+    const previewPoint = {
+      x: point.x * (displayCanvas.width / fullRectifiedWidth),
+      y: point.y * (displayCanvas.height / fullRectifiedHeight),
+    };
+    const rotatedPoint = showingPostRotationPreview
+      ? rotateCanvasPointAroundCenter(previewPoint, displayCanvas.width, displayCanvas.height, rotationRadians)
+      : previewPoint;
+    return {
+      x: offsetX + (rotatedPoint.x * (drawW / displayCanvas.width)),
+      y: offsetY + (rotatedPoint.y * (drawH / displayCanvas.height)),
+    };
+  };
 
   ctx.save();
+  if (showingMarkerlessWorkingImage) {
+    ctx.restore();
+    return;
+  }
   if (config.alignmentPipeline === "markerless" && !state.preview.showRectifiedDiagnostic) {
     const insetPx = Math.max(
       0,
       Math.min(
-        Math.floor(displayCanvas.width * 0.5) - 1,
-        Math.min(Math.floor(displayCanvas.height * 0.5) - 1, config.paperMarginPx || 0)
+        Math.floor(fullRectifiedWidth * 0.5) - 1,
+        Math.min(Math.floor(fullRectifiedHeight * 0.5) - 1, config.paperMarginPx || 0)
       )
     );
+    const insetTl = mapRectifiedPointToPreview({ x: insetPx, y: insetPx });
+    const insetTr = mapRectifiedPointToPreview({ x: fullRectifiedWidth - insetPx, y: insetPx });
+    const insetBr = mapRectifiedPointToPreview({ x: fullRectifiedWidth - insetPx, y: fullRectifiedHeight - insetPx });
+    const insetBl = mapRectifiedPointToPreview({ x: insetPx, y: fullRectifiedHeight - insetPx });
     ctx.strokeStyle = "rgb(0, 90, 220)";
     ctx.lineWidth = getPanelOverlayStrokeWidth(1);
-    ctx.strokeRect(
-      offsetX + (insetPx * scale),
-      offsetY + (insetPx * scale),
-      Math.max(1, drawW - (2 * insetPx * scale)),
-      Math.max(1, drawH - (2 * insetPx * scale))
-    );
-  }
-  drawOmittedFrameQuads(ctx, offsetX, offsetY, scale);
-  const currentFrameQuad = getCurrentPreviewFrameQuad();
-  if (currentFrameQuad) {
-    // Draw the current frame directly in rectified-sheet pixel coordinates.
-    ctx.strokeStyle = "rgb(0, 128, 0)";
-    ctx.lineWidth = getPanelOverlayStrokeWidth(1);
     ctx.beginPath();
-    ctx.moveTo(offsetX + currentFrameQuad.tl.x * scale, offsetY + currentFrameQuad.tl.y * scale);
-    ctx.lineTo(offsetX + currentFrameQuad.tr.x * scale, offsetY + currentFrameQuad.tr.y * scale);
-    ctx.lineTo(offsetX + currentFrameQuad.br.x * scale, offsetY + currentFrameQuad.br.y * scale);
-    ctx.lineTo(offsetX + currentFrameQuad.bl.x * scale, offsetY + currentFrameQuad.bl.y * scale);
+    ctx.moveTo(insetTl.x, insetTl.y);
+    ctx.lineTo(insetTr.x, insetTr.y);
+    ctx.lineTo(insetBr.x, insetBr.y);
+    ctx.lineTo(insetBl.x, insetBl.y);
     ctx.closePath();
     ctx.stroke();
   }
-  drawActiveEditedMarkerEdges(ctx, offsetX, offsetY, scale);
+  drawOmittedFrameQuads(ctx, mapRectifiedPointToPreview);
+  const currentFrameQuad = getCurrentPreviewFrameQuad();
+  if (currentFrameQuad) {
+    // Draw the current frame in full rectified-sheet coordinates, remapped onto the preview canvas.
+    ctx.strokeStyle = "rgb(0, 128, 0)";
+    ctx.lineWidth = getPanelOverlayStrokeWidth(1);
+    const tl = mapRectifiedPointToPreview(currentFrameQuad.tl);
+    const tr = mapRectifiedPointToPreview(currentFrameQuad.tr);
+    const br = mapRectifiedPointToPreview(currentFrameQuad.br);
+    const bl = mapRectifiedPointToPreview(currentFrameQuad.bl);
+    ctx.beginPath();
+    ctx.moveTo(tl.x, tl.y);
+    ctx.lineTo(tr.x, tr.y);
+    ctx.lineTo(br.x, br.y);
+    ctx.lineTo(bl.x, bl.y);
+    ctx.closePath();
+    ctx.stroke();
+  }
+  drawActiveEditedMarkerEdges(ctx, mapRectifiedPointToPreview);
   if (
     config.alignmentPipeline === "markerless" &&
     state.runtime.markerlessPhaseDebugVisible &&
@@ -3003,11 +3963,11 @@ function renderRectifiedPreview(rectifiedCanvas) {
       state.geometry.alignmentInfo?.markerlessEstimate?.phaseDebugX || null,
       offsetX,
       offsetY,
-      scale,
+      overlayScaleX,
       drawW,
       drawH,
-      displayCanvas.width,
-      displayCanvas.height,
+      fullRectifiedWidth,
+      fullRectifiedHeight,
     );
   }
   ctx.restore();
@@ -3215,12 +4175,10 @@ function getCurrentPreviewFrameQuad() {
  * have been excluded from playback/export by Number of Frames to Export.
  *
  * @param {CanvasRenderingContext2D} ctx
- * @param {number} offsetX
- * @param {number} offsetY
- * @param {number} scale
+ * @param {(point:{x:number,y:number}) => {x:number,y:number}} mapRectifiedPointToPreview
  * @returns {void}
  */
-function drawOmittedFrameQuads(ctx, offsetX, offsetY, scale) {
+function drawOmittedFrameQuads(ctx, mapRectifiedPointToPreview) {
   const totalFrameCount = Math.max(0, state.geometry.frameCount || 0);
   const includedFrameCount = getIncludedSourceFrameCount();
   if (!state.geometry.alignmentInfo || includedFrameCount >= totalFrameCount) return;
@@ -3230,16 +4188,20 @@ function drawOmittedFrameQuads(ctx, offsetX, offsetY, scale) {
   for (let sourceIndex = includedFrameCount; sourceIndex < totalFrameCount; sourceIndex += 1) {
     const quad = getPreviewFrameQuadForSourceIndex(sourceIndex);
     if (!quad) continue;
+    const tl = mapRectifiedPointToPreview(quad.tl);
+    const tr = mapRectifiedPointToPreview(quad.tr);
+    const br = mapRectifiedPointToPreview(quad.br);
+    const bl = mapRectifiedPointToPreview(quad.bl);
     ctx.beginPath();
-    ctx.moveTo(offsetX + quad.tl.x * scale, offsetY + quad.tl.y * scale);
-    ctx.lineTo(offsetX + quad.tr.x * scale, offsetY + quad.tr.y * scale);
-    ctx.lineTo(offsetX + quad.br.x * scale, offsetY + quad.br.y * scale);
-    ctx.lineTo(offsetX + quad.bl.x * scale, offsetY + quad.bl.y * scale);
+    ctx.moveTo(tl.x, tl.y);
+    ctx.lineTo(tr.x, tr.y);
+    ctx.lineTo(br.x, br.y);
+    ctx.lineTo(bl.x, bl.y);
     ctx.closePath();
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(offsetX + quad.tr.x * scale, offsetY + quad.tr.y * scale);
-    ctx.lineTo(offsetX + quad.bl.x * scale, offsetY + quad.bl.y * scale);
+    ctx.moveTo(tr.x, tr.y);
+    ctx.lineTo(bl.x, bl.y);
     ctx.stroke();
   }
   ctx.restore();
@@ -3276,12 +4238,10 @@ function resolveDisplayedAlignmentPoint(alignmentInfo, col, row) {
  * are moving while dragging an override.
  *
  * @param {CanvasRenderingContext2D} ctx
- * @param {number} offsetX
- * @param {number} offsetY
- * @param {number} scale
+ * @param {(point:{x:number,y:number}) => {x:number,y:number}} mapRectifiedPointToPreview
  * @returns {void}
  */
-function drawActiveEditedMarkerEdges(ctx, offsetX, offsetY, scale) {
+function drawActiveEditedMarkerEdges(ctx, mapRectifiedPointToPreview) {
   const activeMarker = state.preview.activeEditedMarker;
   const alignmentInfo = state.geometry.alignmentInfo;
   if (!activeMarker || !alignmentInfo) return;
@@ -3300,9 +4260,11 @@ function drawActiveEditedMarkerEdges(ctx, offsetX, offsetY, scale) {
   for (const [startMarker, endMarker] of segments) {
     const start = resolveDisplayedAlignmentPoint(alignmentInfo, startMarker.col, startMarker.row);
     const end = resolveDisplayedAlignmentPoint(alignmentInfo, endMarker.col, endMarker.row);
+    const startPreview = mapRectifiedPointToPreview(start);
+    const endPreview = mapRectifiedPointToPreview(end);
     ctx.beginPath();
-    ctx.moveTo(offsetX + start.x * scale, offsetY + start.y * scale);
-    ctx.lineTo(offsetX + end.x * scale, offsetY + end.y * scale);
+    ctx.moveTo(startPreview.x, startPreview.y);
+    ctx.lineTo(endPreview.x, endPreview.y);
     ctx.stroke();
   }
   ctx.restore();
@@ -3402,6 +4364,7 @@ function getRectifiedConvolutionCanvas(sourceCanvas) {
  */
 function invalidateAppearanceCache() {
   state.frames.adjustedCache.clear();
+  state.frames.adjustedOutputEpoch.clear();
 }
 
 /**
@@ -3421,30 +4384,169 @@ function releaseRectifiedCvCache() {
 }
 
 /**
- * Invalidate the post-extraction stabilization solve and any derived frame caches.
+ * Free heavy reusable caches before starting a new geometry/CV pass.
+ *
+ * This keeps the currently painted UI visible, but drops old extracted-frame canvases, solved
+ * stabilization data, and rectified Mats so large reprocesses do not have to coexist with the
+ * previous run's biggest buffers.
  *
  * @returns {void}
  */
-function invalidateStabilizationCache() {
+function trimCachesBeforeReprocess() {
+  releaseRectifiedCvCache();
+  state.preview.rectifiedDiagnosticSourceCanvas = null;
+  state.preview.rectifiedDiagnosticDirty = true;
+  state.preview.postRotationPreviewCanvas = null;
+  state.preview.postRotationPreviewSourceCanvas = null;
+  state.preview.postRotationPreviewDeg = 0;
+  releaseRectifiedFullResUrl();
+  state.preview.rectifiedFullResBuildId += 1;
+  state.frames.base = [];
+  state.frames.baseOutputEpoch = [];
   state.frames.stabilizedCache.clear();
+  state.frames.stabilizedOutputEpoch.clear();
+  state.frames.phaseAdjustedCache.clear();
   state.frames.stabilizationMatchData = null;
   state.frames.stabilizationPairwise = null;
   state.frames.stabilizationAverageReference = null;
   state.frames.stabilizationOffsets = null;
   state.frames.adjustedCache.clear();
+  state.frames.adjustedOutputEpoch.clear();
+  syncRectifiedSheetHeadingLink();
+}
+
+/**
+ * Invalidate the post-extraction stabilization solve and any derived frame caches.
+ *
+ * @returns {void}
+ */
+function invalidateStabilizationCache() {
+  cancelStabilizationMeasurement();
+  state.frames.stabilizedCache.clear();
+  state.frames.stabilizedOutputEpoch.clear();
+  state.frames.phaseAdjustedCache.clear();
+  state.frames.stabilizationMatchData = null;
+  state.frames.stabilizationPairwise = null;
+  state.frames.stabilizationAverageReference = null;
+  state.frames.stabilizationOffsets = null;
+  state.frames.adjustedCache.clear();
+  state.frames.adjustedOutputEpoch.clear();
+  refreshStatusDisplay();
 }
 
 /**
  * Invalidate stabilized/adjusted frame outputs while keeping the solved pairwise offsets cached.
  *
- * This is used for stabilization-strength scrubbing because the solve does not change, only the
- * applied blend amount does.
+ * This is used when stabilization is toggled on or off because the solve does not change, only
+ * whether the solved offsets are applied.
  *
  * @returns {void}
  */
 function invalidateStabilizedOutputCaches() {
   state.frames.stabilizedCache.clear();
+  state.frames.stabilizedOutputEpoch.clear();
+  state.frames.phaseAdjustedCache.clear();
   state.frames.adjustedCache.clear();
+  state.frames.adjustedOutputEpoch.clear();
+}
+
+/**
+ * Run one cache mutation while restoring the current stabilization solve afterward.
+ *
+ * Several UI controls need the old "invalidate all frame outputs" behavior to fully refresh the
+ * animation, but they should not force the expensive stabilization matcher to restart.
+ *
+ * @param {() => void} mutation
+ * @returns {void}
+ */
+function withPreservedStabilizationCaches(mutation) {
+  const savedMatchData = state.frames.stabilizationMatchData;
+  const savedPairwise = state.frames.stabilizationPairwise;
+  const savedAverageReference = state.frames.stabilizationAverageReference;
+  const savedOffsets = state.frames.stabilizationOffsets;
+  mutation();
+  state.frames.stabilizationMatchData = savedMatchData;
+  state.frames.stabilizationPairwise = savedPairwise;
+  state.frames.stabilizationAverageReference = savedAverageReference;
+  state.frames.stabilizationOffsets = savedOffsets;
+}
+
+/**
+ * Advance the output-cache epoch so lazily accessed frames know they must be regenerated.
+ *
+ * @returns {void}
+ */
+function bumpFrameOutputEpoch() {
+  state.frames.outputEpoch += 1;
+}
+
+/**
+ * Clear extracted/stabilized/adjusted frame-output caches without touching stabilization inputs.
+ *
+ * @returns {void}
+ */
+function clearFrameOutputCachesOnly() {
+  state.frames.base = new Array(state.geometry.frameCount);
+  state.frames.baseOutputEpoch = new Array(state.geometry.frameCount);
+  state.frames.stabilizedCache.clear();
+  state.frames.stabilizedOutputEpoch.clear();
+  state.frames.phaseAdjustedCache.clear();
+  state.frames.adjustedCache.clear();
+  state.frames.adjustedOutputEpoch.clear();
+}
+
+/**
+ * Invalidate extracted frame outputs while preserving any cached stabilization measurements.
+ *
+ * @returns {void}
+ */
+function invalidateFrameOutputCaches() {
+  withPreservedStabilizationCaches(() => {
+    clearFrameOutputCachesOnly();
+  });
+}
+
+/**
+ * Invalidate only the post-stabilization phase-adjusted outputs.
+ *
+ * Markerless phase offsets are now applied after stabilization, so changing them should not force
+ * frame extraction or stabilization recomputation.
+ *
+ * @returns {void}
+ */
+function invalidatePhaseAdjustedOutputCaches() {
+  state.frames.phaseAdjustedCache.clear();
+  state.frames.adjustedCache.clear();
+  state.frames.adjustedOutputEpoch.clear();
+}
+
+/**
+ * Rebuild every extracted/output frame while preserving any cached stabilization measurements.
+ *
+ * This is used by controls such as phase offsets and crop/output geometry, where users expect the
+ * full animation to reflect the committed change immediately after release.
+ *
+ * @returns {void}
+ */
+function rebuildAllFrameOutputCaches() {
+  invalidateFrameOutputCaches();
+  const frameCount = state.geometry.frameCount;
+  for (let index = 0; index < frameCount; index += 1) {
+    getAdjustedFrameCanvas(index);
+  }
+}
+
+/**
+ * Rebuild every phase-adjusted/output frame while preserving extraction and stabilization caches.
+ *
+ * @returns {void}
+ */
+function rebuildAllPhaseAdjustedOutputCaches() {
+  invalidatePhaseAdjustedOutputCaches();
+  const frameCount = state.geometry.frameCount;
+  for (let index = 0; index < frameCount; index += 1) {
+    getAdjustedFrameCanvas(index);
+  }
 }
 
 /**
@@ -3457,7 +4559,10 @@ function invalidateStabilizedOutputCaches() {
 function invalidateStabilizationOffsetsCache() {
   state.frames.stabilizationOffsets = null;
   state.frames.stabilizedCache.clear();
+  state.frames.stabilizedOutputEpoch.clear();
+  state.frames.phaseAdjustedCache.clear();
   state.frames.adjustedCache.clear();
+  state.frames.adjustedOutputEpoch.clear();
 }
 
 /**
@@ -3466,13 +4571,14 @@ function invalidateStabilizationOffsetsCache() {
  * @returns {void}
  */
 function invalidateFrameCaches() {
-  state.frames.base = new Array(state.geometry.frameCount);
-  state.frames.stabilizedCache.clear();
+  cancelStabilizationMeasurement();
+  state.frames.outputEpoch += 1;
+  clearFrameOutputCachesOnly();
   state.frames.stabilizationMatchData = null;
   state.frames.stabilizationPairwise = null;
   state.frames.stabilizationAverageReference = null;
   state.frames.stabilizationOffsets = null;
-  state.frames.adjustedCache.clear();
+  refreshStatusDisplay();
 }
 
 /**
@@ -3489,13 +4595,17 @@ function invalidateCurrentPreviewFrameCaches() {
   const index = getCurrentDisplayedFrameSourceIndex();
   if (index < 0 || index >= frameCount) return;
   state.frames.base[index] = undefined;
+  state.frames.baseOutputEpoch[index] = undefined;
   state.frames.stabilizedCache.delete(index);
+  state.frames.stabilizedOutputEpoch.delete(index);
+  state.frames.phaseAdjustedCache.delete(index);
   state.frames.adjustedCache.delete(index);
+  state.frames.adjustedOutputEpoch.delete(index);
 }
 
 /**
- * Invalidate only the currently displayed stabilized/adjusted frame so stabilization-strength
- * dragging can feel responsive without recomputing the global shift solve.
+ * Invalidate only the currently displayed stabilized/adjusted frame so stabilization preview
+ * updates can feel responsive without recomputing the global shift solve.
  *
  * @returns {void}
  */
@@ -3505,6 +4615,21 @@ function invalidateCurrentPreviewStabilizationCaches() {
   const index = getCurrentDisplayedFrameSourceIndex();
   if (index < 0 || index >= frameCount) return;
   state.frames.stabilizedCache.delete(index);
+  state.frames.phaseAdjustedCache.delete(index);
+  state.frames.adjustedCache.delete(index);
+}
+
+/**
+ * Invalidate only the currently displayed phase-adjusted output.
+ *
+ * @returns {void}
+ */
+function invalidateCurrentPreviewPhaseAdjustedCaches() {
+  const frameCount = state.geometry.frameCount;
+  if (frameCount <= 0) return;
+  const index = getCurrentDisplayedFrameSourceIndex();
+  if (index < 0 || index >= frameCount) return;
+  state.frames.phaseAdjustedCache.delete(index);
   state.frames.adjustedCache.delete(index);
 }
 
@@ -3526,6 +4651,7 @@ function invalidateCurrentPreviewFrameForMarker(markerCol, markerRow) {
   if (!affected.includes(index)) return;
   state.frames.base[index] = undefined;
   state.frames.stabilizedCache.delete(index);
+  state.frames.phaseAdjustedCache.delete(index);
   state.frames.adjustedCache.delete(index);
 }
 
@@ -3564,6 +4690,7 @@ function getAffectedFrameIndicesForMarker(markerCol, markerRow) {
  */
 function invalidateFramesForMarker(markerCol, markerRow) {
   state.frames.stabilizedCache.clear();
+  state.frames.phaseAdjustedCache.clear();
   state.frames.stabilizationMatchData = null;
   state.frames.stabilizationAverageReference = null;
   state.frames.stabilizationOffsets = null;
@@ -3588,6 +4715,7 @@ function invalidateMarkerlessNudgedFramesForMarker(markerCol, markerRow) {
   for (const index of getAffectedFrameIndicesForMarker(markerCol, markerRow)) {
     state.frames.base[index] = undefined;
     state.frames.stabilizedCache.delete(index);
+    state.frames.phaseAdjustedCache.delete(index);
     state.frames.adjustedCache.delete(index);
   }
 }
@@ -3606,6 +4734,7 @@ function refreshAppearanceOutputs() {
   state.preview.rectifiedDiagnosticSourceCanvas = null;
   state.preview.rectifiedDiagnosticDirty = true;
   primeRectifiedDragAsset(state.preview.rectifiedCanvas);
+  syncRectifiedSheetHeadingLink();
   renderRectifiedPreview(state.preview.rectifiedCanvas);
 }
 
@@ -3630,30 +4759,37 @@ function refreshAppearanceOutputs() {
  * @returns {HTMLCanvasElement | null}
  */
 function extractProcessedFrameCanvas(index, sourceOffset = { x: 0, y: 0 }, includeMarkerlessNudges = true, includeMarkerlessDriftCompensation = true) {
-  const extractionContext = getFrameExtractionContext(index, includeMarkerlessNudges);
-  if (!extractionContext) return null;
-  const { config, col, row, alignmentInfo, rectifiedMat } = extractionContext;
-  const automaticOffset = getAutomaticMarkerlessSourceOffset(
-    config,
-    alignmentInfo,
-    index,
-    includeMarkerlessDriftCompensation
-  );
-  const frame = extractSingleFrameToCanvas(
-    rectifiedMat,
-    alignmentInfo,
-    col,
-    row,
-    config.crop,
-    getCvInterpolationFlag(config.exportOptions.resampling),
-    combineSourceOffsets(automaticOffset, sourceOffset)
-  );
-  const transformedFrame = transformOutputCanvas(frame, config.postCropGeometry);
-  return scaleOutputCanvas(
-    transformedFrame,
-    getInteractiveOutputWidth(config.exportOptions.outputWidthPx),
-    config.exportOptions.resampling
-  );
+  return timeProfiled("extractProcessedFrameCanvas", () => {
+    const extractionContext = getFrameExtractionContext(index, includeMarkerlessNudges);
+    if (!extractionContext) return null;
+    const { config, col, row, alignmentInfo, rectifiedMat } = extractionContext;
+    const automaticOffset = getAutomaticMarkerlessSourceOffset(
+      config,
+      alignmentInfo,
+      index,
+      includeMarkerlessDriftCompensation
+    );
+    const frame = extractSingleFrameToCanvas(
+      rectifiedMat,
+      alignmentInfo,
+      col,
+      row,
+      config.crop,
+      getCvInterpolationFlag(config.exportOptions.resampling),
+      combineSourceOffsets(automaticOffset, sourceOffset)
+    );
+    const transformedFrame = transformOutputCanvas(frame, config.postCropGeometry);
+    const interactiveOutputSize = getInteractiveOutputSize(
+      config.exportOptions.outputWidthPx,
+      config.exportOptions.outputHeightPx,
+    );
+    return scaleOutputCanvas(
+      transformedFrame,
+      interactiveOutputSize.width,
+      interactiveOutputSize.height,
+      config.exportOptions.resampling
+    );
+  });
 }
 
 /**
@@ -3664,23 +4800,36 @@ function extractProcessedFrameCanvas(index, sourceOffset = { x: 0, y: 0 }, inclu
  */
 function getBaseFrameCanvas(index) {
   const cached = state.frames.base[index];
-  if (cached) return cached;
+  if (cached && state.frames.baseOutputEpoch[index] === state.frames.outputEpoch) return cached;
   // Extraction stays lazy: pull just this frame from the rectified sheet, then apply post-crop
   // output scaling without forcing the whole animation to be rebuilt.
   const scaledFrame = extractProcessedFrameCanvas(index);
   state.frames.base[index] = scaledFrame;
+  state.frames.baseOutputEpoch[index] = state.frames.outputEpoch;
   return scaledFrame;
 }
 
 /**
  * Extract one frame for the stabilization solver, explicitly excluding markerless post-stabilization
- * corner nudges so the solve operates on the underlying automatic extraction.
+ * corner nudges, phase offsets, drift compensation, crop, and output scaling so the solve operates
+ * on a stable neutral frame representation.
  *
  * @param {number} index
  * @returns {HTMLCanvasElement | null}
  */
 function getStabilizationSourceFrameCanvas(index) {
-  return extractProcessedFrameCanvas(index, { x: 0, y: 0 }, false, false);
+  const extractionContext = getFrameExtractionContext(index, false);
+  if (!extractionContext) return null;
+  const { col, row, alignmentInfo, rectifiedMat } = extractionContext;
+  return extractSingleFrameToCanvas(
+    rectifiedMat,
+    alignmentInfo,
+    col,
+    row,
+    { left: 0, right: 0, top: 0, bottom: 0 },
+    getCvInterpolationFlag("linear"),
+    { x: 0, y: 0 }
+  );
 }
 
 /**
@@ -3689,9 +4838,13 @@ function getStabilizationSourceFrameCanvas(index) {
  * @returns {cv.Mat | null}
  */
 function ensureBaseRectifiedMat() {
+  if (state.geometry.baseRectifiedMat) return state.geometry.baseRectifiedMat;
   if (!state.geometry.baseRectifiedCanvas) return null;
   if (!state.geometry.baseRectifiedMat) {
-    state.geometry.baseRectifiedMat = cv.imread(state.geometry.baseRectifiedCanvas);
+    const rectifiedRgba = cv.imread(state.geometry.baseRectifiedCanvas);
+    state.geometry.baseRectifiedMat = new cv.Mat();
+    cv.cvtColor(rectifiedRgba, state.geometry.baseRectifiedMat, cv.COLOR_RGBA2BGR);
+    rectifiedRgba.delete();
   }
   return state.geometry.baseRectifiedMat;
 }
@@ -3773,29 +4926,31 @@ function collectStabilizationSourceFrames() {
 /**
  * Build or reuse sampled grayscale match data for every pre-stabilization frame.
  *
- * Both stabilization methods use the same sampled/periphery-weighted matcher, so this shared cache
+ * Both stabilization methods use the same sampled stabilization matcher, so this shared cache
  * avoids rebuilding the reduced luma representation separately for pairwise and average-reference
  * experiments.
  *
- * @returns {{data:Float32Array,weights:Float32Array,width:number,height:number}[] | null}
+ * @returns {{data:Float32Array,weights:Float32Array,width:number,height:number,scaleX:number,scaleY:number}[] | null}
  */
 function getStabilizationMatchDataFrames() {
-  const frameCount = state.geometry.frameCount;
-  if (frameCount <= 1) return null;
-  if (state.frames.stabilizationMatchData?.length === frameCount) {
-    return state.frames.stabilizationMatchData;
-  }
-  const frames = collectStabilizationSourceFrames();
-  if (!frames) return null;
-  const matchData = frames.map((frame) => getFrameMatchData(frame));
-  state.frames.stabilizationMatchData = matchData;
-  return matchData;
+  return timeProfiled("getStabilizationMatchDataFrames", () => {
+    const frameCount = state.geometry.frameCount;
+    if (frameCount <= 1) return null;
+    if (state.frames.stabilizationMatchData?.length === frameCount) {
+      return state.frames.stabilizationMatchData;
+    }
+    const frames = collectStabilizationSourceFrames();
+    if (!frames) return null;
+    const matchData = frames.map((frame) => getFrameMatchData(frame));
+    state.frames.stabilizationMatchData = matchData;
+    return matchData;
+  });
 }
 
 /**
  * Build one weighted stabilization edge between two frame indices.
  *
- * @param {Array<HTMLCanvasElement | {data:Float32Array,weights:Float32Array,width:number,height:number}>} frames
+ * @param {Array<HTMLCanvasElement | {data:Float32Array,weights:Float32Array,width:number,height:number,scaleX:number,scaleY:number}>} frames
  * @param {number} from
  * @param {number} to
  * @param {"horizontal"|"rowBreak"|"vertical"|"seam"} kind
@@ -3811,140 +4966,239 @@ function buildStabilizationEdge(frames, from, to, kind) {
     dy: shift.dy,
     kind,
   };
-  edge.weight = getStabilizationEdgeWeight(edge);
+  edge.weight = getStabilizationEdgeWeight({
+    ...edge,
+    dx: shift.dxSample,
+    dy: shift.dySample,
+  });
   return edge;
 }
 
 /**
- * Append all within-row horizontal stabilization edges.
+ * Append all within-row horizontal stabilization edge descriptors.
  *
- * @param {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[]} edges
- * @param {HTMLCanvasElement[]} frames
+ * @param {{from:number,to:number,kind:"horizontal"|"rowBreak"|"vertical"|"seam"}[]} edges
  * @param {number} cols
  * @param {number} rows
  * @returns {void}
  */
-function appendHorizontalStabilizationEdges(edges, frames, cols, rows) {
+function appendHorizontalStabilizationEdgeDescriptors(edges, cols, rows) {
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols - 1; col++) {
       const from = row * cols + col;
       const to = from + 1;
-      const edge = buildStabilizationEdge(frames, from, to, "horizontal");
-      if (edge) edges.push(edge);
+      edges.push({ from, to, kind: "horizontal" });
     }
   }
 }
 
 /**
- * Append end-of-row discontinuity stabilization edges.
+ * Append end-of-row discontinuity stabilization edge descriptors.
  *
- * @param {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[]} edges
- * @param {HTMLCanvasElement[]} frames
+ * @param {{from:number,to:number,kind:"horizontal"|"rowBreak"|"vertical"|"seam"}[]} edges
  * @param {number} cols
  * @param {number} rows
  * @returns {void}
  */
-function appendRowBreakStabilizationEdges(edges, frames, cols, rows) {
+function appendRowBreakStabilizationEdgeDescriptors(edges, cols, rows) {
   for (let row = 0; row < rows - 1; row++) {
     const from = (row * cols) + (cols - 1);
     const to = from + 1;
-    const edge = buildStabilizationEdge(frames, from, to, "rowBreak");
-    if (edge) edges.push(edge);
+    edges.push({ from, to, kind: "rowBreak" });
   }
 }
 
 /**
- * Append vertical stabilization edges between neighboring sheet rows.
+ * Append vertical stabilization edge descriptors between neighboring sheet rows.
  *
- * @param {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[]} edges
- * @param {HTMLCanvasElement[]} frames
+ * @param {{from:number,to:number,kind:"horizontal"|"rowBreak"|"vertical"|"seam"}[]} edges
  * @param {number} cols
  * @param {number} rows
  * @returns {void}
  */
-function appendVerticalStabilizationEdges(edges, frames, cols, rows) {
+function appendVerticalStabilizationEdgeDescriptors(edges, cols, rows) {
   for (let row = 0; row < rows - 1; row++) {
     for (let col = 0; col < cols; col++) {
       const from = row * cols + col;
       const to = (row + 1) * cols + col;
-      const edge = buildStabilizationEdge(frames, from, to, "vertical");
-      if (edge) edges.push(edge);
+      edges.push({ from, to, kind: "vertical" });
     }
   }
 }
 
 /**
- * Append the weak loop-seam stabilization edge from the last frame back to the first.
+ * Append the weak loop-seam stabilization edge descriptor from the last frame back to the first.
  *
- * @param {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[]} edges
- * @param {HTMLCanvasElement[]} frames
+ * @param {{from:number,to:number,kind:"horizontal"|"rowBreak"|"vertical"|"seam"}[]} edges
+ * @param {number} frameCount
  * @returns {void}
  */
-function appendSeamStabilizationEdge(edges, frames) {
-  const edge = buildStabilizationEdge(frames, frames.length - 1, 0, "seam");
-  if (edge) edges.push(edge);
+function appendSeamStabilizationEdgeDescriptor(edges, frameCount) {
+  edges.push({ from: frameCount - 1, to: 0, kind: "seam" });
 }
 
 /**
- * Build the full stabilization graph for the current frame set.
+ * Build the full list of sheet-topology edge descriptors used by Neighbor Comparison.
  *
- * @param {HTMLCanvasElement[]} frames
- * @returns {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[]}
+ * The expensive image matcher runs later in chunked form. This helper only establishes which
+ * frame pairs should be measured, so progress can be reported in edge-count units.
+ *
+ * @param {number} frameCount
+ * @returns {{from:number,to:number,kind:"horizontal"|"rowBreak"|"vertical"|"seam"}[]}
  */
-function buildStabilizationGraph(frames) {
-  const frameCount = frames.length;
+function buildStabilizationEdgeDescriptors(frameCount) {
   const alignmentInfo = state.geometry.alignmentInfo;
   const cols = Math.max(1, alignmentInfo?.cols || 1);
   const rows = Math.max(1, alignmentInfo?.rows || Math.ceil(frameCount / cols));
   const edges = [];
-  appendHorizontalStabilizationEdges(edges, frames, cols, rows);
+  appendHorizontalStabilizationEdgeDescriptors(edges, cols, rows);
   // Row-break edges keep the solver aware of the scan order jump between the end of one printed
   // row and the start of the next, but they stay weak enough not to dominate the sheet topology.
-  appendRowBreakStabilizationEdges(edges, frames, cols, rows);
-  appendVerticalStabilizationEdges(edges, frames, cols, rows);
+  appendRowBreakStabilizationEdgeDescriptors(edges, cols, rows);
+  appendVerticalStabilizationEdgeDescriptors(edges, cols, rows);
   if (frameCount > 1) {
-    appendSeamStabilizationEdge(edges, frames);
+    appendSeamStabilizationEdgeDescriptor(edges, frameCount);
   }
   return edges;
 }
 
 /**
- * Build or reuse the average-frame grayscale reference used by the alternate stabilization method.
+ * Build or reuse the grayscale reference used by the alternate stabilization method.
  *
- * The reference is the pixelwise mean of all pre-stabilization sampled frames. It intentionally
- * does not use any stabilized output, so the average template never feeds back on prior results.
+ * This path is currently using a pixelwise median image rather than a mean image as a temporary
+ * experiment. It intentionally does not use any stabilized output, so the reference template never
+ * feeds back on prior results.
  *
- * @returns {{data:Float32Array,weights:Float32Array,width:number,height:number} | null}
+ * @returns {{data:Float32Array,weights:Float32Array,width:number,height:number,scaleX:number,scaleY:number} | null}
  */
 function getAverageReferenceMatchData() {
-  const matchFrames = getStabilizationMatchDataFrames();
-  if (!matchFrames?.length) return null;
-  if (state.frames.stabilizationAverageReference) {
-    return state.frames.stabilizationAverageReference;
-  }
-
-  const first = matchFrames[0];
-  const averageData = new Float32Array(first.data.length);
-  // Build the template from the sampled grayscale match data so this alternate method shares the
-  // same downsampling and periphery weighting as the pairwise matcher.
-  for (const frame of matchFrames) {
-    for (let i = 0; i < averageData.length; i++) {
-      averageData[i] += frame.data[i];
+  return timeProfiled("getAverageReferenceMatchData", () => {
+    const matchFrames = getStabilizationMatchDataFrames();
+    if (!matchFrames?.length) return null;
+    if (state.frames.stabilizationAverageReference) {
+      return state.frames.stabilizationAverageReference;
     }
+
+    const first = matchFrames[0];
+    const referenceData = new Float32Array(first.data.length);
+    const frameCount = matchFrames.length;
+    const pixelSamples = new Float32Array(frameCount);
+    const middleIndex = Math.floor(frameCount / 2);
+    const useEvenMedianAverage = frameCount % 2 === 0;
+    for (let pixelIndex = 0; pixelIndex < referenceData.length; pixelIndex += 1) {
+      for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+        pixelSamples[frameIndex] = matchFrames[frameIndex].data[pixelIndex];
+      }
+      pixelSamples.sort();
+      referenceData[pixelIndex] = useEvenMedianAverage
+        ? 0.5 * (pixelSamples[middleIndex - 1] + pixelSamples[middleIndex])
+        : pixelSamples[middleIndex];
+    }
+
+    const reference = {
+      data: referenceData,
+      weights: first.weights,
+      width: first.width,
+      height: first.height,
+      scaleX: first.scaleX,
+      scaleY: first.scaleY,
+    };
+    state.frames.stabilizationAverageReference = reference;
+    return reference;
+  });
+}
+
+/**
+ * Measure one chunk of pairwise stabilization edges, yielding between chunks so the browser can
+ * repaint Status and continue handling input on very large frame sets.
+ *
+ * @param {{data:Float32Array,weights:Float32Array,width:number,height:number}[]} frames
+ * @param {{from:number,to:number,kind:"horizontal"|"rowBreak"|"vertical"|"seam"}[]} descriptors
+ * @param {number} token
+ * @returns {Promise<{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[] | null>}
+ */
+async function measureStabilizationEdgesChunked(frames, descriptors, token) {
+  const total = descriptors.length;
+  const edges = [];
+  state.processing.stabilizationMeasurementActive = true;
+  state.processing.stabilizationMeasurementProgressCompleted = 0;
+  state.processing.stabilizationMeasurementProgressTotal = total;
+  updateStabilizationProgressUi();
+  refreshStatusDisplay();
+  setGeometryProcessingCursor(true);
+  await waitForNextPaint();
+  try {
+    for (let start = 0; start < total; start += STABILIZATION_MEASUREMENT_CHUNK_SIZE) {
+      if (token !== state.processing.stabilizationMeasurementToken) return null;
+      const end = Math.min(total, start + STABILIZATION_MEASUREMENT_CHUNK_SIZE);
+      for (let index = start; index < end; index += 1) {
+        const descriptor = descriptors[index];
+        const edge = buildStabilizationEdge(frames, descriptor.from, descriptor.to, descriptor.kind);
+        if (edge) edges.push(edge);
+      }
+      state.processing.stabilizationMeasurementProgressCompleted = end;
+      refreshStatusDisplay();
+      if (end < total) {
+        await waitForNextPaint();
+      }
+    }
+    return edges;
+  } finally {
+    setGeometryProcessingCursor(false);
   }
-  const divisor = matchFrames.length;
-  for (let i = 0; i < averageData.length; i++) {
-    averageData[i] /= divisor;
+}
+
+/**
+ * Start or join the chunked Neighbor Comparison measurement job for the current frame set.
+ *
+ * @param {{redrawWhenReady?: boolean}} [options]
+ * @returns {Promise<{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[] | null>}
+ */
+async function ensureStabilizationPairwiseMeasurements(options = {}) {
+  const { redrawWhenReady = false } = options;
+  const frameCount = state.geometry.frameCount;
+  if (frameCount <= 1) return null;
+  if (state.frames.stabilizationPairwise?.length) {
+    return state.frames.stabilizationPairwise;
+  }
+  if (state.processing.stabilizationMeasurementPromise) {
+    if (redrawWhenReady) {
+      state.processing.stabilizationMeasurementRedrawPending = true;
+    }
+    return state.processing.stabilizationMeasurementPromise;
   }
 
-  const reference = {
-    data: averageData,
-    weights: first.weights,
-    width: first.width,
-    height: first.height,
-  };
-  state.frames.stabilizationAverageReference = reference;
-  return reference;
+  const frames = getStabilizationMatchDataFrames();
+  if (!frames) return null;
+  const descriptors = buildStabilizationEdgeDescriptors(frames.length);
+  const token = state.processing.stabilizationMeasurementToken + 1;
+  state.processing.stabilizationMeasurementToken = token;
+  state.processing.stabilizationMeasurementRedrawPending = !!redrawWhenReady;
+  state.processing.stabilizationMeasurementPromise = (async () => {
+    try {
+      const edges = await measureStabilizationEdgesChunked(frames, descriptors, token);
+      if (token !== state.processing.stabilizationMeasurementToken || !edges) return null;
+      state.frames.stabilizationPairwise = edges;
+      return edges;
+    } catch (error) {
+      console.error(error);
+      return null;
+    } finally {
+      if (token === state.processing.stabilizationMeasurementToken) {
+        const needsRedraw = state.processing.stabilizationMeasurementRedrawPending;
+        state.processing.stabilizationMeasurementActive = false;
+        state.processing.stabilizationMeasurementProgressCompleted = 0;
+        state.processing.stabilizationMeasurementProgressTotal = 0;
+        state.processing.stabilizationMeasurementPromise = null;
+        state.processing.stabilizationMeasurementRedrawPending = false;
+        refreshStatusDisplay();
+        if (needsRedraw && state.frames.stabilizationPairwise?.length) {
+          scheduleStabilizationPreviewUpdate();
+        }
+      }
+    }
+  })();
+  return state.processing.stabilizationMeasurementPromise;
 }
 
 /**
@@ -3966,17 +5220,17 @@ function getAverageReferenceMatchData() {
  * @returns {{from:number,to:number,dx:number,dy:number,kind:string,weight:number}[] | null}
  */
 function getStabilizationPairwiseMeasurements() {
-  const frameCount = state.geometry.frameCount;
-  if (frameCount <= 1) return null;
-  if (state.frames.stabilizationPairwise?.length) {
-    return state.frames.stabilizationPairwise;
-  }
-
-  const frames = getStabilizationMatchDataFrames();
-  if (!frames) return null;
-  const edges = buildStabilizationGraph(frames);
-  state.frames.stabilizationPairwise = edges;
-  return edges;
+  return timeProfiled("getStabilizationPairwiseMeasurements", () => {
+    const frameCount = state.geometry.frameCount;
+    if (frameCount <= 1) return null;
+    if (state.frames.stabilizationPairwise?.length) {
+      return state.frames.stabilizationPairwise;
+    }
+    // Neighbor Comparison measurements now run in chunked background work so large frame sets do
+    // not lock the main thread for tens of seconds at a time.
+    void ensureStabilizationPairwiseMeasurements({ redrawWhenReady: true });
+    return null;
+  });
 }
 
 /**
@@ -4032,45 +5286,45 @@ function solveStabilizationOffsetField(edges, frameCount) {
  * @returns {{x:number, y:number}[] | null}
  */
 function getStabilizationOffsets() {
-  const strength = readConfig().stabilizationStrength;
-  if (strength <= 0) return null;
-  const frameCount = state.geometry.frameCount;
-  if (frameCount <= 1) return null;
-  if (state.frames.stabilizationOffsets?.length === frameCount) {
-    return state.frames.stabilizationOffsets;
-  }
-  const sampleFrame = getStabilizationSourceFrameCanvas(0);
-  if (!sampleFrame) return null;
-  const method = readConfig().stabilizationMethod;
-  let offsets = null;
-  if (method === "difference-from-average") {
-    // The alternate method aligns every frame independently against one shared blurry template
-    // instead of solving a coupled graph over neighbor-to-neighbor comparisons.
-    const reference = getAverageReferenceMatchData();
-    const matchFrames = getStabilizationMatchDataFrames();
-    if (!reference || !matchFrames?.length) return null;
-    offsets = matchFrames.map((frame) => {
-      const shift = estimateLoopPairShift(reference, frame);
-      return { x: shift.dx, y: shift.dy };
-    });
+  return timeProfiled("getStabilizationOffsets", () => {
+    if (!readConfig().stabilizationEnabled) return null;
+    const frameCount = state.geometry.frameCount;
+    if (frameCount <= 1) return null;
+    if (state.frames.stabilizationOffsets?.length === frameCount) {
+      return state.frames.stabilizationOffsets;
+    }
+    const sampleFrame = getStabilizationSourceFrameCanvas(0);
+    if (!sampleFrame) return null;
+    const method = readConfig().stabilizationMethod;
+    let offsets = null;
+    if (method === "difference-from-average") {
+      const reference = getAverageReferenceMatchData();
+      const matchFrames = getStabilizationMatchDataFrames();
+      if (!reference || !matchFrames?.length) return null;
+      offsets = matchFrames.map((frame) => {
+        const shift = estimateLoopPairShift(reference, frame);
+        return { x: shift.dx, y: shift.dy };
+      });
+      centerOffsetsAroundZero(offsets);
+    } else {
+      const edges = getStabilizationPairwiseMeasurements();
+      if (!edges?.length) {
+        void ensureStabilizationPairwiseMeasurements({ redrawWhenReady: true });
+        return null;
+      }
+      offsets = solveStabilizationOffsetField(edges, frameCount);
+    }
+    const { capX, capY } = getStabilizationOffsetCaps(sampleFrame);
+    clampOffsetsInPlace(offsets, capX, capY);
     centerOffsetsAroundZero(offsets);
-  } else {
-    // The default method keeps the weighted sheet-topology graph and solves one global offset
-    // field, which lets neighboring frames share evidence and regularization.
-    const edges = getStabilizationPairwiseMeasurements();
-    if (!edges?.length) return null;
-    offsets = solveStabilizationOffsetField(edges, frameCount);
-  }
-  const { capX, capY } = getStabilizationOffsetCaps(sampleFrame);
-  clampOffsetsInPlace(offsets, capX, capY);
-  centerOffsetsAroundZero(offsets);
-  state.frames.stabilizationOffsets = offsets;
-  return offsets;
+    state.frames.stabilizationOffsets = offsets;
+    return offsets;
+  });
 }
 
 /**
  * Warm the expensive markerless stabilization measurements after processing so the first
- * stabilization-strength drag does not have to pay the full startup cost.
+ * stabilization enable/preview does not have to pay the full startup cost.
  *
  * @param {number} requestId
  * @returns {void}
@@ -4078,6 +5332,7 @@ function getStabilizationOffsets() {
 function scheduleMarkerlessStabilizationWarmup(requestId) {
   window.setTimeout(() => {
     if (requestId !== state.processing.requestId) return;
+    if (!readConfig().stabilizationEnabled) return;
     scheduleCurrentStabilizationWarmup();
   }, 0);
 }
@@ -4085,22 +5340,33 @@ function scheduleMarkerlessStabilizationWarmup(requestId) {
 /**
  * Warm whichever markerless stabilization method is currently selected without forcing a full solve.
  *
- * This avoids the first stabilization-strength movement from zero having to build all matcher state
- * synchronously on the slider path.
+ * This avoids the first stabilization preview from having to build all matcher state synchronously
+ * on the interaction path.
  *
  * @returns {void}
  */
 function scheduleCurrentStabilizationWarmup() {
   window.setTimeout(() => {
     if (readConfig().alignmentPipeline !== "markerless") return;
+    if (!readConfig().stabilizationEnabled) return;
     if (state.processing.active) return;
     try {
+      const warmupProfile = beginTimingProfile("Warmup");
       if (readConfig().stabilizationMethod === "difference-from-average") {
-        getAverageReferenceMatchData();
+        timeProfiled("getAverageReferenceMatchData", () => getAverageReferenceMatchData());
+        lastWarmupTimingSummary = finishTimingProfile(warmupProfile);
       } else if (!state.frames.stabilizationPairwise?.length) {
-        getStabilizationPairwiseMeasurements();
+        void ensureStabilizationPairwiseMeasurements();
+        activeTimingProfile = null;
+        lastWarmupTimingSummary = "";
+      } else {
+        lastWarmupTimingSummary = finishTimingProfile(warmupProfile);
+      }
+      if (lastBaseStatusText) {
+        refreshStatusDisplay();
       }
     } catch (error) {
+      activeTimingProfile = null;
       console.error(error);
     }
   }, 0);
@@ -4112,8 +5378,7 @@ function scheduleCurrentStabilizationWarmup() {
  * @returns {string}
  */
 function getStabilizationDebugText() {
-  const strength = readConfig().stabilizationStrength;
-  if (strength <= 0) return "";
+  if (!readConfig().stabilizationEnabled) return "";
   const edges = state.frames.stabilizationPairwise;
   if (!edges?.length) return "";
   const lines = ["", "Stabilization shifts:"];
@@ -4138,33 +5403,31 @@ function getStabilizationDebugText() {
  * @returns {HTMLCanvasElement | null}
  */
 function getStabilizedFrameCanvas(index) {
-  const baseFrame = getBaseFrameCanvas(index);
-  if (!baseFrame) return null;
-  const strength = readConfig().stabilizationStrength;
-  const isMarkerless = readConfig().alignmentPipeline === "markerless";
-  if (strength <= 0 && !isMarkerless) return baseFrame;
-  if (state.frames.stabilizedCache.has(index)) return state.frames.stabilizedCache.get(index);
+  return timeProfiled("getStabilizedFrameCanvas", () => {
+    const baseFrame = getBaseFrameCanvas(index);
+    if (!baseFrame) return null;
+    const config = readConfig();
+    if (!config.stabilizationEnabled) return baseFrame;
+    if (
+      state.frames.stabilizedCache.has(index) &&
+      state.frames.stabilizedOutputEpoch.get(index) === state.frames.outputEpoch
+    ) {
+      return state.frames.stabilizedCache.get(index);
+    }
 
-  if (strength <= 0) {
-    // Keep markerless preview continuous at exactly 0% strength by using the same extraction path
-    // as the stabilized branch, just with a zero translation. Otherwise 0% can jump to the older
-    // precomputed pipeline frame instead of smoothly converging to the same result.
-    const unstabilized = extractProcessedFrameCanvas(index, { x: 0, y: 0 });
-    if (!unstabilized) return baseFrame;
-    state.frames.stabilizedCache.set(index, unstabilized);
-    return unstabilized;
-  }
-
-  const offsets = getStabilizationOffsets();
-  if (!offsets || !offsets[index]) return baseFrame;
-  const strengthScale = strength / 100;
-  const stabilized = extractProcessedFrameCanvas(index, {
-    x: offsets[index].x * strengthScale,
-    y: offsets[index].y * strengthScale,
+    const offsets = getStabilizationOffsets();
+    if (!offsets || !offsets[index]) return baseFrame;
+    const stabilizationStrengthScale = Math.max(0, config.stabilizationStrengthPct || 0) / 100;
+    if (stabilizationStrengthScale <= 1e-9) return baseFrame;
+    const stabilized = extractProcessedFrameCanvas(index, {
+      x: offsets[index].x * stabilizationStrengthScale,
+      y: offsets[index].y * stabilizationStrengthScale,
+    });
+    if (!stabilized) return baseFrame;
+    state.frames.stabilizedCache.set(index, stabilized);
+    state.frames.stabilizedOutputEpoch.set(index, state.frames.outputEpoch);
+    return stabilized;
   });
-  if (!stabilized) return baseFrame;
-  state.frames.stabilizedCache.set(index, stabilized);
-  return stabilized;
 }
 
 /**
@@ -4196,15 +5459,17 @@ function getCurrentCropAspectRatioText() {
  *
  * @param {HTMLCanvasElement} sourceCanvas
  * @param {number} outputWidthPx
+ * @param {number} outputHeightPx
  * @param {string} resampling
  * @returns {HTMLCanvasElement}
  */
-function scaleOutputCanvas(sourceCanvas, outputWidthPx, resampling) {
+function scaleOutputCanvas(sourceCanvas, outputWidthPx, outputHeightPx, resampling) {
   if (!sourceCanvas) return sourceCanvas;
   const targetWidth = Math.max(1, Math.round(outputWidthPx || sourceCanvas.width));
-  if (targetWidth === sourceCanvas.width) return sourceCanvas;
-  const scale = targetWidth / sourceCanvas.width;
-  const targetHeight = Math.max(1, Math.round(sourceCanvas.height * scale));
+  const targetHeight = Math.max(1, Math.round(outputHeightPx || sourceCanvas.height));
+  if (targetWidth === sourceCanvas.width && targetHeight === sourceCanvas.height) {
+    return sourceCanvas;
+  }
   if (!bUseOpenCvOutputScaling) {
     const scaled = document.createElement("canvas");
     scaled.width = targetWidth;
@@ -4246,11 +5511,15 @@ function scaleOutputCanvas(sourceCanvas, outputWidthPx, resampling) {
  * Full output resolution is restored on slider release when caches are invalidated normally.
  *
  * @param {number} outputWidthPx
- * @returns {number}
+ * @param {number} outputHeightPx
+ * @returns {{width:number,height:number}}
  */
-function getInteractiveOutputWidth(outputWidthPx) {
+function getInteractiveOutputSize(outputWidthPx, outputHeightPx) {
   if (!state.preview.markerlessPhaseScrubbing) {
-    return outputWidthPx;
+    return {
+      width: outputWidthPx,
+      height: outputHeightPx,
+    };
   }
   const previewWidth = Math.max(
     1,
@@ -4261,10 +5530,17 @@ function getInteractiveOutputWidth(outputWidthPx) {
       1
     )
   );
-  if (!outputWidthPx || outputWidthPx <= 0) {
-    return previewWidth;
+  if (!outputWidthPx || outputWidthPx <= 0 || !outputHeightPx || outputHeightPx <= 0) {
+    return {
+      width: previewWidth,
+      height: outputHeightPx,
+    };
   }
-  return Math.min(outputWidthPx, previewWidth);
+  const scale = Math.min(1, previewWidth / outputWidthPx);
+  return {
+    width: Math.max(1, Math.round(outputWidthPx * scale)),
+    height: Math.max(1, Math.round(outputHeightPx * scale)),
+  };
 }
 
 /**
@@ -4331,95 +5607,121 @@ function rotateCanvas90Cw(sourceCanvas) {
  * @returns {HTMLCanvasElement | null}
  */
 function getAdjustedFrameCanvas(index) {
-  const baseFrame = getStabilizedFrameCanvas(index);
-  if (!baseFrame) return null;
-  const filters = readConfig().filters;
-  if (!hasAppearanceAdjustments(filters)) return baseFrame;
-  if (state.frames.adjustedCache.has(index)) return state.frames.adjustedCache.get(index);
-  const adjustedFrame = document.createElement("canvas");
-  applyVisualAdjustments(baseFrame, adjustedFrame, filters);
-  state.frames.adjustedCache.set(index, adjustedFrame);
-  return adjustedFrame;
+  return timeProfiled("getAdjustedFrameCanvas", () => {
+    const baseFrame = getStabilizedFrameCanvas(index);
+    if (!baseFrame) return null;
+    const filters = readConfig().filters;
+    if (!hasAppearanceAdjustments(filters)) return baseFrame;
+    if (
+      state.frames.adjustedCache.has(index) &&
+      state.frames.adjustedOutputEpoch.get(index) === state.frames.outputEpoch
+    ) {
+      return state.frames.adjustedCache.get(index);
+    }
+    const adjustedFrame = document.createElement("canvas");
+    timeProfiled("applyVisualAdjustments", () => applyVisualAdjustments(baseFrame, adjustedFrame, filters));
+    state.frames.adjustedCache.set(index, adjustedFrame);
+    state.frames.adjustedOutputEpoch.set(index, state.frames.outputEpoch);
+    return adjustedFrame;
+  });
 }
 
 /**
  * Estimate the best translation to align the second frame to the first using a 21x21 search over
  * cumulative absolute pixel differences in luma space.
  *
- * The search is performed on sampled grayscale frames, not full-resolution exports, and the score
- * is perimeter-weighted so relatively static border content influences the match more than the
- * animated center of the frame.
+ * The search is performed on sampled grayscale frames, not full-resolution exports. Matching now
+ * defaults to flat per-pixel weights.
  *
- * @param {HTMLCanvasElement | {data:Float32Array,weights:Float32Array,width:number,height:number}} currentFrame
- * @param {HTMLCanvasElement | {data:Float32Array,weights:Float32Array,width:number,height:number}} nextFrame
- * @returns {{dx:number, dy:number}}
+ * @param {HTMLCanvasElement | {data:Float32Array,weights:Float32Array,width:number,height:number,scaleX:number,scaleY:number}} currentFrame
+ * @param {HTMLCanvasElement | {data:Float32Array,weights:Float32Array,width:number,height:number,scaleX:number,scaleY:number}} nextFrame
+ * @returns {{dx:number, dy:number, dxSample:number, dySample:number}}
  */
 function estimateLoopPairShift(currentFrame, nextFrame) {
-  const currentData = currentFrame?.data instanceof Float32Array ? currentFrame : getFrameMatchData(currentFrame);
-  const nextData = nextFrame?.data instanceof Float32Array ? nextFrame : getFrameMatchData(nextFrame);
-  const maxShiftX = Math.min(10, Math.floor(currentData.width / 2));
-  const maxShiftY = Math.min(10, Math.floor(currentData.height / 2));
-  let bestDx = 0;
-  let bestDy = 0;
-  let bestScore = Infinity;
+  return timeProfiled("estimateLoopPairShift", () => {
+    const currentData = currentFrame?.data instanceof Float32Array ? currentFrame : getFrameMatchData(currentFrame);
+    const nextData = nextFrame?.data instanceof Float32Array ? nextFrame : getFrameMatchData(nextFrame);
+    const maxShiftX = Math.min(10, Math.floor(currentData.width / 2));
+    const maxShiftY = Math.min(10, Math.floor(currentData.height / 2));
+    let bestDx = 0;
+    let bestDy = 0;
+    let bestScore = Infinity;
 
-  for (let dy = -maxShiftY; dy <= maxShiftY; dy++) {
-    for (let dx = -maxShiftX; dx <= maxShiftX; dx++) {
-      const score = computeShiftDifferenceScore(currentData, nextData, currentData.width, currentData.height, dx, dy);
-      if (score < bestScore) {
-        bestScore = score;
-        bestDx = dx;
-        bestDy = dy;
+    for (let dy = -maxShiftY; dy <= maxShiftY; dy++) {
+      for (let dx = -maxShiftX; dx <= maxShiftX; dx++) {
+        const score = computeShiftDifferenceScore(currentData, nextData, currentData.width, currentData.height, dx, dy);
+        if (score < bestScore) {
+          bestScore = score;
+          bestDx = dx;
+          bestDy = dy;
+        }
       }
     }
-  }
-  return { dx: bestDx, dy: bestDy };
+    const scaleX = 0.5 * ((currentData.scaleX || 1) + (nextData.scaleX || 1));
+    const scaleY = 0.5 * ((currentData.scaleY || 1) + (nextData.scaleY || 1));
+    return {
+      dx: bestDx * scaleX,
+      dy: bestDy * scaleY,
+      dxSample: bestDx,
+      dySample: bestDy,
+    };
+  });
 }
 
 /**
  * Convert a frame canvas into sampled grayscale luma for pairwise stabilization matching.
  *
  * @param {HTMLCanvasElement} canvas
- * @returns {{data:Float32Array, weights:Float32Array, width:number, height:number}}
+ * @returns {{data:Float32Array, weights:Float32Array, width:number, height:number, scaleX:number, scaleY:number}}
  */
 function getFrameMatchData(canvas) {
-  const sampleStep = Math.max(1, Math.ceil(Math.sqrt((canvas.width * canvas.height) / 60000)));
-  const sampleWidth = Math.max(1, Math.floor(canvas.width / sampleStep));
-  const sampleHeight = Math.max(1, Math.floor(canvas.height / sampleStep));
-  const sampleCanvas = document.createElement("canvas");
-  sampleCanvas.width = sampleWidth;
-  sampleCanvas.height = sampleHeight;
-  const sampleCtx = sampleCanvas.getContext("2d");
-  sampleCtx.drawImage(canvas, 0, 0, sampleWidth, sampleHeight);
-  const imageData = sampleCtx.getImageData(0, 0, sampleWidth, sampleHeight).data;
-  const luma = new Float32Array(sampleWidth * sampleHeight);
-  for (let i = 0, j = 0; i < imageData.length; i += 4, j++) {
-    luma[j] = (0.299 * imageData[i]) + (0.587 * imageData[i + 1]) + (0.114 * imageData[i + 2]);
-  }
-  return {
-    data: luma,
-    weights: getFrameMatchWeights(sampleWidth, sampleHeight),
-    width: sampleWidth,
-    height: sampleHeight,
-  };
+  return timeProfiled("getFrameMatchData", () => {
+    const sampleStep = Math.max(1, Math.ceil(Math.sqrt((canvas.width * canvas.height) / 60000)));
+    const sampleWidth = Math.max(1, Math.floor(canvas.width / sampleStep));
+    const sampleHeight = Math.max(1, Math.floor(canvas.height / sampleStep));
+    const sampleCanvas = document.createElement("canvas");
+    sampleCanvas.width = sampleWidth;
+    sampleCanvas.height = sampleHeight;
+    const sampleCtx = sampleCanvas.getContext("2d");
+    sampleCtx.drawImage(canvas, 0, 0, sampleWidth, sampleHeight);
+    const imageData = sampleCtx.getImageData(0, 0, sampleWidth, sampleHeight).data;
+    const luma = new Float32Array(sampleWidth * sampleHeight);
+    for (let i = 0, j = 0; i < imageData.length; i += 4, j++) {
+      luma[j] = (0.299 * imageData[i]) + (0.587 * imageData[i + 1]) + (0.114 * imageData[i + 2]);
+    }
+    return {
+      data: luma,
+      weights: getFrameMatchWeights(sampleWidth, sampleHeight, false),
+      width: sampleWidth,
+      height: sampleHeight,
+      scaleX: canvas.width / sampleWidth,
+      scaleY: canvas.height / sampleHeight,
+    };
+  });
 }
 
 /**
- * Build or reuse a cached radial weight field that emphasizes the frame perimeter over the center.
+ * Build or reuse per-pixel match weights for the sampled stabilization frame.
  *
- * Each sampled pixel receives a weight proportional to its distance from the frame center,
- * normalized by half the smaller frame dimension and clamped to `[0, 1]`.
+ * Flat weighting is the active path. The radial-weight branch is intentionally retained but
+ * currently unused so the experiment can be revisited without reconstructing the implementation.
  *
  * @param {number} width
  * @param {number} height
+ * @param {boolean} [emphasizePeriphery=false]
  * @returns {Float32Array}
  */
-function getFrameMatchWeights(width, height) {
-  const key = `${width}x${height}`;
+function getFrameMatchWeights(width, height, emphasizePeriphery = false) {
+  const key = `${width}x${height}:${emphasizePeriphery ? "periphery" : "uniform"}`;
   const cached = FRAME_MATCH_WEIGHT_CACHE.get(key);
   if (cached) return cached;
 
   const weights = new Float32Array(width * height);
+  if (!emphasizePeriphery) {
+    weights.fill(1);
+    FRAME_MATCH_WEIGHT_CACHE.set(key, weights);
+    return weights;
+  }
   const cx = (width - 1) * 0.5;
   const cy = (height - 1) * 0.5;
   const radius = Math.max(1e-6, Math.min(width, height) * 0.5);
@@ -4735,8 +6037,7 @@ function getMarkerlessCornerStabilizationOffset(col, row, alignmentInfo) {
     return { x: 0, y: 0 };
   }
   const offsets = getStabilizationOffsets();
-  const strengthScale = readConfig().stabilizationStrength / 100;
-  if (!offsets?.length || strengthScale <= 0) {
+  if (!offsets?.length || !readConfig().stabilizationEnabled) {
     return { x: 0, y: 0 };
   }
   const samples = [];
@@ -4761,8 +6062,8 @@ function getMarkerlessCornerStabilizationOffset(col, row, alignmentInfo) {
   const meanX = samples.reduce((sum, offset) => sum + offset.x, 0) / samples.length;
   const meanY = samples.reduce((sum, offset) => sum + offset.y, 0) / samples.length;
   return {
-    x: meanX * strengthScale,
-    y: meanY * strengthScale,
+    x: meanX,
+    y: meanY,
   };
 }
 
@@ -4774,13 +6075,12 @@ function getMarkerlessCornerStabilizationOffset(col, row, alignmentInfo) {
  */
 function getFrameStabilizationSourceOffset(index) {
   const offsets = getStabilizationOffsets();
-  const strengthScale = readConfig().stabilizationStrength / 100;
-  if (!offsets?.[index] || strengthScale <= 0) {
+  if (!offsets?.[index] || !readConfig().stabilizationEnabled) {
     return { x: 0, y: 0 };
   }
   return {
-    x: offsets[index].x * strengthScale,
-    y: offsets[index].y * strengthScale,
+    x: offsets[index].x,
+    y: offsets[index].y,
   };
 }
 
@@ -4881,13 +6181,15 @@ function buildMarkerlessExtractionInfoForFrame(alignmentInfo, col, row) {
  * @returns {cv.Mat | null}
  */
 function ensureRectifiedGrayMat() {
-  if (!state.geometry.baseRectifiedCanvas) return null;
-  if (!state.geometry.baseRectifiedMat) {
-    state.geometry.baseRectifiedMat = cv.imread(state.geometry.baseRectifiedCanvas);
-  }
+  const rectifiedMat = ensureBaseRectifiedMat();
+  if (!rectifiedMat) return null;
   if (!state.geometry.baseRectifiedGrayMat) {
     state.geometry.baseRectifiedGrayMat = new cv.Mat();
-    cv.cvtColor(state.geometry.baseRectifiedMat, state.geometry.baseRectifiedGrayMat, cv.COLOR_RGBA2GRAY);
+    cv.cvtColor(
+      rectifiedMat,
+      state.geometry.baseRectifiedGrayMat,
+      rectifiedMat.type() === cv.CV_8UC4 ? cv.COLOR_RGBA2GRAY : cv.COLOR_BGR2GRAY
+    );
   }
   return state.geometry.baseRectifiedGrayMat;
 }
@@ -4903,10 +6205,7 @@ function ensureRectifiedGrayMat() {
  * @returns {object}
  */
 function buildMarkerlessCornerTile(grayMat, expected, alignmentInfo, crossRoiScale) {
-  const cellW = alignmentInfo.gridBounds.width / alignmentInfo.cols;
-  const cellH = alignmentInfo.gridBounds.height / alignmentInfo.rows;
-  const roiHalf = Math.max(10, Math.round(Math.min(cellW, cellH) * 0.18 * crossRoiScale));
-  const side = Math.max(1, roiHalf * 2 + 1);
+  const side = getMarkerlessCornerTileSidePx(alignmentInfo, crossRoiScale);
   const roi = new cv.Mat();
   const roiCenter = (side - 1) * 0.5;
   const tx = roiCenter - expected.x;
@@ -4944,6 +6243,97 @@ function buildMarkerlessCornerTile(grayMat, expected, alignmentInfo, crossRoiSca
 }
 
 /**
+ * Compute the markerless corner-tile side length used by both the normal and scrub-preview paths.
+ *
+ * Sharing this helper keeps Panel 3 tile dimensions stable while Post-Rotation is scrubbed, so
+ * only the sampled content moves and the tile apertures themselves do not visually resize.
+ *
+ * @param {object} alignmentInfo
+ * @param {number} crossRoiScale
+ * @returns {number}
+ */
+function getMarkerlessCornerTileSidePx(alignmentInfo, crossRoiScale) {
+  const cellW = alignmentInfo.gridBounds.width / alignmentInfo.cols;
+  const cellH = alignmentInfo.gridBounds.height / alignmentInfo.rows;
+  const roiHalf = Math.max(10, Math.round(Math.min(cellW, cellH) * 0.18 * crossRoiScale));
+  return capMarkerlessCornerTileSidePx(Math.max(1, roiHalf * 2 + 1), crossRoiScale);
+}
+
+/**
+ * Build one preview-only alignment tile from the rotated rectified-sheet preview canvas.
+ *
+ * This keeps Post-Rotation scrubbing cheap by reusing preview-scale pixels rather than rebuilding
+ * full-resolution OpenCV ROIs on every slider tick. The tile samples a fixed square aperture from
+ * the already-rotated page preview, so content slides through the tile the way the full page
+ * would move under a stationary window.
+ *
+ * @param {HTMLCanvasElement} previewCanvas
+ * @param {{x:number,y:number,col:number,row:number}} expected
+ * @param {object} alignmentInfo
+ * @param {object | null} templateTile
+ * @param {number} [targetSizeOverride=0]
+ * @returns {object}
+ */
+function buildPostRotationPreviewTile(previewCanvas, expected, alignmentInfo, templateTile = null, targetSizeOverride = 0) {
+  const canvas = document.createElement("canvas");
+  const targetWidth = Math.max(1, targetSizeOverride || templateTile?.canvas?.width || 65);
+  const targetHeight = Math.max(1, targetSizeOverride || templateTile?.canvas?.height || targetWidth);
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  canvas.style.width = `${targetWidth}px`;
+  canvas.style.height = `${targetHeight}px`;
+  const ctx = canvas.getContext("2d");
+  const previewScaleX = previewCanvas.width / Math.max(1, alignmentInfo.rectifiedWidth || previewCanvas.width);
+  const previewScaleY = previewCanvas.height / Math.max(1, alignmentInfo.rectifiedHeight || previewCanvas.height);
+  // The page preview is already globally rotated. Sample it at the fixed unrotated tile center so
+  // imagery slides/orbits through the aperture instead of appearing to spin each tile in place.
+  const previewPoint = {
+    x: expected.x * previewScaleX,
+    y: expected.y * previewScaleY,
+  };
+  ctx.fillStyle = getPreviewCanvasBorderFillStyle(previewCanvas);
+  ctx.fillRect(0, 0, targetWidth, targetHeight);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  const sourceWidth = Math.max(1, targetWidth * previewScaleX);
+  const sourceHeight = Math.max(1, targetHeight * previewScaleY);
+  const sourceX = previewPoint.x - (sourceWidth * 0.5);
+  const sourceY = previewPoint.y - (sourceHeight * 0.5);
+  ctx.filter = "grayscale(1)";
+  ctx.drawImage(
+    previewCanvas,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    targetWidth,
+    targetHeight,
+  );
+  ctx.filter = "none";
+  return {
+    ...(templateTile || {}),
+    ...expected,
+    kind: templateTile?.kind || "markerless",
+    markerType: templateTile?.markerType || "markerless",
+    roiCenterX: expected.x,
+    roiCenterY: expected.y,
+    detectedX: expected.x,
+    detectedY: expected.y,
+    dx: templateTile?.dx || 0,
+    dy: templateTile?.dy || 0,
+    darkFrac: templateTile?.darkFrac || 0,
+    confidence: Number.isFinite(templateTile?.confidence) ? templateTile.confidence : 1,
+    accepted: templateTile?.accepted ?? true,
+    localX: (targetWidth - 1) * 0.5,
+    localY: (targetHeight - 1) * 0.5,
+    canvas,
+    blobCanvas: null,
+  };
+}
+
+/**
  * Build a display-only alignment view for markerless mode that incorporates the current manual
  * phase offset while leaving the underlying stored marker coordinates unphased.
  *
@@ -4953,14 +6343,41 @@ function buildMarkerlessCornerTile(grayMat, expected, alignmentInfo, crossRoiSca
 function getDisplayAlignmentInfo(alignmentInfo) {
   if (!alignmentInfo) return null;
   const config = readConfig();
-  if (config.alignmentPipeline !== "markerless") {
+  const showingPostRotationPreview = state.preview.postRotationScrubbing && !!state.preview.rectifiedCanvas;
+  if (config.alignmentPipeline !== "markerless" && !showingPostRotationPreview) {
     return alignmentInfo;
   }
-  const grayMat = ensureRectifiedGrayMat();
-  if (!grayMat) return alignmentInfo;
   const crossRoiScale = config.crossRoiScale;
+  const previewCanvas = showingPostRotationPreview
+    ? getPostRotationPreviewCanvas(state.preview.rectifiedCanvas, getPostRotationPreviewDeg())
+    : null;
+
+  if (config.alignmentPipeline !== "markerless") {
+    const markerLookup = new Map(alignmentInfo.markerLookup);
+    const crossRoiTiles = alignmentInfo.crossRoiTiles.map((tile) => buildPostRotationPreviewTile(
+      previewCanvas,
+      {
+        col: tile.col,
+        row: tile.row,
+        x: Number.isFinite(tile.roiCenterX) ? tile.roiCenterX : tile.x,
+        y: Number.isFinite(tile.roiCenterY) ? tile.roiCenterY : tile.y,
+      },
+      alignmentInfo,
+      tile,
+    ));
+    return {
+      ...alignmentInfo,
+      markerLookup,
+      crossRoiTiles,
+      crossRoiTileMap: new Map(crossRoiTiles.map((tile) => [getMarkerKey(tile.col, tile.row), tile])),
+    };
+  }
+
   const markerLookup = new Map();
   const crossRoiTiles = [];
+  const grayMat = previewCanvas ? null : ensureRectifiedGrayMat();
+  if (!previewCanvas && !grayMat) return alignmentInfo;
+  const markerlessPreviewTileSide = getMarkerlessCornerTileSidePx(alignmentInfo, crossRoiScale);
 
   for (let row = 0; row <= alignmentInfo.rows; row++) {
     for (let col = 0; col <= alignmentInfo.cols; col++) {
@@ -4970,12 +6387,21 @@ function getDisplayAlignmentInfo(alignmentInfo) {
       const displayed = getMarkerlessDisplayedCorner(sourceMarker, col, row, alignmentInfo);
       const displayMarker = { ...sourceMarker, ...displayed };
       markerLookup.set(key, displayMarker);
-      const tile = buildMarkerlessCornerTile(grayMat, {
-        col,
-        row,
-        x: displayMarker.roiCenterX,
-        y: displayMarker.roiCenterY,
-      }, alignmentInfo, crossRoiScale);
+      const sourceTile = alignmentInfo.crossRoiTileMap?.get(key) || null;
+      const tile = previewCanvas
+        ? buildPostRotationPreviewTile(
+            previewCanvas,
+            { col, row, x: displayMarker.roiCenterX, y: displayMarker.roiCenterY },
+            alignmentInfo,
+            sourceTile,
+            markerlessPreviewTileSide,
+          )
+        : buildMarkerlessCornerTile(grayMat, {
+            col,
+            row,
+            x: displayMarker.roiCenterX,
+            y: displayMarker.roiCenterY,
+          }, alignmentInfo, crossRoiScale);
       tile.detectedX = displayMarker.detectedX;
       tile.detectedY = displayMarker.detectedY;
       tile.autoDetectedX = displayMarker.autoDetectedX;
@@ -5166,6 +6592,7 @@ function buildSettingsTsv(config) {
   return buildSettingsTsvViaIo({
     config,
     sourceFilename: state.source.filename,
+    sourceCredit: state.source.sourceCredit,
     manualMarkerOverrides: state.geometry.manualMarkerOverrides,
     sanitizeFilenameBase,
   });
@@ -5257,6 +6684,7 @@ function saveSettingsFile() {
  */
 function setStatus(text) {
   syncStatusText(dom, state, text);
+  updateStabilizationProgressUi();
   const hasLoadedImage = Boolean(state.source.filename || state.source.canvas);
   const showWarning = Boolean(state.runtime.pageBoundaryWarningVisible);
   if (hasLoadedImage && showWarning && dom.statusGroup) {

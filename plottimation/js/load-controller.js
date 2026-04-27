@@ -18,6 +18,14 @@ export function setBusyState(dom, state, busy) {
   document.body.classList.toggle("busy-loading", !!busy);
   dom.statusBusy.hidden = !busy;
   dom.rawBusy.hidden = !busy;
+  if (dom.previewBusy) {
+    dom.previewBusy.hidden = !(
+      busy ||
+      document.body.classList.contains("geometry-processing") ||
+      document.body.classList.contains("stabilization-processing") ||
+      !!state.processing?.stabilizationMeasurementActive
+    );
+  }
 }
 
 /**
@@ -123,7 +131,10 @@ export async function handleFile(file, files = null, { state, loadImageSource, a
  *   revokeGifUrl: () => void,
  *   clearAllPreviews: () => void,
  *   renderRawPreview: () => void,
- *   syncRawPhotoFilenameDisplay?: () => void,
+ *   setGeometryProcessingCursor?: (active: boolean) => void,
+ *   syncRawPhotoHeadingLink?: () => void,
+ *   syncRawPhotoCreditDisplay?: () => void,
+ *   syncPaperPresetUi?: () => void,
  *   loadCompanionSettingsText: (src:string, filename:string, settingsFile?:File | null) => Promise<string>,
  *   applyLoadedSettingsText: (settingsText:string) => void,
  *   invalidateAppearanceCache: () => void,
@@ -146,7 +157,10 @@ export async function loadImageSource({
   revokeGifUrl,
   clearAllPreviews,
   renderRawPreview,
-  syncRawPhotoFilenameDisplay,
+  setGeometryProcessingCursor,
+  syncRawPhotoHeadingLink,
+  syncRawPhotoCreditDisplay,
+  syncPaperPresetUi,
   loadCompanionSettingsText,
   applyLoadedSettingsText,
   invalidateAppearanceCache,
@@ -158,6 +172,7 @@ export async function loadImageSource({
     state.source.ownedObjectUrl = src;
   }
   setBusyState(dom, state, true);
+  setGeometryProcessingCursor?.(true);
   setStatus(t("status.loadingImage"));
   // On mobile, a new image load should bring the user back to the Raw Photo tab before the
   // previews are cleared and redrawn.
@@ -167,13 +182,15 @@ export async function loadImageSource({
   collapseAllPanels();
   resetNonLayoutControls();
   revokeGifUrl();
+  // Clear the old filename before syncing the Raw Photo header, otherwise the filename fallback
+  // can briefly show the previous image's name while the next image/demo is still loading.
+  state.source.filename = "";
   state.source.dragUrl = "";
   state.source.mimeType = "";
-  dom.rawPhotoName.dataset.fullFilename = filename || "";
-  dom.rawPhotoName.textContent = filename || "";
-  dom.rawPhotoNameWrap.hidden = !filename;
-  dom.rawPhotoName.removeAttribute("href");
-  syncRawPhotoFilenameDisplay?.();
+  state.source.sourceCredit = "";
+  dom.rawPhotoHeadingText?.removeAttribute("href");
+  syncRawPhotoHeadingLink?.();
+  syncRawPhotoCreditDisplay?.();
   clearAllPreviews();
   // The UI resets to defaults first, then an optional sibling settings file is layered on top.
   const settingsText = await loadCompanionSettingsText(src, filename, settingsFile);
@@ -184,14 +201,14 @@ export async function loadImageSource({
       document.body.classList.add("has-loaded-image");
       state.source.image = image;
       state.source.filename = filename || "";
+      state.source.sourceCredit = state.source.sourceCredit || "";
       state.source.mimeType = mimeType || "image/jpeg";
       state.source.dragUrl = src;
-      dom.rawPhotoNameWrap.hidden = !state.source.filename;
-      dom.rawPhotoName.href = new URL(src, window.location.href).href;
-      dom.rawPhotoName.dataset.fullFilename = state.source.filename;
-      syncRawPhotoFilenameDisplay?.();
+      syncRawPhotoHeadingLink?.();
+      syncRawPhotoCreditDisplay?.();
       state.source.rawPageContour = null;
       drawImageToCanvas(image, state.source.canvas);
+      syncPaperPresetUi?.();
       renderRawPreview();
       const loadedWhat = settingsText ? t("status.loadedImageAndSettings") : t("status.loadedImage");
       if (settingsText) {
@@ -205,18 +222,19 @@ export async function loadImageSource({
     } finally {
       if (!state.processing.active && !state.processing.pending) {
         setBusyState(dom, state, false);
+        setGeometryProcessingCursor?.(false);
       }
     }
   };
   image.onerror = () => {
     setBusyState(dom, state, false);
+    setGeometryProcessingCursor?.(false);
     state.source.dragUrl = "";
     state.source.mimeType = "";
     state.source.filename = "";
-    dom.rawPhotoName.dataset.fullFilename = "";
-    dom.rawPhotoName.textContent = "";
-    dom.rawPhotoNameWrap.hidden = true;
-    dom.rawPhotoName.removeAttribute("href");
+    state.source.sourceCredit = "";
+    syncRawPhotoHeadingLink?.();
+    syncRawPhotoCreditDisplay?.();
     releaseOwnedSourceUrl(state);
     setStatus(t("status.failedToLoadImage"));
   };

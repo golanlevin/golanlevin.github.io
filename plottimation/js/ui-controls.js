@@ -46,7 +46,11 @@ export function setTooltipsEnabled({ dom, state, enabled, previewTooltipText }) 
       element.removeAttribute("title");
     }
   }
-  dom.gifPreviewCanvas.title = previewTooltipText || "";
+  if (enabled && String(previewTooltipText || "").trim()) {
+    dom.gifPreviewCanvas.title = previewTooltipText;
+  } else {
+    dom.gifPreviewCanvas.removeAttribute("title");
+  }
   if (!state.runtime.mp4ExportSupported) {
     dom.exportMp4Button.title = t("panels.mp4Unsupported");
   }
@@ -77,7 +81,6 @@ export function initializeTooltips({ tooltipText, state, dom, applyTooltipState 
     });
   }
   state.runtime.tooltipRegistry = [...tooltipMap.entries()];
-  dom.gifPreviewCanvas.title = tooltipText["#gifPreviewCanvas"] || "";
   applyTooltipState(false);
 }
 
@@ -123,8 +126,8 @@ function attachAlignmentPipelineControls({
  * Wire the markerless stabilization-method radio group.
  *
  * Switching methods invalidates different caches from the same frame set, so the handler warms
- * the newly selected path before clearing the busy cursor. That keeps the first strength drag from
- * paying the full matcher setup cost on the interaction path.
+ * the newly selected path before clearing the busy cursor. That keeps the first stabilization
+ * enable/preview from paying the full matcher setup cost on the interaction path.
  *
  * @param {{
  *   dom: import("./dom-state.js").dom,
@@ -153,16 +156,25 @@ function attachStabilizationMethodControls({
     if (!input) return;
     const applyMethodChange = () => {
       // Switching methods changes which stabilization caches are valid, so invalidate them
-      // immediately and warm the newly selected path before the user starts dragging strength.
-      setGeometryProcessingCursor(true);
+      // immediately. Only warm the new path when stabilization is actually enabled.
       syncAlignmentMarkerUi();
       revokeGifUrl();
       updateSliderReadouts();
       invalidateStabilizationCache();
-      requestAnimationFrame(() => {
-        warmCurrentStabilizationMethod();
+      if (!alignmentDom.stabilizationEnabled?.checked) {
         scheduleStabilizationPreviewUpdate();
-        setGeometryProcessingCursor(false);
+        return;
+      }
+      setGeometryProcessingCursor(true);
+      requestAnimationFrame(() => {
+        try {
+          warmCurrentStabilizationMethod();
+          scheduleStabilizationPreviewUpdate();
+        } catch (error) {
+          console.error(error);
+        } finally {
+          setGeometryProcessingCursor(false);
+        }
       });
     };
     input.addEventListener("input", applyMethodChange);
@@ -294,13 +306,15 @@ function attachMarkerlessSearchInsetControls({
 }
 
 /**
- * Wire the markerless stabilization sliders.
+ * Wire the markerless stabilization controls.
  *
- * Both sliders scrub against already-computed matcher state. `Strength` only changes how much of
- * the solved offset field is applied, while `Rigidity` invalidates the offset solve itself.
+ * `Enable Stabilization` gates whether the solved offsets are applied at all.
+ * `Stabilization Strength` scales those already-solved offsets without restarting the solve.
+ * `Rigidity` still scrubs against the pairwise solve path and invalidates only the offset solve.
  *
  * @param {{
  *   dom: import("./dom-state.js").dom,
+ *   setGeometryProcessingCursor: (active:boolean) => void,
  *   beginStabilizationStrengthScrub: () => void,
  *   endStabilizationStrengthScrub: () => void,
  *   revokeGifUrl: () => void,
@@ -314,6 +328,7 @@ function attachMarkerlessSearchInsetControls({
  */
 function attachStabilizationControls({
   dom,
+  setGeometryProcessingCursor,
   beginStabilizationStrengthScrub,
   endStabilizationStrengthScrub,
   revokeGifUrl,
@@ -324,6 +339,25 @@ function attachStabilizationControls({
   scheduleStabilizationPreviewUpdate,
 }) {
   const alignmentDom = dom.alignment;
+  if (alignmentDom.stabilizationEnabled) {
+    alignmentDom.stabilizationEnabled.addEventListener("change", () => {
+      setGeometryProcessingCursor(true);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          try {
+            revokeGifUrl();
+            updateSliderReadouts();
+            invalidateStabilizedOutputCaches();
+            scheduleStabilizationPreviewUpdate();
+          } finally {
+            requestAnimationFrame(() => {
+              setGeometryProcessingCursor(false);
+            });
+          }
+        });
+      });
+    });
+  }
   const bindSlider = (input, onChangeInvalidate) => {
     input.addEventListener("pointerdown", beginStabilizationStrengthScrub);
     input.addEventListener("pointerup", endStabilizationStrengthScrub);
@@ -345,25 +379,27 @@ function attachStabilizationControls({
     });
   };
 
-  bindSlider(alignmentDom.stabilizationStrength, invalidateStabilizedOutputCaches);
+  if (alignmentDom.stabilizationStrength) {
+    bindSlider(alignmentDom.stabilizationStrength, invalidateStabilizedOutputCaches);
+  }
   bindSlider(alignmentDom.stabilizationLambda, invalidateStabilizationOffsetsCache);
 }
 
 /**
  * Wire the markerless post-lattice adjustment sliders.
  *
- * Dragging uses the fast current-frame path; release promotes the change to a full frame-cache
- * rebuild because phase and drift alter the extraction geometry seen by all frames.
+ * Dragging uses the fast current-frame path; release simply ends the scrub. The actual batch-wide
+ * propagation now happens through the shared frame-output epoch in `app.js`, so every later frame
+ * access observes the committed phase/drift without restarting stabilization.
  *
  * @param {{
  *   dom: import("./dom-state.js").dom,
  *   beginMarkerlessPhaseScrub: () => void,
  *   endMarkerlessPhaseScrub: () => void,
- *   setGeometryProcessingCursor: (active: boolean) => void,
+ *   bumpFrameOutputEpoch: () => void,
  *   revokeGifUrl: () => void,
  *   updateSliderReadouts: () => void,
  *   invalidateCurrentPreviewFrameCaches: () => void,
- *   invalidateFrameCaches: () => void,
  *   scheduleMarkerlessPhasePreviewUpdate: () => void,
  *   drawCurrentGifPreview: () => void
  * }} deps
@@ -373,11 +409,10 @@ function attachMarkerlessPhaseControls({
   dom,
   beginMarkerlessPhaseScrub,
   endMarkerlessPhaseScrub,
-  setGeometryProcessingCursor,
+  bumpFrameOutputEpoch,
   revokeGifUrl,
   updateSliderReadouts,
   invalidateCurrentPreviewFrameCaches,
-  invalidateFrameCaches,
   scheduleMarkerlessPhasePreviewUpdate,
   drawCurrentGifPreview,
 }) {
@@ -387,28 +422,40 @@ function attachMarkerlessPhaseControls({
     alignmentDom.markerlessPhaseY,
     alignmentDom.verticalDriftCompensation,
   ].forEach((input) => {
-    input.addEventListener("pointerdown", beginMarkerlessPhaseScrub);
-    input.addEventListener("pointerup", endMarkerlessPhaseScrub);
-    input.addEventListener("pointercancel", endMarkerlessPhaseScrub);
-    input.addEventListener("blur", endMarkerlessPhaseScrub);
+    let releaseListenersAttached = false;
+    const detachReleaseListeners = () => {
+      if (!releaseListenersAttached) return;
+      releaseListenersAttached = false;
+      window.removeEventListener("pointerup", finishScrub, true);
+      window.removeEventListener("pointercancel", finishScrub, true);
+    };
+    const attachReleaseListeners = () => {
+      if (releaseListenersAttached) return;
+      releaseListenersAttached = true;
+      window.addEventListener("pointerup", finishScrub, true);
+      window.addEventListener("pointercancel", finishScrub, true);
+    };
+    const finishScrub = () => {
+      detachReleaseListeners();
+      // Output caches now track a shared epoch, so phase/drift changes propagate lazily to every
+      // frame without forcing an eager whole-batch rebuild on release.
+      endMarkerlessPhaseScrub();
+      drawCurrentGifPreview();
+    };
+    input.addEventListener("pointerdown", () => {
+      beginMarkerlessPhaseScrub();
+      attachReleaseListeners();
+    });
+    input.addEventListener("blur", finishScrub);
     input.addEventListener("input", () => {
       beginMarkerlessPhaseScrub();
+      bumpFrameOutputEpoch();
       revokeGifUrl();
       updateSliderReadouts();
       invalidateCurrentPreviewFrameCaches();
       scheduleMarkerlessPhasePreviewUpdate();
     });
-    input.addEventListener("change", () => {
-      revokeGifUrl();
-      updateSliderReadouts();
-      setGeometryProcessingCursor(true);
-      requestAnimationFrame(() => {
-        invalidateFrameCaches();
-        drawCurrentGifPreview();
-        endMarkerlessPhaseScrub();
-        setGeometryProcessingCursor(false);
-      });
-    });
+    input.addEventListener("change", finishScrub);
   });
 }
 
@@ -447,6 +494,13 @@ function attachMarkerlessPhaseMetricToggles({
 }
 
 /**
+ * Wire the temporary markerless autocorrelation-blur slider.
+ *
+ * This changes the reduced working image used for both pitch and phase estimation, so it always
+ * requires a full reprocess rather than a preview-only cache update.
+ *
+ * @param {{
+ *   dom: import("./dom-state.js").dom,
  * Attach all DOM event listeners and classify controls by what they invalidate.
  *
  * @param {{
@@ -467,6 +521,7 @@ function attachMarkerlessPhaseMetricToggles({
  *   stepPausedPreviewFrame: (direction: number) => void,
  *   toggleMarkerBlobView: () => void,
  *   toggleMarkerlessPhaseDebug: () => void,
+ *   toggleMarkerlessWorkingImage: () => void,
  *   toggleMarkerEditing: () => void,
  *   clearMarkerEdits: () => void,
  *   syncOutputSizeFromWidthInput: () => void,
@@ -488,14 +543,22 @@ function attachMarkerlessPhaseMetricToggles({
  *   scheduleAppearancePreviewUpdate: (includeRectified?: boolean) => void,
  *   scheduleStabilizationPreviewUpdate: () => void,
  *   scheduleMarkerlessPhasePreviewUpdate: () => void,
+ *   schedulePostRotationPreviewUpdate: () => void,
+ *   runTimedHeavyPath: <T>(label:string, fn:() => T) => T,
  *   warmCurrentStabilizationMethod: () => void,
  *   beginStabilizationStrengthScrub: () => void,
  *   endStabilizationStrengthScrub: () => void,
  *   beginMarkerlessPhaseScrub: () => void,
  *   endMarkerlessPhaseScrub: () => void,
+ *   beginPostRotationScrub: () => void,
+ *   endPostRotationScrub: () => void,
+ *   finishPostRotationScrubIfUnchanged: () => boolean,
+ *   bumpFrameOutputEpoch: () => void,
  *   setGeometryProcessingCursor: (active:boolean) => void,
  *   cancelInFlightProcessing: () => void,
  *   invalidateFrameCaches: () => void,
+ *   invalidateFrameOutputCaches: () => void,
+ *   rebuildAllFrameOutputCaches: () => void,
  *   drawCurrentGifPreview: () => void,
  *   exportGif: () => Promise<void>,
  *   exportMp4: () => Promise<void>,
@@ -523,6 +586,7 @@ export function attachUi({
   stepPausedPreviewFrame,
   toggleMarkerBlobView,
   toggleMarkerlessPhaseDebug,
+  toggleMarkerlessWorkingImage,
   toggleMarkerEditing,
   clearMarkerEdits,
   syncOutputSizeFromWidthInput,
@@ -544,13 +608,21 @@ export function attachUi({
   scheduleAppearancePreviewUpdate,
   scheduleStabilizationPreviewUpdate,
   scheduleMarkerlessPhasePreviewUpdate,
+  schedulePostRotationPreviewUpdate,
+  runTimedHeavyPath,
   warmCurrentStabilizationMethod,
   beginStabilizationStrengthScrub,
   endStabilizationStrengthScrub,
   beginMarkerlessPhaseScrub,
   endMarkerlessPhaseScrub,
+  beginPostRotationScrub,
+  endPostRotationScrub,
+  finishPostRotationScrubIfUnchanged,
+  bumpFrameOutputEpoch,
   cancelInFlightProcessing,
   invalidateFrameCaches,
+  invalidateFrameOutputCaches,
+  rebuildAllFrameOutputCaches,
   drawCurrentGifPreview,
   exportGif,
   exportMp4,
@@ -597,15 +669,33 @@ export function attachUi({
   dom.dropZone.addEventListener("dragleave", () => {
     dom.dropZone.classList.remove("dragging");
   });
+  const beginSourceLoadInteraction = (file, files = null) => {
+    if (!file) return;
+    document.body.classList.add("busy-loading");
+    setGeometryProcessingCursor(true);
+    requestAnimationFrame(() => {
+      void (async () => {
+        try {
+          await handleFile(file, files);
+        } finally {
+          if (!state.runtime.busy) {
+            document.body.classList.remove("busy-loading");
+            setGeometryProcessingCursor(false);
+          }
+        }
+      })();
+    });
+  };
+
   dom.dropZone.addEventListener("drop", (event) => {
     event.preventDefault();
     dom.dropZone.classList.remove("dragging");
     const file = event.dataTransfer?.files?.[0];
-    if (file) void handleFile(file, event.dataTransfer?.files || null);
+    beginSourceLoadInteraction(file, event.dataTransfer?.files || null);
   });
   dom.fileInput.addEventListener("change", (event) => {
     const file = event.target.files?.[0];
-    if (file) void handleFile(file, event.target.files || null);
+    beginSourceLoadInteraction(file, event.target.files || null);
   });
   dom.loadDemoSelect.addEventListener("change", () => {
     const filename = dom.loadDemoSelect.value;
@@ -649,6 +739,9 @@ export function attachUi({
     if (event.key === " " || event.key === "Spacebar") {
       event.preventDefault();
       togglePreviewPaused();
+    } else if (event.key === "d" || event.key === "D") {
+      event.preventDefault();
+      toggleMarkerlessPhaseDebug();
     } else if (event.key === "ArrowLeft") {
       event.preventDefault();
       stepPausedPreviewFrame(-1);
@@ -673,20 +766,16 @@ export function attachUi({
     updateSliderReadouts();
     const after = `${String(dom.paperWidth.value || "").trim()}x${String(dom.paperHeight.value || "").trim()}`;
     if (before !== after) {
-      scheduleProcess();
+      // Large scans can make paper-geometry reprocessing expensive. Use a longer debounce here so
+      // quick preset/orientation sequences like "Tabloid, then Portrait" collapse into one run.
+      scheduleProcess(480);
     }
   };
 
-  dom.paperPreset.addEventListener("input", () => {
-    maybeProcessPaperGeometryChange();
-  });
   dom.paperPreset.addEventListener("change", () => {
     maybeProcessPaperGeometryChange();
   });
   [dom.paperOrientationLandscape, dom.paperOrientationPortrait].forEach((input) => {
-    input.addEventListener("input", () => {
-      maybeProcessPaperGeometryChange();
-    });
     input.addEventListener("change", () => {
       maybeProcessPaperGeometryChange();
     });
@@ -805,6 +894,7 @@ export function attachUi({
 
   attachStabilizationControls({
     dom,
+    setGeometryProcessingCursor,
     beginStabilizationStrengthScrub,
     endStabilizationStrengthScrub,
     revokeGifUrl,
@@ -818,11 +908,10 @@ export function attachUi({
     dom,
     beginMarkerlessPhaseScrub,
     endMarkerlessPhaseScrub,
-    setGeometryProcessingCursor,
+    bumpFrameOutputEpoch,
     revokeGifUrl,
     updateSliderReadouts,
     invalidateCurrentPreviewFrameCaches,
-    invalidateFrameCaches,
     scheduleMarkerlessPhasePreviewUpdate,
     drawCurrentGifPreview,
   });
@@ -843,6 +932,30 @@ export function attachUi({
     updateSliderReadouts();
     scheduleProcess();
   });
+  if (dom.postRotation) {
+    dom.postRotation.addEventListener("pointerdown", beginPostRotationScrub);
+    dom.postRotation.addEventListener("pointerup", () => {
+      finishPostRotationScrubIfUnchanged();
+    });
+    dom.postRotation.addEventListener("pointercancel", () => {
+      finishPostRotationScrubIfUnchanged();
+    });
+    dom.postRotation.addEventListener("blur", () => {
+      finishPostRotationScrubIfUnchanged();
+    });
+    dom.postRotation.addEventListener("input", () => {
+      revokeGifUrl();
+      beginPostRotationScrub();
+      updateSliderReadouts();
+      schedulePostRotationPreviewUpdate();
+    });
+    dom.postRotation.addEventListener("change", () => {
+      revokeGifUrl();
+      updateSliderReadouts();
+      if (finishPostRotationScrubIfUnchanged()) return;
+      scheduleProcess();
+    });
+  }
 
   const lazyFrameInputs = [
     dom.gifResampling,
@@ -865,43 +978,164 @@ export function attachUi({
     dom.boustrophedonOrder,
     dom.pingPong
   ];
+  const requiresFrameCacheRebuild = (input) => (
+    (input === dom.gifResampling) ||
+    (input === dom.outputWidth) ||
+    (input === dom.outputHeight) ||
+    (input === dom.cropLeft) ||
+    (input === dom.cropRight) ||
+    (input === dom.cropTop) ||
+    (input === dom.cropBottom) ||
+    (input === dom.flipHorizontal) ||
+    (input === dom.flipVertical) ||
+    (input === dom.rotate90Cw)
+  );
+  const usesLazyOutputEpochUpdate = (input) => (
+    (input === dom.flipHorizontal) ||
+    (input === dom.flipVertical) ||
+    (input === dom.rotate90Cw)
+  );
+  const applyLazyFrameUpdate = (input, { showBusyCursor = false } = {}) => {
+    if (input === dom.outputWidth) syncOutputSizeFromWidthInput();
+    if (input === dom.outputHeight) syncOutputSizeFromHeightInput();
+    revokeGifUrl();
+    if (usesLazyOutputEpochUpdate(input)) {
+      bumpFrameOutputEpoch();
+      invalidateCurrentPreviewFrameCaches();
+      runTimedHeavyPath("Heavy path: preview-redraw", () => {
+        drawCurrentGifPreview();
+      });
+      return;
+    }
+    const redraw = () => {
+      const label = requiresFrameCacheRebuild(input)
+        ? "Heavy path: frame-cache-rebuild"
+        : "Heavy path: preview-redraw";
+      runTimedHeavyPath(label, () => {
+        if (requiresFrameCacheRebuild(input)) rebuildAllFrameOutputCaches();
+        drawCurrentGifPreview();
+      });
+    };
+    if (!showBusyCursor) {
+      redraw();
+      return;
+    }
+    setGeometryProcessingCursor(true);
+    if (dom.previewBusy) {
+      dom.previewBusy.hidden = false;
+    }
+    requestAnimationFrame(() => {
+      try {
+        redraw();
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setGeometryProcessingCursor(false);
+        if (dom.previewBusy && !document.body.classList.contains("busy-loading")) {
+          dom.previewBusy.hidden = true;
+        }
+      }
+    });
+  };
+  const cropInputDebounceMs = 320;
+  const outputSizeInputDebounceMs = 380;
+  const lazyInputTimers = new WeakMap();
+  const lazyInputLastAppliedValues = new WeakMap();
+  const isCropField = (input) => (
+    input === dom.cropLeft ||
+    input === dom.cropRight ||
+    input === dom.cropTop ||
+    input === dom.cropBottom
+  );
+  const isOutputSizeField = (input) => (
+    input === dom.outputWidth ||
+    input === dom.outputHeight
+  );
+  const getLazyInputValue = (input) => {
+    if (input instanceof HTMLInputElement && input.type === "checkbox") {
+      return input.checked ? "true" : "false";
+    }
+    return String(input?.value ?? "");
+  };
+  const shouldShowBusyCursorForLazyInput = (input) => (
+    input === dom.gifResampling || isCropField(input) || isOutputSizeField(input)
+  );
+  const hasLazyInputValueChanged = (input) => (
+    getLazyInputValue(input) !== lazyInputLastAppliedValues.get(input)
+  );
+  const flushLazyFrameUpdate = (input) => {
+    const existingTimer = lazyInputTimers.get(input);
+    if (existingTimer) {
+      window.clearTimeout(existingTimer);
+      lazyInputTimers.delete(input);
+    }
+    if (!hasLazyInputValueChanged(input)) return;
+    applyLazyFrameUpdate(input, { showBusyCursor: shouldShowBusyCursorForLazyInput(input) });
+    lazyInputLastAppliedValues.set(input, getLazyInputValue(input));
+  };
+  const scheduleLazyFrameUpdate = (input) => {
+    if (!hasLazyInputValueChanged(input)) {
+      const existingTimer = lazyInputTimers.get(input);
+      if (existingTimer) {
+        window.clearTimeout(existingTimer);
+        lazyInputTimers.delete(input);
+      }
+      return;
+    }
+    if (!isCropField(input) && !isOutputSizeField(input)) {
+      applyLazyFrameUpdate(input, { showBusyCursor: shouldShowBusyCursorForLazyInput(input) });
+      lazyInputLastAppliedValues.set(input, getLazyInputValue(input));
+      return;
+    }
+    const existingTimer = lazyInputTimers.get(input);
+    if (existingTimer) window.clearTimeout(existingTimer);
+    const timerId = window.setTimeout(() => {
+      lazyInputTimers.delete(input);
+      applyLazyFrameUpdate(input, { showBusyCursor: shouldShowBusyCursorForLazyInput(input) });
+      lazyInputLastAppliedValues.set(input, getLazyInputValue(input));
+    }, isOutputSizeField(input) ? outputSizeInputDebounceMs : cropInputDebounceMs);
+    lazyInputTimers.set(input, timerId);
+  };
   lazyFrameInputs.forEach((input) => {
+    lazyInputLastAppliedValues.set(input, getLazyInputValue(input));
+    input.addEventListener("focus", () => {
+      if (!isCropField(input) && !isOutputSizeField(input)) return;
+      // Crop fields are often updated programmatically during image/settings load. Treat the value
+      // seen on focus as the current committed baseline so merely clicking into the field does not
+      // flush a stale "changed" state from earlier setup work. Output-size fields use the same
+      // protection because they are also rewritten programmatically during settings/UI sync.
+      lazyInputLastAppliedValues.set(input, getLazyInputValue(input));
+    });
     input.addEventListener("input", () => {
-      if (input === dom.outputWidth) syncOutputSizeFromWidthInput();
-      if (input === dom.outputHeight) syncOutputSizeFromHeightInput();
-      revokeGifUrl();
+      if (isOutputSizeField(input)) {
+        if (input === dom.outputWidth) syncOutputSizeFromWidthInput();
+        if (input === dom.outputHeight) syncOutputSizeFromHeightInput();
+        updateSliderReadouts();
+        scheduleLazyFrameUpdate(input);
+        return;
+      }
       updateSliderReadouts();
-      if (
-        (input === dom.gifResampling) ||
-        (input === dom.outputWidth) ||
-        (input === dom.outputHeight) ||
-        (input === dom.cropLeft) ||
-        (input === dom.cropRight) ||
-        (input === dom.cropTop) ||
-        (input === dom.cropBottom) ||
-        (input === dom.flipHorizontal) ||
-        (input === dom.flipVertical) ||
-        (input === dom.rotate90Cw)
-      ) invalidateFrameCaches();
-      drawCurrentGifPreview();
+      scheduleLazyFrameUpdate(input);
     });
     input.addEventListener("change", () => {
-      if (input === dom.outputWidth) syncOutputSizeFromWidthInput();
-      if (input === dom.outputHeight) syncOutputSizeFromHeightInput();
-      revokeGifUrl();
-      if (
-        (input === dom.gifResampling) ||
-        (input === dom.outputWidth) ||
-        (input === dom.outputHeight) ||
-        (input === dom.cropLeft) ||
-        (input === dom.cropRight) ||
-        (input === dom.cropTop) ||
-        (input === dom.cropBottom) ||
-        (input === dom.flipHorizontal) ||
-        (input === dom.flipVertical) ||
-        (input === dom.rotate90Cw)
-      ) invalidateFrameCaches();
-      drawCurrentGifPreview();
+      if (isOutputSizeField(input)) {
+        if (input === dom.outputWidth) syncOutputSizeFromWidthInput();
+        if (input === dom.outputHeight) syncOutputSizeFromHeightInput();
+        updateSliderReadouts();
+        flushLazyFrameUpdate(input);
+        return;
+      }
+      updateSliderReadouts();
+      scheduleLazyFrameUpdate(input);
+    });
+    input.addEventListener("blur", () => {
+      if (!isCropField(input) && !isOutputSizeField(input)) return;
+      flushLazyFrameUpdate(input);
+    });
+    input.addEventListener("keydown", (event) => {
+      if (!isCropField(input) && !isOutputSizeField(input)) return;
+      if (event.key !== "Enter" && event.key !== "Return") return;
+      flushLazyFrameUpdate(input);
     });
   });
 

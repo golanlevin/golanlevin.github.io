@@ -19,9 +19,16 @@ const MIN_CROSS_DETECTIONS_ABS = 4;
 const PAGE_WARP_LOW_LONG_EDGE_PX = 1100;
 const MARKERLESS_WORKING_LONG_EDGE_PX = 720;
 const MARKERLESS_AUTOCORR_SEARCH_FRAC = 0.25;
+const MARKERLESS_AUTOCORR_REFINE_RADIUS_PX = 9;
 const MARKERLESS_MIN_PITCH_PX = 12;
 const MARKERLESS_PADDING_FRAC = 0.35;
 const MARKERLESS_PHASE_BAND_WIDTH = 3;
+const MARKERLESS_DEFAULT_CORNER_TILE_SCALE = 0.52;
+const MARKERLESS_DEFAULT_CORNER_TILE_MAX_SIDE_PX = 127;
+const RECTIFIED_PREVIEW_LONG_EDGE_PX = 2200;
+const NEAR_IDENTITY_PAGE_AREA_PCT = 0.998;
+const NEAR_IDENTITY_CORNER_TOLERANCE_PX = 2;
+const NEAR_IDENTITY_DIM_TOLERANCE_PX = 2;
 // High-resolution extraction should track the real source-image resolution instead of a fixed
 // paper-size number. The long edge of the extraction warp is capped at 90% of the source-image
 // diagonal so extraction preserves more detail while still preventing pathological warp sizes.
@@ -76,6 +83,55 @@ export function estimateCrossRoiSidePx(gridWidth, gridHeight, cols, rows, crossR
   const cellH = effectiveHeight / Math.max(1, rows);
   const roiHalf = Math.max(10, Math.round(Math.min(cellW, cellH) * 0.18 * crossRoiScale));
   return roiHalf * 2 + 1;
+}
+
+/**
+ * Cap markerless corner-diagnostic tiles so very large source images do not automatically inflate
+ * the panel at the default slider setting. Users can still exceed the default cap by moving the
+ * slider above its default value.
+ *
+ * @param {number} sidePx
+ * @param {number} crossRoiScale
+ * @returns {number}
+ */
+export function capMarkerlessCornerTileSidePx(sidePx, crossRoiScale) {
+  const safeSide = Math.max(21, Math.round(Number(sidePx) || 0));
+  const safeScale = Math.max(0.18, Number(crossRoiScale) || MARKERLESS_DEFAULT_CORNER_TILE_SCALE);
+  let maxSide = MARKERLESS_DEFAULT_CORNER_TILE_MAX_SIDE_PX;
+  if (safeScale > MARKERLESS_DEFAULT_CORNER_TILE_SCALE) {
+    maxSide = Math.round(
+      MARKERLESS_DEFAULT_CORNER_TILE_MAX_SIDE_PX * (safeScale / MARKERLESS_DEFAULT_CORNER_TILE_SCALE)
+    );
+  }
+  if ((maxSide % 2) === 0) maxSide += 1;
+  return Math.min(safeSide, maxSide);
+}
+
+/**
+ * Estimate the displayed markerless corner-tile side in pixels after applying the automatic cap.
+ *
+ * @param {number} gridWidth
+ * @param {number} gridHeight
+ * @param {number} cols
+ * @param {number} rows
+ * @param {number} crossRoiScale
+ * @param {number} fallbackWidth
+ * @param {number} fallbackHeight
+ * @returns {number}
+ */
+export function estimateMarkerlessCornerTileSidePx(
+  gridWidth,
+  gridHeight,
+  cols,
+  rows,
+  crossRoiScale,
+  fallbackWidth,
+  fallbackHeight,
+) {
+  return capMarkerlessCornerTileSidePx(
+    estimateCrossRoiSidePx(gridWidth, gridHeight, cols, rows, crossRoiScale, fallbackWidth, fallbackHeight),
+    crossRoiScale,
+  );
 }
 
 /**
@@ -170,16 +226,22 @@ function clampPositiveConvolutionToUint8(conv32, target8) {
  * @returns {{
  *   frames: HTMLCanvasElement[],
  *   rectifiedCanvas: HTMLCanvasElement,
+ *   rectifiedMat: cv.Mat,
  *   pagePreviewCanvas: HTMLCanvasElement,
  *   pagePreviewGridQuad: {tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}} | null,
  *   alignmentInfo: object,
  *   statusText: string,
- *   pageQuadPoints: {x:number, y:number}[]
+ *   pageQuadPoints: {x:number, y:number}[],
+ *   rectifiedDownloadUsesRawSource: boolean
  * }}
  */
 export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
-  const visionSrc = cv.imread(sourceCanvas);
-  const styledSrc = cv.imread(sourceCanvas);
+  const useMarkerlessAlignment = config.alignmentPipeline === "markerless";
+  const useInvertedMarkerVision = !useMarkerlessAlignment && config.lightOnDarkDesign;
+  const styledSrcRgba = cv.imread(sourceCanvas);
+  let styledSrc = new cv.Mat();
+  let visionSrc = new cv.Mat();
+  cv.cvtColor(styledSrcRgba, styledSrc, cv.COLOR_RGBA2BGR);
   const grayImg = new cv.Mat();
   const thresh = new cv.Mat();
   let pageQuad = null;
@@ -189,8 +251,9 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
   let pageWarpPreviewCanvas = null;
 
   try {
-    const useMarkerlessAlignment = config.alignmentPipeline === "markerless";
-    const useInvertedMarkerVision = !useMarkerlessAlignment && config.lightOnDarkDesign;
+    // Keep one full-color styled branch for extraction/display, but reduce the vision branch to
+    // grayscale immediately because page detection and alignment only use intensity information.
+    cv.cvtColor(styledSrc, visionSrc, cv.COLOR_BGR2GRAY);
     if (useInvertedMarkerVision) {
       // Marker mode normally assumes dark artwork / markers on a lighter page. For light ink on
       // dark paper, invert only the CV input so page detection and marker localization can keep
@@ -201,7 +264,7 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
 
     // Segment the paper sheet from the surroundings. In light-on-dark marker mode the vision image
     // has already been inverted, so this stage still sees a bright page against darker surroundings.
-    cv.cvtColor(visionSrc, grayImg, cv.COLOR_RGBA2GRAY);
+    visionSrc.copyTo(grayImg);
     const threshVal = applyPaperThreshold(grayImg, thresh, config.thresholdMethod, config.thresholdOffset);
     throwIfAborted(requestId);
 
@@ -221,20 +284,59 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
       sourceCanvas.height
     );
     pageWarpLow = perspectiveWarp(visionSrc, styledSrc, ordered, pageSizeLow);
-    pageWarpHigh = perspectiveWarp(visionSrc, styledSrc, ordered, pageSizeHigh);
-    pageWarpPreviewCanvas = matToCanvas(pageWarpHigh.styledMat);
+    const useNearIdentityRectification = shouldUseNearIdentityRectificationFastPath(
+      pageQuad,
+      ordered,
+      pageSizeHigh,
+      sourceCanvas.width,
+      sourceCanvas.height
+    );
+    if (useNearIdentityRectification) {
+      if (useMarkerlessAlignment) {
+        // Scanner-like inputs that already fill the image do not need a second full-resolution page
+        // warp. Markerless mode can treat the original source Mats as the rectified working sheet.
+        rectifiedWarp = buildFrameGridRectification_withoutMarkers({ visionMat: visionSrc, styledMat: styledSrc });
+        visionSrc = null;
+        styledSrc = null;
+      } else {
+        // Marker mode still needs the coarse cross sweep, but if the page already coincides with
+        // the source image we can treat raw-image coordinates as page-warp coordinates and avoid
+        // the expensive full-resolution perspective warp entirely.
+        pageWarpHigh = {
+          visionMat: visionSrc,
+          styledMat: styledSrc,
+          forwardTransform: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+          inverseTransform: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+        };
+      }
+    } else {
+      pageWarpHigh = perspectiveWarp(visionSrc, styledSrc, ordered, pageSizeHigh);
+    }
+    // Do not eagerly materialize a full-size HTML canvas copy of the high-resolution page warp.
+    // Large scans can exceed browser memory limits here, and this preview canvas is not currently
+    // used by the live UI.
+    pageWarpPreviewCanvas = null;
     throwIfAborted(requestId);
 
     const useRectifiedAsSource = config.useRectifiedAsSource;
-    rectifiedWarp = useMarkerlessAlignment
-      ? buildFrameGridRectification_withoutMarkers(pageWarpHigh)
-      : buildFrameGridRectification_fromCrosses(
-          visionSrc,
-          styledSrc,
-          pageWarpHigh,
-          config,
-          useRectifiedAsSource
-        );
+    if (!rectifiedWarp) {
+      rectifiedWarp = useMarkerlessAlignment
+        ? buildFrameGridRectification_withoutMarkers(pageWarpHigh)
+        : buildFrameGridRectification_fromCrosses(
+            visionSrc,
+            styledSrc,
+            pageWarpHigh,
+            config,
+            useRectifiedAsSource
+          );
+    }
+    if (useMarkerlessAlignment && pageWarpHigh) {
+      // Markerless mode uses the full high-resolution page warp as its rectified working sheet.
+      // Transfer ownership of those mats into `rectifiedWarp` instead of cloning another pair of
+      // multi-hundred-megabyte Mats, which can exhaust the browser heap on large scans.
+      pageWarpHigh = null;
+    }
+    applyPostRectificationRotation(rectifiedWarp, config.postRotationDeg);
     throwIfAborted(requestId);
 
     // Resolve the marker lattice if enabled; otherwise keep the nominal grid and unrefined ROI views.
@@ -253,6 +355,7 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
                 useTexture: config.markerlessUseTexture,
                 useVariance: config.markerlessUseVariance,
                 lightOnDark: config.lightOnDarkDesign,
+                blurScale: config.markerlessAutocorrelationBlurScale,
               },
             )
           : buildCrossAlignmentData(
@@ -296,7 +399,9 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
       requestId,
       throwIfAborted
     );
-    const rectifiedCanvas = matToCanvas(rectifiedWarp.styledMat);
+    const rectifiedCanvas = matToPreviewCanvas(rectifiedWarp.styledMat, RECTIFIED_PREVIEW_LONG_EDGE_PX);
+    const rectifiedMat = rectifiedWarp.styledMat;
+    rectifiedWarp.styledMat = null;
     const statusText = buildStatusText({
       threshVal,
       rawWidth: sourceCanvas.width,
@@ -309,8 +414,8 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
       alignmentInfo,
       frameCount: frames.length,
       expectedFrameCount: config.frameCols * config.frameRows,
-      rectifiedWidth: rectifiedWarp.styledMat.cols,
-      rectifiedHeight: rectifiedWarp.styledMat.rows,
+      rectifiedWidth: rectifiedMat.cols,
+      rectifiedHeight: rectifiedMat.rows,
       animationWidth: frames[0]?.width || 0,
       animationHeight: frames[0]?.height || 0,
       gridDetector: "cross-only",
@@ -319,18 +424,25 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
     return {
       frames,
       rectifiedCanvas,
+      rectifiedMat,
       pagePreviewCanvas: pageWarpPreviewCanvas,
       pagePreviewGridQuad: rectifiedWarp.previewGridQuad || null,
       alignmentInfo,
       statusText,
       pageQuadPoints: pageQuad.points,
+      rectifiedDownloadUsesRawSource:
+        useNearIdentityRectification &&
+        useMarkerlessAlignment &&
+        Math.abs(Number(config.postRotationDeg) || 0) < 1e-6,
     };
   } catch (error) {
     if (error?.name !== "ProcessAbortedError") {
-      error.partialResult = {
-        pageQuadPoints: pageQuad?.points || null,
-        rectifiedCanvas: pageWarpPreviewCanvas,
-      };
+      if (error && typeof error === "object") {
+        error.partialResult = {
+          pageQuadPoints: pageQuad?.points || null,
+          rectifiedCanvas: pageWarpPreviewCanvas,
+        };
+      }
     }
     throw error;
   } finally {
@@ -338,13 +450,48 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
     rectifiedWarp?.styledMat?.delete();
     pageWarpLow?.visionMat?.delete();
     pageWarpLow?.styledMat?.delete();
-    pageWarpHigh?.visionMat?.delete();
-    pageWarpHigh?.styledMat?.delete();
-    visionSrc.delete();
-    styledSrc.delete();
+    if (pageWarpHigh && pageWarpHigh.visionMat !== visionSrc) pageWarpHigh.visionMat?.delete();
+    if (pageWarpHigh && pageWarpHigh.styledMat !== styledSrc) pageWarpHigh.styledMat?.delete();
+    visionSrc?.delete();
+    styledSrc?.delete();
+    styledSrcRgba.delete();
     grayImg.delete();
     thresh.delete();
   }
+}
+
+/**
+ * Detect scanner-style inputs where the detected page already coincides with the source image, so
+ * a high-resolution perspective warp would be effectively indistinguishable from a direct copy.
+ *
+ * The predicate is intentionally strict: it requires a near-full-image contour, source-sized
+ * extraction dimensions, and page-quad corners that are all within a couple of pixels of the raw
+ * image corners. This avoids skipping rectification on slightly rotated or skewed photographs.
+ *
+ * @param {{areaPct:number}} pageQuad
+ * @param {{tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}}} ordered
+ * @param {cv.Size} pageSizeHigh
+ * @param {number} sourceWidth
+ * @param {number} sourceHeight
+ * @returns {boolean}
+ */
+function shouldUseNearIdentityRectificationFastPath(pageQuad, ordered, pageSizeHigh, sourceWidth, sourceHeight) {
+  if (Math.max(sourceWidth, sourceHeight) <= PAGE_WARP_LOW_LONG_EDGE_PX) return false;
+  if (!pageQuad || pageQuad.areaPct < NEAR_IDENTITY_PAGE_AREA_PCT) return false;
+  if (!ordered || !pageSizeHigh) return false;
+  if (Math.abs(pageSizeHigh.width - sourceWidth) > NEAR_IDENTITY_DIM_TOLERANCE_PX) return false;
+  if (Math.abs(pageSizeHigh.height - sourceHeight) > NEAR_IDENTITY_DIM_TOLERANCE_PX) return false;
+
+  const expected = [
+    { actual: ordered.tl, expected: { x: 0, y: 0 } },
+    { actual: ordered.tr, expected: { x: sourceWidth - 1, y: 0 } },
+    { actual: ordered.br, expected: { x: sourceWidth - 1, y: sourceHeight - 1 } },
+    { actual: ordered.bl, expected: { x: 0, y: sourceHeight - 1 } },
+  ];
+  return expected.every(({ actual, expected }) =>
+    Math.abs(actual.x - expected.x) <= NEAR_IDENTITY_CORNER_TOLERANCE_PX &&
+    Math.abs(actual.y - expected.y) <= NEAR_IDENTITY_CORNER_TOLERANCE_PX
+  );
 }
 
 /**
@@ -401,8 +548,8 @@ function buildFrameGridRectification_fromCrosses(visionSrc, styledSrc, pageWarpH
  * @returns {{visionMat:cv.Mat, styledMat:cv.Mat, gridBounds:{left:number, top:number, width:number, height:number}, includeCornerCrosses:boolean, previewGridQuad:null}}
  */
 function buildFrameGridRectification_withoutMarkers(pageWarpHigh) {
-  const visionMat = pageWarpHigh.visionMat.clone();
-  const styledMat = pageWarpHigh.styledMat.clone();
+  const visionMat = pageWarpHigh.visionMat;
+  const styledMat = pageWarpHigh.styledMat;
   return {
     visionMat,
     styledMat,
@@ -410,6 +557,83 @@ function buildFrameGridRectification_withoutMarkers(pageWarpHigh) {
     includeCornerCrosses: true,
     previewGridQuad: null,
   };
+}
+
+/**
+ * Apply a small affine rotation to the already-rectified sheet before downstream alignment runs.
+ *
+ * This is intentionally post-rectification: both marker detection and markerless autocorrelation
+ * should see the corrected sheet orientation. Borders are replicated so tiny rotations do not
+ * create undefined wedges around the sheet.
+ *
+ * @param {{visionMat:cv.Mat, styledMat:cv.Mat, gridBounds:{left:number, top:number, width:number, height:number}}} rectifiedWarp
+ * @param {number} rotationDeg
+ * @returns {void}
+ */
+function applyPostRectificationRotation(rectifiedWarp, rotationDeg) {
+  // UI convention: positive Post-Rotation should feel clockwise to the user.
+  const safeRotationDeg = -(Number(rotationDeg) || 0);
+  if (!rectifiedWarp || Math.abs(safeRotationDeg) < 1e-6) return;
+
+  const width = rectifiedWarp.visionMat.cols;
+  const height = rectifiedWarp.visionMat.rows;
+  const center = new cv.Point((width - 1) * 0.5, (height - 1) * 0.5);
+  const affine = cv.getRotationMatrix2D(center, safeRotationDeg, 1);
+
+  try {
+    // `warpAffine` should not read and write the same full-size Mat here. Rotate and replace one
+    // branch at a time instead so the result is well-defined, even though that means one
+    // additional temporary Mat exists during each branch's rotation.
+    const rotateAndReplaceMat = (key) => {
+      const sourceMat = rectifiedWarp[key];
+      const rotatedMat = new cv.Mat();
+      try {
+        cv.warpAffine(
+          sourceMat,
+          rotatedMat,
+          affine,
+          new cv.Size(width, height),
+          cv.INTER_LINEAR,
+          cv.BORDER_REPLICATE,
+          new cv.Scalar()
+        );
+        sourceMat.delete();
+        rectifiedWarp[key] = rotatedMat;
+      } catch (error) {
+        rotatedMat.delete();
+        throw error;
+      }
+    };
+
+    rotateAndReplaceMat("visionMat");
+    rotateAndReplaceMat("styledMat");
+
+    const affineData = affine.data64F?.length ? affine.data64F : affine.data32F;
+    const [a00, a01, a02, a10, a11, a12] = affineData;
+    const transformPoint = (x, y) => ({
+      x: a00 * x + a01 * y + a02,
+      y: a10 * x + a11 * y + a12,
+    });
+    const bounds = rectifiedWarp.gridBounds;
+    const corners = [
+      transformPoint(bounds.left, bounds.top),
+      transformPoint(bounds.left + bounds.width, bounds.top),
+      transformPoint(bounds.left + bounds.width, bounds.top + bounds.height),
+      transformPoint(bounds.left, bounds.top + bounds.height),
+    ];
+    const minX = Math.max(0, Math.min(...corners.map((point) => point.x)));
+    const minY = Math.max(0, Math.min(...corners.map((point) => point.y)));
+    const maxX = Math.min(width, Math.max(...corners.map((point) => point.x)));
+    const maxY = Math.min(height, Math.max(...corners.map((point) => point.y)));
+    rectifiedWarp.gridBounds = {
+      left: Math.round(minX),
+      top: Math.round(minY),
+      width: Math.max(1, Math.round(maxX - minX)),
+      height: Math.max(1, Math.round(maxY - minY)),
+    };
+  } finally {
+    affine.delete();
+  }
 }
 
 /**
@@ -1088,6 +1312,42 @@ function matToCanvas(mat) {
 }
 
 /**
+ * Convert an OpenCV mat into a preview canvas, downscaling very large images first so the UI does
+ * not materialize another enormous RGBA copy just for display.
+ *
+ * @param {cv.Mat} mat
+ * @param {number} [maxLongEdge=RECTIFIED_PREVIEW_LONG_EDGE_PX]
+ * @returns {HTMLCanvasElement}
+ */
+function matToPreviewCanvas(mat, maxLongEdge = RECTIFIED_PREVIEW_LONG_EDGE_PX) {
+  const longEdge = Math.max(mat.cols, mat.rows);
+  if (longEdge <= maxLongEdge) {
+    return matToCanvas(mat);
+  }
+  const previewSource = new cv.Mat();
+  const scale = maxLongEdge / Math.max(1, longEdge);
+  const previewSize = new cv.Size(
+    Math.max(1, Math.round(mat.cols * scale)),
+    Math.max(1, Math.round(mat.rows * scale))
+  );
+  const resized = new cv.Mat();
+  try {
+    // The preview panel does not need alpha. Convert opaque sheet images to BGR before resizing so
+    // the display path cannot inherit unexpected transparency from large RGBA Mats.
+    if (mat.type() === cv.CV_8UC4) {
+      cv.cvtColor(mat, previewSource, cv.COLOR_RGBA2BGR);
+    } else {
+      mat.copyTo(previewSource);
+    }
+    cv.resize(previewSource, resized, previewSize, 0, 0, cv.INTER_AREA);
+    return matToCanvas(resized);
+  } finally {
+    previewSource.delete();
+    resized.delete();
+  }
+}
+
+/**
  * Order four points into top-left, top-right, bottom-right, bottom-left.
  *
  * @param {{x:number, y:number}[]} pts
@@ -1111,12 +1371,14 @@ function orderCorners(pts) {
  */
 function toLightnessGray(inMat) {
   const grayMat = new cv.Mat();
-  if (inMat.type() === cv.CV_8UC4) {
+  if (inMat.type() === cv.CV_8UC1) {
+    inMat.copyTo(grayMat);
+  } else if (inMat.type() === cv.CV_8UC4) {
     cv.cvtColor(inMat, grayMat, cv.COLOR_RGBA2GRAY);
   } else if (inMat.type() === cv.CV_8UC3) {
     cv.cvtColor(inMat, grayMat, cv.COLOR_BGR2GRAY);
   } else {
-    throw new Error("Expected a 3- or 4-channel Mat.");
+    throw new Error("Expected a 1-, 3-, or 4-channel Mat.");
   }
   const k = Math.max(3, (Math.min(grayMat.rows, grayMat.cols) / 400) | 1);
   cv.GaussianBlur(grayMat, grayMat, new cv.Size(k, k), 0, 0, cv.BORDER_REPLICATE);
@@ -1131,12 +1393,14 @@ function toLightnessGray(inMat) {
  */
 function toGrayNoBlur(inMat) {
   const grayMat = new cv.Mat();
-  if (inMat.type() === cv.CV_8UC4) {
+  if (inMat.type() === cv.CV_8UC1) {
+    inMat.copyTo(grayMat);
+  } else if (inMat.type() === cv.CV_8UC4) {
     cv.cvtColor(inMat, grayMat, cv.COLOR_RGBA2GRAY);
   } else if (inMat.type() === cv.CV_8UC3) {
     cv.cvtColor(inMat, grayMat, cv.COLOR_BGR2GRAY);
   } else {
-    throw new Error("Expected a 3- or 4-channel Mat.");
+    throw new Error("Expected a 1-, 3-, or 4-channel Mat.");
   }
   return grayMat;
 }
@@ -1608,7 +1872,7 @@ function buildMarkerlessAlignmentData(
           cols,
           rows,
           crossRoiScale,
-          "crosses"
+          "markerless"
         );
         tile.kind = "markerless";
         tile.accepted = true;
@@ -1655,6 +1919,7 @@ function buildMarkerlessAlignmentData(
         pitchY: estimate.pitchY,
         startX: estimate.startX,
         startY: estimate.startY,
+        workingBlurCanvas: estimate.workingBlurCanvas,
         phaseDebugX: estimate.phaseDebugX,
       },
     };
@@ -1677,14 +1942,15 @@ function buildMarkerlessAlignmentData(
  * @param {cv.Mat} grayMat
  * @param {number} cols
  * @param {number} rows
- * @param {{useDarkness?:boolean, useTexture?:boolean, useVariance?:boolean, lightOnDark?:boolean}} [gutterMetricFlags={}]
- * @returns {{pitchX:number, pitchY:number, startX:number, startY:number, xPositions:number[], yPositions:number[]} | null}
+ * @param {{useDarkness?:boolean, useTexture?:boolean, useVariance?:boolean, lightOnDark?:boolean, blurScale?:number}} [gutterMetricFlags={}]
+ * @returns {{pitchX:number, pitchY:number, startX:number, startY:number, xPositions:number[], yPositions:number[], workingBlurCanvas:HTMLCanvasElement} | null}
  */
 function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0, gutterMetricFlags = {}) {
   const working = new cv.Mat();
   const blurred = new cv.Mat();
   const insetRoi = new cv.Mat();
   const padded = new cv.Mat();
+  let pitchSourceHigh = null;
   const longEdge = Math.max(grayMat.cols, grayMat.rows);
   const scale = longEdge > MARKERLESS_WORKING_LONG_EDGE_PX ? (MARKERLESS_WORKING_LONG_EDGE_PX / longEdge) : 1;
   const workingWidth = Math.max(32, Math.round(grayMat.cols * scale));
@@ -1692,7 +1958,9 @@ function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0, gutterMe
 
   try {
     cv.resize(grayMat, working, new cv.Size(workingWidth, workingHeight), 0, 0, cv.INTER_AREA);
-    const blurKernel = Math.max(3, ((Math.floor(Math.max(working.cols, working.rows) / 90) * 2) + 1));
+    const blurScale = Math.max(0.5, Math.min(2.0, Number(gutterMetricFlags.blurScale) || 1));
+    const baseBlurKernel = Math.max(3, ((Math.floor(Math.max(working.cols, working.rows) / 90) * 2) + 1));
+    const blurKernel = Math.max(3, ((Math.round(baseBlurKernel * blurScale) | 1)));
     cv.GaussianBlur(working, blurred, new cv.Size(blurKernel, blurKernel), 0, 0, cv.BORDER_REPLICATE);
 
     // Apply Search Inset Margin in the reduced-resolution domain used for seeded autocorrelation.
@@ -1736,8 +2004,36 @@ function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0, gutterMe
 
     const scaleX = grayMat.cols / blurred.cols;
     const scaleY = grayMat.rows / blurred.rows;
-    const pitchX = pitchXSmall * scaleX;
-    const pitchY = pitchYSmall * scaleY;
+    const predictedPitchX = pitchXSmall * scaleX;
+    const predictedPitchY = pitchYSmall * scaleY;
+    const insetHigh = Math.max(0, Math.round(Math.max(0, paperMarginPx)));
+    const insetWidthHigh = Math.max(1, grayMat.cols - (insetHigh * 2));
+    const insetHeightHigh = Math.max(1, grayMat.rows - (insetHigh * 2));
+    const useInsetForPitchHigh = useInsetForPitch &&
+      insetWidthHigh >= 1 &&
+      insetHeightHigh >= 1;
+    pitchSourceHigh = useInsetForPitchHigh
+      ? grayMat.roi(new cv.Rect(insetHigh, insetHigh, insetWidthHigh, insetHeightHigh)).clone()
+      : grayMat.clone();
+    // Refine the coarse low-resolution lag on the original-resolution bounded sheet, but only in a
+    // small local window so we keep near-full pitch precision without paying for a full wide-window
+    // high-resolution autocorrelation sweep.
+    const pitchX = estimateAutocorrelationPitch(
+      pitchSourceHigh,
+      "x",
+      predictedPitchX,
+      Math.round(predictedPitchX) - MARKERLESS_AUTOCORR_REFINE_RADIUS_PX,
+      Math.round(predictedPitchX) + MARKERLESS_AUTOCORR_REFINE_RADIUS_PX
+    );
+    const pitchY = estimateAutocorrelationPitch(
+      pitchSourceHigh,
+      "y",
+      predictedPitchY,
+      Math.round(predictedPitchY) - MARKERLESS_AUTOCORR_REFINE_RADIUS_PX,
+      Math.round(predictedPitchY) + MARKERLESS_AUTOCORR_REFINE_RADIUS_PX
+    );
+    const refineOffsetX = pitchX - Math.round(predictedPitchX);
+    const refineOffsetY = pitchY - Math.round(predictedPitchY);
     const insetOffsetX = useInsetForPitch ? (insetSmall * scaleX) : 0;
     const insetOffsetY = useInsetForPitch ? (insetSmall * scaleY) : 0;
     // Phase is solved in padded/inset working coordinates, then translated back into the original
@@ -1750,10 +2046,13 @@ function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0, gutterMe
     return {
       pitchX,
       pitchY,
+      refineOffsetX,
+      refineOffsetY,
       startX,
       startY,
       xPositions,
       yPositions,
+      workingBlurCanvas: matToCanvas(blurred),
       phaseDebugX: {
         positions: Array.from({ length: xProfiles.gutter.length }, (_, i) => ((i - padXSmall) * scaleX) + insetOffsetX),
         darkness: Array.from(xProfiles.darkness),
@@ -1767,6 +2066,7 @@ function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0, gutterMe
     blurred.delete();
     insetRoi.delete();
     padded.delete();
+    pitchSourceHigh?.delete();
   }
 }
 
@@ -1791,20 +2091,24 @@ function extractBoundsRoi(grayMat, bounds) {
  * @param {cv.Mat} grayMat
  * @param {"x"|"y"} axis
  * @param {number} nominalPitch
+ * @param {number} [pitchMinOverride]
+ * @param {number} [pitchMaxOverride]
  * @returns {number}
  */
-function estimateAutocorrelationPitch(grayMat, axis, nominalPitch) {
+function estimateAutocorrelationPitch(grayMat, axis, nominalPitch, pitchMinOverride = null, pitchMaxOverride = null) {
   const data = grayMat.data;
   const width = grayMat.cols;
   const height = grayMat.rows;
   const maxLagAllowed = Math.max(1, (axis === "x" ? width : height) - 1);
+  const seededPitchMin = Math.round(nominalPitch * (1 - MARKERLESS_AUTOCORR_SEARCH_FRAC));
+  const seededPitchMax = Math.round(nominalPitch * (1 + MARKERLESS_AUTOCORR_SEARCH_FRAC));
   const pitchMin = Math.min(
     maxLagAllowed,
-    Math.max(MARKERLESS_MIN_PITCH_PX, Math.round(nominalPitch * (1 - MARKERLESS_AUTOCORR_SEARCH_FRAC)))
+    Math.max(MARKERLESS_MIN_PITCH_PX, Math.round(pitchMinOverride ?? seededPitchMin))
   );
   const pitchMax = Math.min(
     maxLagAllowed,
-    Math.max(pitchMin + 1, Math.round(nominalPitch * (1 + MARKERLESS_AUTOCORR_SEARCH_FRAC)))
+    Math.max(pitchMin + 1, Math.round(pitchMaxOverride ?? seededPitchMax))
   );
   const sampleStrideX = Math.max(1, Math.floor(width / 180));
   const sampleStrideY = Math.max(1, Math.floor(height / 180));
@@ -2508,7 +2812,10 @@ function buildUnrefinedCrossRegionTile(grayMat, expected, sheetW, sheetH, cols, 
   const cellW = sheetW / cols;
   const cellH = sheetH / rows;
   const roiHalf = Math.max(10, Math.round(Math.min(cellW, cellH) * 0.18 * crossRoiScale));
-  const side = Math.max(1, roiHalf * 2 + 1);
+  const naturalSide = Math.max(1, roiHalf * 2 + 1);
+  const side = markerType === "markerless"
+    ? capMarkerlessCornerTileSidePx(naturalSide, crossRoiScale)
+    : naturalSide;
   const roi = extractCenteredSquareRoi(grayMat, expected.x, expected.y, side);
   const center = (side - 1) * 0.5;
 
@@ -2822,13 +3129,15 @@ function buildStatusText({
         })
       );
     }
-    if (alignmentInfo.ok) {
-      lines.push(t("status.markerAlignment", {
-        count: alignmentInfo.detectedCount,
-        expected: alignmentInfo.expectedCount,
-      }));
-    } else {
-      lines.push(t("status.markerAlignmentFallback", { reason: alignmentInfo.reason }));
+    if (alignmentInfo.requestedMarkerType !== "markerless") {
+      if (alignmentInfo.ok) {
+        lines.push(t("status.markerAlignment", {
+          count: alignmentInfo.detectedCount,
+          expected: alignmentInfo.expectedCount,
+        }));
+      } else {
+        lines.push(t("status.markerAlignmentFallback", { reason: alignmentInfo.reason }));
+      }
     }
   }
 
