@@ -44,12 +44,17 @@
 - If a settings file provides both `output_width` and `output_height`, preserve that exact pair instead of re-deriving one dimension from the other during load.
 - If `source_credit` is absent, the Raw Photo header should fall back to the loaded source filename.
 - `Frames in Export` limits preview and export from the same source-cell subset.
+- Thresholding Offset live scrubbing is a lightweight Raw Photo page-boundary preview. Keep it
+  responsive and non-destructive; the full pipeline result on slider release is authoritative.
 - Preview/export ordering changes must stay consistent with:
   - preview playback
   - paused arrow-key stepping
   - rectified-sheet green current-frame overlay
   - rectified-sheet red omitted-frame overlays
   - exported GIF/MP4/ZIP frame ordering
+- If an exported GIF exists in the current session, the `Preview & Export` heading text links to
+  that GIF via the generated object URL and `download` filename. Revoking the GIF URL must also
+  remove that header link.
 
 ## Markerless Notes
 - Markerless pitch estimation comes from grayscale blurred autocorrelation.
@@ -62,6 +67,9 @@
 - Cache invalidation in `js/app.js`
 - Mode-switched labels and tooltips
 - Rectified-sheet overlays
+- Header/link sync for viewer titles should be idempotent. Avoid rewriting heading `textContent`
+  during redraw loops unless the text actually changed, because that breaks text selection and
+  appears as flicker.
 - Post-Rotation scrub-preview behavior and handoff to the real processed result
 - Large-image memory pressure during consecutive reprocesses
 - Preview/export frame-order logic

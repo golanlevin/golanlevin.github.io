@@ -36,12 +36,12 @@ brightness	0
 contrast	0
 vibrance	0
 color_temperature	0
-unsharp_amount	0
-unsharp_radius	1
+unsharp_amount	8
+unsharp_radius	6.4
 invert	false
-fps	20
+fps	15
 loop_count	1
-frame_count_to_export	16
+frame_count_to_export	14
 reverse_order	false
 boustrophedon_order	false
 ping_pong	false

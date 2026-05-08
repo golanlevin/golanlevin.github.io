@@ -180,19 +180,24 @@ export function buildCrossConvolutionCanvas(sourceCanvas, targetCanvas) {
  * @param {number} sourceHeight
  * @param {string} thresholdMethod
  * @param {number} thresholdOffset
- * @returns {{threshVal:number, pageQuadPoints:{x:number,y:number}[] | null}}
+ * @returns {{threshVal:number, pageQuadPoints:{x:number,y:number}[] | null, pageAreaPct:number | null, failureReason:string}}
  */
 export function previewPageBoundary(grayImg, sourceWidth, sourceHeight, thresholdMethod, thresholdOffset) {
   const thresh = new cv.Mat();
   try {
     const threshVal = applyPaperThreshold(grayImg, thresh, thresholdMethod, thresholdOffset);
     let pageQuadPoints = null;
+    let pageAreaPct = null;
+    let failureReason = "";
     try {
-      pageQuadPoints = findLargestQuad(thresh, sourceWidth * sourceHeight).points;
-    } catch {
+      const pageQuad = findLargestQuad(thresh, sourceWidth * sourceHeight);
+      pageQuadPoints = pageQuad.points;
+      pageAreaPct = pageQuad.areaPct;
+    } catch (error) {
       pageQuadPoints = null;
+      failureReason = error?.message || String(error);
     }
-    return { threshVal, pageQuadPoints };
+    return { threshVal, pageQuadPoints, pageAreaPct, failureReason };
   } finally {
     thresh.delete();
   }
@@ -228,6 +233,8 @@ function clampPositiveConvolutionToUint8(conv32, target8) {
  *   rectifiedCanvas: HTMLCanvasElement,
  *   rectifiedMat: cv.Mat,
  *   pagePreviewCanvas: HTMLCanvasElement,
+ *   pagePreviewWidth: number,
+ *   pagePreviewHeight: number,
  *   pagePreviewGridQuad: {tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}} | null,
  *   alignmentInfo: object,
  *   statusText: string,
@@ -249,6 +256,8 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
   let pageWarpHigh = null;
   let rectifiedWarp = null;
   let pageWarpPreviewCanvas = null;
+  let pageWarpPreviewWidth = 0;
+  let pageWarpPreviewHeight = 0;
 
   try {
     // Keep one full-color styled branch for extraction/display, but reduce the vision branch to
@@ -312,10 +321,13 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
     } else {
       pageWarpHigh = perspectiveWarp(visionSrc, styledSrc, ordered, pageSizeHigh);
     }
-    // Do not eagerly materialize a full-size HTML canvas copy of the high-resolution page warp.
-    // Large scans can exceed browser memory limits here, and this preview canvas is not currently
-    // used by the live UI.
-    pageWarpPreviewCanvas = null;
+    // Keep only a bounded display canvas for the full page warp. The full-resolution page Mats stay
+    // in OpenCV form for detection and are released below, avoiding another large RGBA copy.
+    pageWarpPreviewCanvas = pageWarpHigh?.styledMat
+      ? matToPreviewCanvas(pageWarpHigh.styledMat, RECTIFIED_PREVIEW_LONG_EDGE_PX)
+      : null;
+    pageWarpPreviewWidth = pageWarpHigh?.styledMat?.cols || pageWarpPreviewCanvas?.width || 0;
+    pageWarpPreviewHeight = pageWarpHigh?.styledMat?.rows || pageWarpPreviewCanvas?.height || 0;
     throwIfAborted(requestId);
 
     const useRectifiedAsSource = config.useRectifiedAsSource;
@@ -426,6 +438,8 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
       rectifiedCanvas,
       rectifiedMat,
       pagePreviewCanvas: pageWarpPreviewCanvas,
+      pagePreviewWidth: pageWarpPreviewWidth,
+      pagePreviewHeight: pageWarpPreviewHeight,
       pagePreviewGridQuad: rectifiedWarp.previewGridQuad || null,
       alignmentInfo,
       statusText,

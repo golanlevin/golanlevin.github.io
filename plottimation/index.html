@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <!-- Core document metadata and social sharing previews. -->
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Free web tool for animators to create looping GIFs and MP4s from photos of frame sheets, contact sheets, and sprite sheets." />
@@ -18,13 +19,21 @@
     <meta name="twitter:image" content="doc/plottimation_overview.jpg" />
     <link rel="canonical" href="https://golanlevin.github.io/plottimation/" />
     <title data-i18n="app.documentTitle">Plottimation Web Tool</title>
+    <!-- Runtime styling and browser-side CV/export dependencies. -->
     <link rel="stylesheet" href="style.css" />
     <script src="js/vendor/opencv.js"></script>
     <script src="js/vendor/gif.js"></script>
   </head>
   <body>
+    <!--
+      App shell:
+      - left/control side contains the source loader and all shared settings controls
+      - right/workspace side contains the four live viewer panels
+      - mobile mode reparents the same control groups into the mobile stack below
+    -->
     <div id="appShell" class="app-shell">
       <aside id="controlPanel" class="control-panel">
+        <!-- Product title, high-level help links, version, and attribution. -->
         <div class="panel-head">
           <div class="title-row">
             <h1 id="appTitle" data-i18n="app.title">Plottimation Tool</h1>
@@ -34,11 +43,12 @@
           </p>
           <p id="appLedeMobileNote" class="lede mobile-header-note" data-i18n="app.mobileNote">(Please use desktop version for advanced controls.)</p>
           <p id="appLedeSecondary" class="lede">
-            <span data-app-version>v1.14</span> • <a href="https://github.com/golanlevin/plottimation/tree/main/README.md" target="_blank" rel="noopener noreferrer" data-i18n="app.documentation">Instructions</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer" data-i18n="app.demoVideo">Demo Video</a> • <a href="templates/index.html" target="_blank" rel="noopener noreferrer" data-i18n="app.templates">Templates</a>
+            <span data-app-version>v1.15</span> • <a href="https://github.com/golanlevin/plottimation/tree/main/README.md" target="_blank" rel="noopener noreferrer" data-i18n="app.documentation">Instructions</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer" data-i18n="app.demoVideo">Demo Video</a> • <a href="templates/index.html" target="_blank" rel="noopener noreferrer" data-i18n="app.templates">Templates</a>
           </p>
           <p id="appLedeTertiary" class="lede"><span data-i18n="app.bylinePrefix">By @golanlevin, 2026 •</span> <a href="https://github.com/golanlevin/plottimation" target="_blank" rel="noopener noreferrer">Source</a></p>
         </div>
 
+        <!-- Source-image entry point. Accepts images plus optional sibling settings manifests. -->
         <section class="control-group">
           <div class="section-head">
             <h2 id="photoHeading" data-i18n="photo.heading">Photo</h2>
@@ -60,6 +70,7 @@ separated by small crosses or dots.</span>
           <input id="fileInput" type="file" accept="image/*,.txt,text/plain" />
         </section>
 
+        <!-- Top-level choice between markerless gutter fitting and marker-based alignment. -->
         <section id="alignmentPipelineGroup" class="control-group">
           <fieldset id="alignmentPipelineField" class="radio-group">
             <legend data-i18n="alignment.pipeline">Alignment Pipeline</legend>
@@ -74,6 +85,7 @@ separated by small crosses or dots.</span>
           </fieldset>
         </section>
 
+        <!-- Sheet/grid layout assumptions used before page detection and frame extraction. -->
         <details id="layoutGroup" class="control-group collapsible" data-mobile-control="layout">
           <summary id="layoutSummary"><span data-i18n="layout.summary">Layout</span></summary>
           <div id="frameGridFields" class="field-grid">
@@ -129,6 +141,7 @@ separated by small crosses or dots.</span>
           </div>
         </details>
 
+        <!-- Page finding, frame-grid search, and post-rectification rotation controls. -->
         <details id="pageGridDetectionGroup" class="control-group collapsible" data-mobile-control="page-grid">
           <summary id="pageGridDetectionSummary"><span data-i18n="detection.summary">Page &amp; Grid Detection</span><span id="pageGridDetectionWarning" class="header-note summary-warning" hidden>⚠️</span></summary>
           <label id="lightOnDarkDesignRow" class="toggle">
@@ -168,6 +181,7 @@ separated by small crosses or dots.</span>
           </div>
         </details>
 
+        <!-- Pipeline-specific frame alignment or markerless stabilization controls. -->
         <details id="frameAlignmentGroup" class="control-group collapsible" data-mobile-control="alignment">
           <summary id="frameAlignmentSummary"><span data-i18n="alignment.summary">Automatic Frame Alignment</span></summary>
           <label id="stabilizationEnabledRow" class="toggle" hidden>
@@ -247,6 +261,7 @@ separated by small crosses or dots.</span>
           </label>
         </details>
 
+        <!-- Color and tone adjustments applied after geometry is settled. -->
         <details id="appearanceGroup" class="control-group collapsible" data-mobile-control="appearance">
           <summary id="appearanceSummary">
             <span data-i18n="appearance.summary">Appearance</span>
@@ -284,6 +299,7 @@ separated by small crosses or dots.</span>
           </label>
         </details>
 
+        <!-- Post-extraction crop, flip, and rotation controls. -->
         <details id="cropGeometryGroup" class="control-group collapsible" data-mobile-control="crop">
           <summary id="cropOutputSummary">
             <span data-i18n="crop.summary">Crop &amp; Geometry</span>
@@ -324,6 +340,7 @@ separated by small crosses or dots.</span>
           </label>
         </details>
 
+        <!-- Preview/export sizing, ordering, encoding, and settings-save controls. -->
         <details id="exportOptionsGroup" class="control-group collapsible" data-mobile-control="export">
           <summary id="gifExportSummary">
             <span data-i18n="export.summary">Export Options</span>
@@ -396,6 +413,7 @@ separated by small crosses or dots.</span>
           </div>
         </details>
 
+        <!-- Live processing status, diagnostics, and tooltip toggle. -->
         <details id="statusGroup" class="control-group status-group independent-collapsible" open>
           <summary id="statusSummary">
             <div class="status-headline">
@@ -413,6 +431,7 @@ separated by small crosses or dots.</span>
       </aside>
 
       <main id="workspace" class="workspace">
+        <!-- Mobile/single-viewer tab bar. Hidden in the desktop multi-panel layout. -->
         <nav class="viewer-tabs" data-i18n-aria-label="aria.viewerPanels" aria-label="Viewer panels">
           <button id="viewerTabRaw" class="viewer-tab is-active" type="button" data-view="raw" aria-pressed="true" data-i18n="viewerTabs.raw">Raw</button>
           <button id="viewerTabRectified" class="viewer-tab" type="button" data-view="rectified" aria-pressed="false" data-i18n="viewerTabs.rectified">Rectified</button>
@@ -420,6 +439,7 @@ separated by small crosses or dots.</span>
           <button id="viewerTabPreview" class="viewer-tab" type="button" data-view="preview" aria-pressed="false" data-i18n="viewerTabs.preview">Preview</button>
         </nav>
 
+        <!-- Panel 1: raw source image plus detected page outline. -->
         <section id="rawViewerCard" class="viewer-card" data-view="raw">
           <header>
             <div class="viewer-header-copy">
@@ -435,6 +455,7 @@ separated by small crosses or dots.</span>
           </div>
         </section>
 
+        <!-- Panel 2: rectified page preview, with Pre/Post display mode selector. -->
         <section id="rectifiedViewerCard" class="viewer-card" data-view="rectified">
           <header>
             <div class="viewer-header-copy">
@@ -443,12 +464,23 @@ separated by small crosses or dots.</span>
                 <span id="rectifiedSheetProgress" class="lede viewer-subnote viewer-inline-subnote" hidden></span>
               </div>
             </div>
+            <fieldset id="rectifiedViewToggle" class="rectified-view-toggle lede viewer-subnote" aria-label="Rectified Sheet view" data-i18n-aria-label="aria.rectifiedViewToggle">
+              <label>
+                <input id="rectifiedViewPre" name="rectifiedViewMode" type="radio" value="pre" checked />
+                <span data-i18n="panels.rectifiedViewPre">Pre</span>
+              </label>
+              <label>
+                <input id="rectifiedViewPost" name="rectifiedViewMode" type="radio" value="post" />
+                <span data-i18n="panels.rectifiedViewPost">Post</span>
+              </label>
+            </fieldset>
           </header>
           <div class="viewer-stage">
             <canvas id="rectifiedCanvas"></canvas>
           </div>
         </section>
 
+        <!-- Panel 3: marker ROIs in marker mode; frame/corner centers in markerless mode. -->
         <section id="markersViewerCard" class="viewer-card" data-view="markers">
           <header>
             <h2 id="crossRegionsHeading"><span data-panel-heading data-i18n="panels.frameAlignmentMarkers">3. Frame Alignment Markers</span> <span id="mobileMarkersReadOnlyNote" class="header-note mobile-only-inline" data-i18n="alignment.readOnly">(read-only)</span></h2>
@@ -463,10 +495,11 @@ separated by small crosses or dots.</span>
           </div>
         </section>
 
+        <!-- Panel 4: live animation preview and export action buttons. -->
         <section id="previewViewerCard" class="viewer-card" data-view="preview">
           <header>
             <div class="status-headline">
-              <h2 id="animationPreviewHeading" data-i18n="panels.preview">4. Preview &amp; Export</h2>
+              <h2 id="animationPreviewHeading"><span id="animationPreviewHeadingNumber">4.</span> <a id="animationPreviewHeadingText">Preview &amp; Export</a></h2>
               <span id="previewBusy" class="status-busy" hidden aria-hidden="true"></span>
             </div>
             <div class="header-actions">
@@ -483,6 +516,7 @@ separated by small crosses or dots.</span>
         </section>
       </main>
 
+      <!-- Mobile control tab host. The JS moves the same desktop details groups here on narrow screens. -->
       <div id="mobileControlStack" class="mobile-control-stack">
         <div id="mobileControlTabs" class="mobile-control-tabs" role="tablist" data-i18n-aria-label="aria.mobileControls" aria-label="Mobile controls">
           <button id="mobileControlTabLayout" class="mobile-control-tab" type="button" data-control-tab="layout" role="tab" aria-selected="true" data-i18n="mobileControlTabs.layout">Layout</button>
@@ -494,6 +528,7 @@ separated by small crosses or dots.</span>
         </div>
       </div>
     </div>
+    <!-- Main module wires the UI, loads OpenCV-dependent processing, and owns app state. -->
     <script type="module" src="js/app.js"></script>
   </body>
 </html>

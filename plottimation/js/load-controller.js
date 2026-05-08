@@ -188,6 +188,7 @@ export async function loadImageSource({
   state.source.dragUrl = "";
   state.source.mimeType = "";
   state.source.sourceCredit = "";
+  state.source.settingsLoaded = false;
   dom.rawPhotoHeadingText?.removeAttribute("href");
   syncRawPhotoHeadingLink?.();
   syncRawPhotoCreditDisplay?.();
@@ -210,10 +211,13 @@ export async function loadImageSource({
       drawImageToCanvas(image, state.source.canvas);
       syncPaperPresetUi?.();
       renderRawPreview();
-      const loadedWhat = settingsText ? t("status.loadedImageAndSettings") : t("status.loadedImage");
-      if (settingsText) {
+      const hasSettingsText = !!settingsText.trim();
+      const loadedWhat = hasSettingsText ? t("status.loadedImageAndSettings") : t("status.loadedImage");
+      state.preview.rectifiedViewMode = hasSettingsText ? "post" : "pre";
+      if (hasSettingsText) {
         // Apply the saved settings before CV runs so detection/extraction starts from the restored state.
         applyLoadedSettingsText(settingsText);
+        state.source.settingsLoaded = true;
       }
       invalidateAppearanceCache();
       setStatus(`${loadedWhat}\n${t("status.analyzingPage")}`);
@@ -233,6 +237,7 @@ export async function loadImageSource({
     state.source.mimeType = "";
     state.source.filename = "";
     state.source.sourceCredit = "";
+    state.source.settingsLoaded = false;
     syncRawPhotoHeadingLink?.();
     syncRawPhotoCreditDisplay?.();
     releaseOwnedSourceUrl(state);

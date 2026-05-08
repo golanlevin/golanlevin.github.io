@@ -8,14 +8,44 @@ import { renderCanvasFit, resizeCanvasToBox } from "./canvas-view.js";
 import { t } from "./i18n.js";
 
 /**
- * Keep the Preview panel title fixed.
+ * Keep the Preview panel title/link synchronized without rewriting unchanged heading text.
+ *
+ * Reassigning `textContent` during preview redraws breaks active text selection, so this helper is
+ * intentionally idempotent. After GIF export, the heading text also becomes a download link for the
+ * current object URL.
  *
  * @param {import("./dom-state.js").dom} dom
  * @param {import("./dom-state.js").state} state
  * @returns {void}
  */
 export function updateAnimationPreviewHeading(dom, state) {
-  dom.animationPreviewHeading.textContent = t("panels.preview");
+  const headingText = t("panels.preview");
+  const strippedHeadingText = String(headingText || "").replace(/^\s*\d+\s*[\.\):\-–—]?\s*/, "") || "Preview & Export";
+  if (dom.animationPreviewHeadingText) {
+    if (dom.animationPreviewHeadingText.textContent !== strippedHeadingText) {
+      dom.animationPreviewHeadingText.textContent = strippedHeadingText;
+    }
+    if (state.export.url) {
+      if (dom.animationPreviewHeadingText.getAttribute("href") !== state.export.url) {
+        dom.animationPreviewHeadingText.href = state.export.url;
+      }
+      const download = state.export.filename || "plottimation.gif";
+      if (dom.animationPreviewHeadingText.download !== download) {
+        dom.animationPreviewHeadingText.download = download;
+      }
+    } else {
+      if (dom.animationPreviewHeadingText.hasAttribute("href")) {
+        dom.animationPreviewHeadingText.removeAttribute("href");
+      }
+      if (dom.animationPreviewHeadingText.hasAttribute("download")) {
+        dom.animationPreviewHeadingText.removeAttribute("download");
+      }
+    }
+    return;
+  }
+  if (dom.animationPreviewHeading.textContent !== headingText) {
+    dom.animationPreviewHeading.textContent = headingText;
+  }
 }
 
 /**

@@ -66,7 +66,10 @@ Use `Page & Grid Detection` to help the app find the paper and the outer boundar
   - `Triangle`
     Uses OpenCV's Triangle global threshold.
 - `Thresholding Offset`
-  Nudges the chosen threshold darker or lighter after thresholding. This is often the first setting to try if page detection fails.
+  Nudges the chosen threshold darker or lighter after thresholding. This is often the first setting
+  to try if page detection fails. While you drag this slider, the Raw Photo panel shows a quick
+  page-boundary preview and clears stale Status text; the full recomputation happens when you
+  release the slider.
 - `Search Inset Margin`
   Insets the coarse boundary search away from the page edge to avoid warped borders and background bleed.
 - `Boundary Threshold`
@@ -264,6 +267,8 @@ Use `Crop & Geometry` to trim the extracted frame and apply simple post-crop tra
   Mirrors the output frames top-to-bottom.
 - `Rotate 90° CW`
   Rotates the output frames clockwise.
+  If you have customized `Output Width` and `Output Height`, toggling this option swaps those two
+  values so the rotated animation keeps the intended aspect ratio.
 - `Reset`
   Restores all crop and geometry settings to defaults.
 
@@ -337,6 +342,9 @@ The `Preview & Export` panel header contains the export actions.
 - `↓GIF`
   Generates and downloads an animated GIF.
 
+After a GIF has been generated, the `Preview & Export` heading text also becomes a download link to
+that GIF for the current browser session.
+
 The exported filename includes:
 
 - the source image name
@@ -360,7 +368,9 @@ Typical messages include:
 
 It also surfaces page-detection failures and other diagnostic information.
 
-The `Enable Tooltips` / `Disable Tooltips` button in the panel header toggles explanatory tooltips for the interface, including pipeline-specific controls in both `Markers` and `Markerless` modes.
+The `Enable Tooltips` / `Disable Tooltips` button in the panel header toggles explanatory tooltips
+for the interface, including pipeline-specific controls in both `Markers` and `Markerless` modes.
+The main `Plottimation Tool` title also has a tooltip summarizing what the app does.
 
 
 ---
@@ -374,16 +384,28 @@ The four main viewer panels are:
   The small line under this header shows `source_credit` from the settings file when present; if
   no credit is available, it falls back to the loaded source filename.
 - `2. Rectified Sheet`
-  Shows the rectified page used for frame extraction, along with the current frame quad.
+  Shows either the full rectified page warp or the cropped rectified sheet used for frame
+  extraction, along with the current frame quad.
+  Use the header `Pre` / `Post` buttons to switch between those two views:
+  - `Pre` shows the full page warp before frame-grid crop/re-rectification.
+  - `Post` shows the cropped extraction-space sheet used for frame extraction.
+  In `Pre`, the blue outline shows the detected frame-grid search result and the magenta outline
+  shows the current `Search Inset Margin` region.
+  If the source image was loaded with a sibling settings file, this panel shows the cropped
+  extraction-space sheet because the saved detection settings are presumed to be correct. If no
+  sibling settings file was loaded, it shows the full page warp with the frame-grid search area so
+  you can tune `Page & Grid Detection` before the grid crop is applied.
   On very large source images, this panel may display a downscaled preview of the rectified sheet
   even though extraction still uses the full-resolution rectified image internally.
   In markerless mode it can also show the blue inset ROI rectangle used for the markerless search.
-  If `Frames in Export` omits cells, those omitted source cells are shown here as red slashed quads.
+  If `Frames in Export` omits cells, those omitted source cells are shown here as red slashed quads
+  with a translucent gray fill.
 - `3. Frame Alignment Markers` or `3. Frame Alignment Centers`
   In `Markers` mode, this panel shows the marker ROI tiles used for frame alignment.
   In `Markerless` mode, it shows the extracted corner tiles used for corner nudging.
 - `4. Preview & Export`
-  Shows the live animation preview and the export controls.
+  Shows the live animation preview and the export controls. After `↓GIF` has generated an exported
+  GIF, the `Preview & Export` heading text links to that GIF using the exported filename.
 
 Desktop notes:
 

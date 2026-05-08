@@ -246,6 +246,8 @@ function attachAlignmentMarkerTypeControls({
  *   state: import("./dom-state.js").state,
  *   beginMarkerlessPhaseScrub: () => void,
  *   endMarkerlessPhaseScrub: () => void,
+ *   beginSearchInsetPreviewOverride: () => void,
+ *   endSearchInsetPreviewOverride: () => void,
  *   revokeGifUrl: () => void,
  *   updateSliderReadouts: () => void,
  *   renderRectifiedPreview: (canvas: HTMLCanvasElement) => void,
@@ -258,6 +260,8 @@ function attachMarkerlessSearchInsetControls({
   state,
   beginMarkerlessPhaseScrub,
   endMarkerlessPhaseScrub,
+  beginSearchInsetPreviewOverride,
+  endSearchInsetPreviewOverride,
   revokeGifUrl,
   updateSliderReadouts,
   renderRectifiedPreview,
@@ -267,40 +271,43 @@ function attachMarkerlessSearchInsetControls({
   const pageDetectionDom = dom.pageDetection;
   const isMarkerless = () => alignmentDom.alignmentPipelineMarkerless.checked;
   const paperMargin = pageDetectionDom.paperMargin;
+  const finishSearchInsetInteraction = () => {
+    if (isMarkerless()) {
+      endMarkerlessPhaseScrub();
+    }
+    endSearchInsetPreviewOverride();
+  };
 
   paperMargin.addEventListener("pointerdown", () => {
+    beginSearchInsetPreviewOverride();
     if (!isMarkerless()) return;
     beginMarkerlessPhaseScrub();
   });
   paperMargin.addEventListener("pointerup", () => {
-    if (!isMarkerless()) return;
-    endMarkerlessPhaseScrub();
+    finishSearchInsetInteraction();
   });
   paperMargin.addEventListener("pointercancel", () => {
-    if (!isMarkerless()) return;
-    endMarkerlessPhaseScrub();
+    finishSearchInsetInteraction();
   });
   paperMargin.addEventListener("blur", () => {
-    if (!isMarkerless()) return;
-    endMarkerlessPhaseScrub();
+    finishSearchInsetInteraction();
   });
   paperMargin.addEventListener("input", () => {
     revokeGifUrl();
     updateSliderReadouts();
+    beginSearchInsetPreviewOverride();
+    if (state.preview.rectifiedCanvas) {
+      renderRectifiedPreview(state.preview.rectifiedCanvas);
+    }
     if (isMarkerless()) {
       beginMarkerlessPhaseScrub();
-      if (state.preview.rectifiedCanvas) {
-        renderRectifiedPreview(state.preview.rectifiedCanvas);
-      }
       return;
     }
-    scheduleProcess();
+    scheduleProcess(700);
   });
   paperMargin.addEventListener("change", () => {
     revokeGifUrl();
-    if (isMarkerless()) {
-      endMarkerlessPhaseScrub();
-    }
+    finishSearchInsetInteraction();
     scheduleProcess();
   });
 }
@@ -522,10 +529,12 @@ function attachMarkerlessPhaseMetricToggles({
  *   toggleMarkerBlobView: () => void,
  *   toggleMarkerlessPhaseDebug: () => void,
  *   toggleMarkerlessWorkingImage: () => void,
+ *   setRectifiedPreviewMode: (mode:"pre"|"post") => void,
  *   toggleMarkerEditing: () => void,
  *   clearMarkerEdits: () => void,
  *   syncOutputSizeFromWidthInput: () => void,
  *   syncOutputSizeFromHeightInput: () => void,
+ *   swapManualOutputSizeForRotate90: () => void,
  *   previewPageBoundaryForThresholdOffset: () => void,
  *   syncPaperPresetUi: () => void,
  *   syncAlignmentMarkerUi: () => void,
@@ -550,6 +559,8 @@ function attachMarkerlessPhaseMetricToggles({
  *   endStabilizationStrengthScrub: () => void,
  *   beginMarkerlessPhaseScrub: () => void,
  *   endMarkerlessPhaseScrub: () => void,
+ *   beginSearchInsetPreviewOverride: () => void,
+ *   endSearchInsetPreviewOverride: () => void,
  *   beginPostRotationScrub: () => void,
  *   endPostRotationScrub: () => void,
  *   finishPostRotationScrubIfUnchanged: () => boolean,
@@ -587,10 +598,12 @@ export function attachUi({
   toggleMarkerBlobView,
   toggleMarkerlessPhaseDebug,
   toggleMarkerlessWorkingImage,
+  setRectifiedPreviewMode,
   toggleMarkerEditing,
   clearMarkerEdits,
   syncOutputSizeFromWidthInput,
   syncOutputSizeFromHeightInput,
+  swapManualOutputSizeForRotate90,
   previewPageBoundaryForThresholdOffset,
   syncPaperPresetUi,
   syncAlignmentMarkerUi,
@@ -615,6 +628,8 @@ export function attachUi({
   endStabilizationStrengthScrub,
   beginMarkerlessPhaseScrub,
   endMarkerlessPhaseScrub,
+  beginSearchInsetPreviewOverride,
+  endSearchInsetPreviewOverride,
   beginPostRotationScrub,
   endPostRotationScrub,
   finishPostRotationScrubIfUnchanged,
@@ -711,6 +726,13 @@ export function attachUi({
   dom.rectifiedCanvas.addEventListener("click", () => {
     // Keep the convolution debug renderer available in code, but disable the direct canvas click
     // affordance for switching into that view.
+  });
+  [dom.rectifiedViewPre, dom.rectifiedViewPost].forEach((input) => {
+    if (!input) return;
+    input.addEventListener("change", () => {
+      if (!input.checked) return;
+      setRectifiedPreviewMode(input.value === "post" ? "post" : "pre");
+    });
   });
 
   attachResetButton(dom.resetAppearanceButton, resetAppearanceControls);
@@ -877,6 +899,8 @@ export function attachUi({
     state,
     beginMarkerlessPhaseScrub,
     endMarkerlessPhaseScrub,
+    beginSearchInsetPreviewOverride,
+    endSearchInsetPreviewOverride,
     revokeGifUrl,
     updateSliderReadouts,
     renderRectifiedPreview,
@@ -1114,7 +1138,14 @@ export function attachUi({
         scheduleLazyFrameUpdate(input);
         return;
       }
+      if (input === dom.rotate90Cw && hasLazyInputValueChanged(input)) {
+        swapManualOutputSizeForRotate90();
+      }
       updateSliderReadouts();
+      if (input === dom.rotate90Cw) {
+        lazyInputLastAppliedValues.set(dom.outputWidth, getLazyInputValue(dom.outputWidth));
+        lazyInputLastAppliedValues.set(dom.outputHeight, getLazyInputValue(dom.outputHeight));
+      }
       scheduleLazyFrameUpdate(input);
     });
     input.addEventListener("change", () => {
@@ -1125,7 +1156,14 @@ export function attachUi({
         flushLazyFrameUpdate(input);
         return;
       }
+      if (input === dom.rotate90Cw && hasLazyInputValueChanged(input)) {
+        swapManualOutputSizeForRotate90();
+      }
       updateSliderReadouts();
+      if (input === dom.rotate90Cw) {
+        lazyInputLastAppliedValues.set(dom.outputWidth, getLazyInputValue(dom.outputWidth));
+        lazyInputLastAppliedValues.set(dom.outputHeight, getLazyInputValue(dom.outputHeight));
+      }
       scheduleLazyFrameUpdate(input);
     });
     input.addEventListener("blur", () => {

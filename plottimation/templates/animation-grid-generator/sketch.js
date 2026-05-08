@@ -29,8 +29,10 @@ let orientationLandscapeRadio;
 let orientationPortraitRadio;
 let markerTypeCrossesRadio;
 let markerTypeDotsRadio;
+let markerTypeNoneRadio;
 let marginSlider;
 let marginValue;
+let markerSizeControl;
 let markerSizeSlider;
 let markerSizeValue;
 let gutterSlider;
@@ -93,8 +95,10 @@ function setup() {
   orientationPortraitRadio = select('#orientationPortrait');
   markerTypeCrossesRadio = select('#markerTypeCrosses');
   markerTypeDotsRadio = select('#markerTypeDots');
+  markerTypeNoneRadio = select('#markerTypeNone');
   marginSlider = select('#marginSlider');
   marginValue = select('#marginValue');
+  markerSizeControl = select('#markerSizeControl');
   markerSizeSlider = select('#markerSizeSlider');
   markerSizeValue = select('#markerSizeValue');
   gutterSlider = select('#gutterSlider');
@@ -119,6 +123,7 @@ function setup() {
   orientationPortraitRadio.changed(updatePaperSize);
   markerTypeCrossesRadio.changed(updateMarkerType);
   markerTypeDotsRadio.changed(updateMarkerType);
+  markerTypeNoneRadio.changed(updateMarkerType);
   marginSlider.input(updateMargins);
   markerSizeSlider.input(updateMarkerSize);
   gutterSlider.input(updateGutter);
@@ -167,7 +172,12 @@ function updateGridSettings(){
 
 //-------------------------------------------------
 function updateMarkerType(){
-  markerType = markerTypeDotsRadio.elt.checked ? "dots" : "crosses";
+  markerType = markerTypeNoneRadio.elt.checked
+    ? "none"
+    : (markerTypeDotsRadio.elt.checked ? "dots" : "crosses");
+  markerSizeSlider.elt.disabled = markerType === "none";
+  markerSizeControl.elt.classList.toggle("is-disabled", markerType === "none");
+  updateGutter();
   updateExportButtonState();
   redraw();
 }
@@ -224,6 +234,7 @@ function formatPhysicalLength(inchesValue, unit){
 
 //-------------------------------------------------
 function getMarkerSizePx(){
+  if (markerType === "none") return 0;
   return markerSizeInches * inch;
 }
 
@@ -278,7 +289,7 @@ function updateMarkerSize(){
 function updateGutter(){
   const page = getCurrentPageDimensionsInPresetUnits();
   const maximumGutterInches = getMaximumGutterInches(page);
-  const minimumGutterInches = markerSizeInches + 0.05;
+  const minimumGutterInches = markerType === "none" ? 0.125 : 0.25;
   gutterSlider.elt.min = minimumGutterInches.toFixed(4);
   gutterSlider.elt.max = maximumGutterInches.toFixed(4);
   gutterInches = Math.min(maximumGutterInches, Math.max(minimumGutterInches, Number(gutterSlider.value())));
@@ -456,6 +467,7 @@ function drawSafetyFrame(){
 
 //-------------------------------------------------
 function markerOverflowsPage(x, y){
+  if (markerType === "none") return false;
   const radius = getMarkerSizePx() / 2;
   return (
     (x - radius) < 0 ||
@@ -468,6 +480,7 @@ function markerOverflowsPage(x, y){
 
 //-------------------------------------------------
 function markerRowViolatesTopSafety(row){
+  if (markerType === "none") return false;
   const markerY = getCellAndFrameCoords(row, 0).celly;
   return (markerY - (getMarkerSizePx() / 2)) < topBottomSafetyMargin;
 }
@@ -475,6 +488,7 @@ function markerRowViolatesTopSafety(row){
 
 //-------------------------------------------------
 function markerRowViolatesBottomSafety(row){
+  if (markerType === "none") return false;
   const markerY = getCellAndFrameCoords(row, 0).celly;
   return (markerY + (getMarkerSizePx() / 2)) > (height - topBottomSafetyMargin);
 }
@@ -495,6 +509,7 @@ function frameOverflowsPage(row, frame){
 
 //-------------------------------------------------
 function drawRegistrationFeatures(warningOnly = false){
+  if (markerType === "none") return;
   beginSvgGroup("RegistrationMarkers");
   for (let row=0; row<=nRows; row++){
     for (let col=0; col<=nCols; col++){

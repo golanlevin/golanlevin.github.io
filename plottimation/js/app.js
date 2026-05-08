@@ -284,9 +284,19 @@ function updateRectifiedSheetHeading() {
   syncRectifiedSheetHeadingLink();
 }
 
+/**
+ * Keep all page-boundary warning surfaces synchronized.
+ *
+ * The lightweight threshold preview and the full pipeline both use this helper so the Raw Photo
+ * warning, Page & Grid Detection warning, and orange Status styling cannot drift apart.
+ *
+ * @param {boolean} [showWarning=false]
+ * @returns {void}
+ */
 function updatePageGridDetectionHeading(showWarning = false) {
   state.runtime.pageBoundaryWarningVisible = showWarning;
   syncPageGridDetectionHeading(dom, showWarning);
+  dom.statusText?.classList.toggle("status-page-boundary-failure", showWarning);
   syncRawPhotoHeadingLink();
 }
 
@@ -1011,51 +1021,67 @@ function ensureSourceCvCaches() {
 /**
  * Recompute just the page boundary and redraw the Raw panel while Thresholding Offset is dragged.
  *
- * This intentionally skips page warp, grid detection, marker alignment, and frame extraction.
+ * This intentionally skips page warp, grid detection, marker alignment, and frame extraction. The
+ * fast downscaled preview can produce false negatives near threshold edge cases, so failures are
+ * retried at full source resolution before the UI shows a page-boundary warning.
  *
  * @returns {void}
  */
 function previewPageBoundaryForThresholdOffset() {
   if (!state.runtime.cvReady || !state.source.image || state.processing.active) return;
+  // The previous full-pipeline status may describe a value the user has already scrubbed past.
+  dom.statusText.textContent = "";
   const config = readConfig();
-  let previewGrayMat = null;
   try {
     const cachedSource = ensureSourceCvCaches();
     if (!cachedSource) return;
-    previewGrayMat = cachedSource.previewGrayMat.clone();
     const useInvertedMarkerVision = config.alignmentPipeline === "markers" && config.lightOnDarkDesign;
-    if (useInvertedMarkerVision) {
-      // Match the lightweight threshold-preview path to the full marker pipeline so dragging
-      // threshold controls previews the same light-on-dark interpretation used during processing.
-      cv.bitwise_not(previewGrayMat, previewGrayMat);
-    }
-    const previewWidth = previewGrayMat.cols;
-    const previewHeight = previewGrayMat.rows;
-    const preview = previewPageBoundary(
-      previewGrayMat,
-      previewWidth,
-      previewHeight,
-      config.thresholdMethod,
-      config.thresholdOffset
-    );
-    state.source.rawPageContour = Array.isArray(preview.pageQuadPoints)
-      ? preview.pageQuadPoints.map((point) => ({
-          x: point.x / cachedSource.previewScale,
-          y: point.y / cachedSource.previewScale,
-        }))
-      : preview.pageQuadPoints;
+    /**
+     * Run page-boundary detection on a grayscale source mat and return points in that mat's scale.
+     *
+     * @param {cv.Mat} sourceMat
+     * @param {number} sourceScale
+     * @returns {{threshVal:number,pageQuadPoints:{x:number,y:number}[] | null,pageAreaPct:number | null,failureReason:string,sourceScale:number,width:number,height:number}}
+     */
+    const runBoundaryPreview = (sourceMat, sourceScale) => {
+      const workingMat = sourceMat.clone();
+      try {
+        if (useInvertedMarkerVision) {
+          // Match the preview path to the full marker pipeline for light-on-dark inputs.
+          cv.bitwise_not(workingMat, workingMat);
+        }
+        const result = previewPageBoundary(
+          workingMat,
+          workingMat.cols,
+          workingMat.rows,
+          config.thresholdMethod,
+          config.thresholdOffset
+        );
+        return { ...result, sourceScale, width: workingMat.cols, height: workingMat.rows };
+      } finally {
+        workingMat.delete();
+      }
+    };
+
+    const fastPreview = runBoundaryPreview(cachedSource.previewGrayMat, cachedSource.previewScale);
+    const fastPreviewFoundQuad = Array.isArray(fastPreview.pageQuadPoints) && fastPreview.pageQuadPoints.length === 4;
+    const preview = fastPreviewFoundQuad
+      ? fastPreview
+      : runBoundaryPreview(cachedSource.grayMat, 1);
     const hasPageQuad = Array.isArray(preview.pageQuadPoints) && preview.pageQuadPoints.length === 4;
-    if (!hasPageQuad) {
-      clearDerivedOutputsForDetectionFailure();
-    }
+    state.source.rawPageContour = hasPageQuad
+      ? preview.pageQuadPoints.map((point) => ({
+          x: point.x / preview.sourceScale,
+          y: point.y / preview.sourceScale,
+        }))
+      : null;
     updatePageGridDetectionHeading(!hasPageQuad);
     renderRawPreview();
   } catch (error) {
-    clearDerivedOutputsForDetectionFailure();
+    state.source.rawPageContour = null;
+    renderRawPreview();
     updatePageGridDetectionHeading(true);
     console.error(error);
-  } finally {
-    previewGrayMat?.delete();
   }
 }
 
@@ -1402,6 +1428,8 @@ function clearDerivedPreviews() {
   state.preview.rectifiedDragBuildId += 1;
   state.geometry.baseRectifiedCanvas = null;
   state.geometry.baseRectifiedPageCanvas = null;
+  state.geometry.baseRectifiedPageWidth = 0;
+  state.geometry.baseRectifiedPageHeight = 0;
   state.geometry.rectifiedDownloadUsesRawSource = false;
   state.geometry.pagePreviewGridQuad = null;
   state.geometry.alignmentInfo = null;
@@ -1493,6 +1521,8 @@ function clearDerivedOutputsForDetectionFailure() {
   state.preview.rectifiedDragBuildId += 1;
   state.geometry.baseRectifiedCanvas = null;
   state.geometry.baseRectifiedPageCanvas = null;
+  state.geometry.baseRectifiedPageWidth = 0;
+  state.geometry.baseRectifiedPageHeight = 0;
   state.geometry.rectifiedDownloadUsesRawSource = false;
   state.geometry.pagePreviewGridQuad = null;
   state.geometry.alignmentInfo = null;
@@ -1664,10 +1694,12 @@ function attachUi() {
     toggleMarkerBlobView,
     toggleMarkerlessPhaseDebug,
     toggleMarkerlessWorkingImage,
+    setRectifiedPreviewMode,
     toggleMarkerEditing,
     clearMarkerEdits,
     syncOutputSizeFromWidthInput,
     syncOutputSizeFromHeightInput,
+    swapManualOutputSizeForRotate90,
     previewPageBoundaryForThresholdOffset,
     syncPaperPresetUi,
     syncAlignmentMarkerUi,
@@ -1691,6 +1723,8 @@ function attachUi() {
     endStabilizationStrengthScrub,
     beginMarkerlessPhaseScrub,
     endMarkerlessPhaseScrub,
+    beginSearchInsetPreviewOverride,
+    endSearchInsetPreviewOverride,
     beginPostRotationScrub,
     endPostRotationScrub,
     finishPostRotationScrubIfUnchanged,
@@ -2275,22 +2309,43 @@ function syncRectifiedSheetHeadingLink() {
   const translatedTitle = String(
     state.preview.showRectifiedDiagnostic ? t("panels.convolutionDebugView") : t("panels.rectifiedSheet")
   ).trim();
-  dom.rectifiedSheetHeadingText.textContent =
-    translatedTitle.replace(/^\s*\d+\s*[\.\):\-–—]?\s*/, "") || "Rectified Sheet";
-  dom.rectifiedSheetHeadingText.title = state.runtime.tooltipsEnabled ? t("tooltip.rectifiedSheetHeading") : "";
+  const headingText = translatedTitle.replace(/^\s*\d+\s*[\.\):\-–—]?\s*/, "") || "Rectified Sheet";
+  if (dom.rectifiedSheetHeadingText.textContent !== headingText) {
+    dom.rectifiedSheetHeadingText.textContent = headingText;
+  }
+  const titleText = state.runtime.tooltipsEnabled ? t("tooltip.rectifiedSheetHeading") : "";
+  if (dom.rectifiedSheetHeadingText.title !== titleText) {
+    dom.rectifiedSheetHeadingText.title = titleText;
+  }
   if (state.preview.showRectifiedDiagnostic) {
-    dom.rectifiedSheetHeadingText.removeAttribute("href");
-    dom.rectifiedSheetHeadingText.removeAttribute("download");
+    if (dom.rectifiedSheetHeadingText.hasAttribute("href")) {
+      dom.rectifiedSheetHeadingText.removeAttribute("href");
+    }
+    if (dom.rectifiedSheetHeadingText.hasAttribute("download")) {
+      dom.rectifiedSheetHeadingText.removeAttribute("download");
+    }
     return;
   }
   if (state.geometry.rectifiedDownloadUsesRawSource && state.source.dragUrl) {
-    dom.rectifiedSheetHeadingText.href = new URL(state.source.dragUrl, window.location.href).href;
-    dom.rectifiedSheetHeadingText.download = makeRectifiedFilename(state.source.filename);
+    const href = new URL(state.source.dragUrl, window.location.href).href;
+    const download = makeRectifiedFilename(state.source.filename);
+    if (dom.rectifiedSheetHeadingText.href !== href) {
+      dom.rectifiedSheetHeadingText.href = href;
+    }
+    if (dom.rectifiedSheetHeadingText.download !== download) {
+      dom.rectifiedSheetHeadingText.download = download;
+    }
     return;
   }
   if (state.preview.rectifiedFullResUrl) {
-    dom.rectifiedSheetHeadingText.href = state.preview.rectifiedFullResUrl;
-    dom.rectifiedSheetHeadingText.download = makeRectifiedFilename(state.source.filename);
+    const href = state.preview.rectifiedFullResUrl;
+    const download = makeRectifiedFilename(state.source.filename);
+    if (dom.rectifiedSheetHeadingText.href !== href) {
+      dom.rectifiedSheetHeadingText.href = href;
+    }
+    if (dom.rectifiedSheetHeadingText.download !== download) {
+      dom.rectifiedSheetHeadingText.download = download;
+    }
     return;
   }
   const hasRectifiedSource =
@@ -2298,11 +2353,18 @@ function syncRectifiedSheetHeadingLink() {
     !!state.geometry.baseRectifiedCanvas ||
     !!state.preview.rectifiedCanvas;
   if (hasRectifiedSource) {
-    dom.rectifiedSheetHeadingText.href = "#";
+    const href = new URL("#", window.location.href).href;
+    if (dom.rectifiedSheetHeadingText.href !== href) {
+      dom.rectifiedSheetHeadingText.href = "#";
+    }
   } else {
-    dom.rectifiedSheetHeadingText.removeAttribute("href");
+    if (dom.rectifiedSheetHeadingText.hasAttribute("href")) {
+      dom.rectifiedSheetHeadingText.removeAttribute("href");
+    }
   }
-  dom.rectifiedSheetHeadingText.removeAttribute("download");
+  if (dom.rectifiedSheetHeadingText.hasAttribute("download")) {
+    dom.rectifiedSheetHeadingText.removeAttribute("download");
+  }
 }
 
 /**
@@ -3274,6 +3336,10 @@ async function applySettingsFile(file) {
   try {
     const settingsText = await file.text();
     applyLoadedSettingsText(settingsText);
+    if (settingsText.trim()) {
+      state.source.settingsLoaded = true;
+      state.preview.rectifiedViewMode = "post";
+    }
     revokeGifUrl();
     invalidateFrameCaches();
     invalidateAppearanceCache();
@@ -3632,6 +3698,31 @@ function syncOutputSizeFromLoadedValues(width, height) {
 }
 
 /**
+ * Preserve the user's requested output-size pair when toggling post-crop 90-degree rotation.
+ *
+ * Automatic output sizing follows the rotated native frame geometry already. Manual sizing needs a
+ * stored pair swap because the rotation is applied before final output scaling.
+ *
+ * @returns {void}
+ */
+function swapManualOutputSizeForRotate90() {
+  if (state.runtime.outputSizeAuto) return;
+  const readPositiveOutputDimension = (storedValue, fieldValue) => {
+    const parsed = Number(fieldValue);
+    if (Number.isFinite(parsed) && parsed > 0) return clampOutputDimension(parsed);
+    return Number.isFinite(storedValue) && storedValue > 0 ? clampOutputDimension(storedValue) : 0;
+  };
+  const currentWidth =
+    readPositiveOutputDimension(state.runtime.outputWidthPx, dom.outputWidth.value);
+  const currentHeight =
+    readPositiveOutputDimension(state.runtime.outputHeightPx, dom.outputHeight.value);
+  if (currentWidth <= 0 || currentHeight <= 0) return;
+  state.runtime.outputWidthPx = clampOutputDimension(currentHeight);
+  state.runtime.outputHeightPx = clampOutputDimension(currentWidth);
+  state.runtime.pendingOutputScale = null;
+}
+
+/**
  * Resolve the current final output size from the auto/manual state and current geometry.
  *
  * @returns {{width:number,height:number,scale:number}}
@@ -3732,6 +3823,8 @@ async function processCurrentImage(requestId = state.processing.requestId) {
       state.geometry.baseRectifiedCanvas = result.rectifiedCanvas;
       state.geometry.baseRectifiedMat = result.rectifiedMat;
       state.geometry.baseRectifiedPageCanvas = result.pagePreviewCanvas;
+      state.geometry.baseRectifiedPageWidth = result.pagePreviewWidth || result.pagePreviewCanvas?.width || 0;
+      state.geometry.baseRectifiedPageHeight = result.pagePreviewHeight || result.pagePreviewCanvas?.height || 0;
       state.geometry.rectifiedDownloadUsesRawSource = !!result.rectifiedDownloadUsesRawSource;
       state.geometry.pagePreviewGridQuad = result.pagePreviewGridQuad;
       state.runtime.appliedPostRotationDeg = config.postRotationDeg;
@@ -3770,6 +3863,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     timeProfiled("updateExportButtonLabel", () => updateExportButtonLabel());
     lastBaseStatusText = result.statusText;
     lastProcessTimingSummary = finishTimingProfile(timingProfile);
+    updatePageGridDetectionHeading(false);
     setStatus(buildStatusWithTiming(result.statusText));
     if (config.alignmentPipeline === "markerless") {
       scheduleMarkerlessStabilizationWarmup(requestId);
@@ -3780,12 +3874,16 @@ async function processCurrentImage(requestId = state.processing.requestId) {
       endPostRotationScrub();
     }
     if (error?.name !== "ProcessAbortedError") {
-      if (error?.partialResult?.pageQuadPoints) {
+      if (Array.isArray(error?.partialResult?.pageQuadPoints) && error.partialResult.pageQuadPoints.length === 4) {
         state.source.rawPageContour = error.partialResult.pageQuadPoints;
+        renderRawPreview();
+      } else {
+        state.source.rawPageContour = null;
         renderRawPreview();
       }
       clearDerivedOutputsForDetectionFailure();
       console.error(error);
+      updatePageGridDetectionHeading(true);
       updateExportButtonLabel();
       lastBaseStatusText = t("status.pageBoundaryFailure");
       lastProcessTimingSummary = "";
@@ -3858,6 +3956,9 @@ function renderRectifiedPreview(rectifiedCanvas) {
   const displayCanvas = showingPostRotationPreview
     ? getPostRotationPreviewCanvas(baseDisplayCanvas, previewPostRotationDeg)
     : baseDisplayCanvas;
+  const showingPageWarpPreview =
+    rectifiedCanvas === state.geometry.baseRectifiedPageCanvas &&
+    !showingMarkerlessWorkingImage;
   updateMobileRectifiedAspectRatio(displayCanvas);
   const targetCanvas = dom.rectifiedCanvas;
   if (!showingPostRotationPreview) {
@@ -3882,18 +3983,26 @@ function renderRectifiedPreview(rectifiedCanvas) {
   const offsetY = (targetCanvas.height - drawH) * 0.5;
   const fullRectifiedWidth = Math.max(
     1,
-    Math.round(state.geometry.baseRectifiedMat?.cols || rectifiedCanvas.width || 1),
+    Math.round(
+      showingPageWarpPreview
+        ? (state.geometry.baseRectifiedPageWidth || rectifiedCanvas.width || 1)
+        : (state.geometry.baseRectifiedMat?.cols || rectifiedCanvas.width || 1)
+    ),
   );
   const fullRectifiedHeight = Math.max(
     1,
-    Math.round(state.geometry.baseRectifiedMat?.rows || rectifiedCanvas.height || 1),
+    Math.round(
+      showingPageWarpPreview
+        ? (state.geometry.baseRectifiedPageHeight || rectifiedCanvas.height || 1)
+        : (state.geometry.baseRectifiedMat?.rows || rectifiedCanvas.height || 1)
+    ),
   );
   const overlayScaleX = drawW / fullRectifiedWidth;
   const overlayScaleY = drawH / fullRectifiedHeight;
   const ctx = targetCanvas.getContext("2d");
   const config = readConfig();
   const rotationRadians = showingPostRotationPreview ? (previewPostRotationDeg * (Math.PI / 180)) : 0;
-  const mapRectifiedPointToPreview = (point) => {
+  const mapDisplayPointToPreview = (point) => {
     const previewPoint = {
       x: point.x * (displayCanvas.width / fullRectifiedWidth),
       y: point.y * (displayCanvas.height / fullRectifiedHeight),
@@ -3906,11 +4015,52 @@ function renderRectifiedPreview(rectifiedCanvas) {
       y: offsetY + (rotatedPoint.y * (drawH / displayCanvas.height)),
     };
   };
+  const mapRectifiedPointToPreview = showingPageWarpPreview
+    ? (point) => mapDisplayPointToPreview(mapRectifiedPointToPagePreview(point))
+    : mapDisplayPointToPreview;
 
   ctx.save();
   if (showingMarkerlessWorkingImage) {
     ctx.restore();
     return;
+  }
+  if (showingPageWarpPreview && state.geometry.pagePreviewGridQuad) {
+    const gridQuad = state.geometry.pagePreviewGridQuad;
+    const tl = mapDisplayPointToPreview(gridQuad.tl);
+    const tr = mapDisplayPointToPreview(gridQuad.tr);
+    const br = mapDisplayPointToPreview(gridQuad.br);
+    const bl = mapDisplayPointToPreview(gridQuad.bl);
+    ctx.strokeStyle = "rgb(0, 90, 220)";
+    ctx.lineWidth = getPanelOverlayStrokeWidth(1);
+    ctx.beginPath();
+    ctx.moveTo(tl.x, tl.y);
+    ctx.lineTo(tr.x, tr.y);
+    ctx.lineTo(br.x, br.y);
+    ctx.lineTo(bl.x, bl.y);
+    ctx.closePath();
+    ctx.stroke();
+  }
+  if (showingPageWarpPreview) {
+    const insetPx = Math.max(
+      0,
+      Math.min(
+        Math.floor(fullRectifiedWidth * 0.5) - 1,
+        Math.min(Math.floor(fullRectifiedHeight * 0.5) - 1, config.paperMarginPx || 0)
+      )
+    );
+    const insetTl = mapDisplayPointToPreview({ x: insetPx, y: insetPx });
+    const insetTr = mapDisplayPointToPreview({ x: fullRectifiedWidth - insetPx, y: insetPx });
+    const insetBr = mapDisplayPointToPreview({ x: fullRectifiedWidth - insetPx, y: fullRectifiedHeight - insetPx });
+    const insetBl = mapDisplayPointToPreview({ x: insetPx, y: fullRectifiedHeight - insetPx });
+    ctx.strokeStyle = "rgba(255, 0, 255, 1)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(insetTl.x, insetTl.y);
+    ctx.lineTo(insetTr.x, insetTr.y);
+    ctx.lineTo(insetBr.x, insetBr.y);
+    ctx.lineTo(insetBl.x, insetBl.y);
+    ctx.closePath();
+    ctx.stroke();
   }
   if (config.alignmentPipeline === "markerless" && !state.preview.showRectifiedDiagnostic) {
     const insetPx = Math.max(
@@ -4089,6 +4239,107 @@ function normalizeDebugCurveForDisplay(data) {
 }
 
 /**
+ * Choose whether Panel 2 should show the full page warp or the cropped extraction-space sheet.
+ *
+ * A loaded settings file means the project already carries tuned detection settings, so the
+ * extraction-space view is more useful. For first-time images without settings, the full page warp
+ * exposes the frame-grid search area while the user adjusts Page & Grid Detection controls.
+ *
+ * @returns {boolean}
+ */
+function shouldShowFullPageRectifiedPreview() {
+  return state.preview.rectifiedViewMode === "pre" && !!state.geometry.baseRectifiedPageCanvas;
+}
+
+/**
+ * Return the canvas currently preferred for the Rectified Sheet panel.
+ *
+ * Both source canvases are intentionally retained: callers can still render either the full page
+ * warp or the cropped extraction-space sheet by passing that canvas to `renderRectifiedPreview`.
+ *
+ * @returns {HTMLCanvasElement | null}
+ */
+function getPreferredRectifiedPreviewCanvas() {
+  if (shouldShowFullPageRectifiedPreview()) {
+    return state.geometry.baseRectifiedPageCanvas;
+  }
+  return state.geometry.baseRectifiedCanvas;
+}
+
+/**
+ * Keep the Rectified Sheet Pre/Post radio state synchronized with the current display mode.
+ *
+ * @returns {void}
+ */
+function syncRectifiedViewToggleUi() {
+  if (!dom.rectifiedViewPre || !dom.rectifiedViewPost) return;
+  const canShowPre = !!state.geometry.baseRectifiedPageCanvas;
+  if (!canShowPre && state.preview.rectifiedViewMode === "pre") {
+    state.preview.rectifiedViewMode = "post";
+  }
+  const mode = shouldShowFullPageRectifiedPreview() ? "pre" : "post";
+  dom.rectifiedViewPre.disabled = !canShowPre;
+  dom.rectifiedViewPre.checked = mode === "pre";
+  dom.rectifiedViewPost.checked = mode === "post";
+}
+
+/**
+ * Switch Panel 2 between the full page warp and the cropped extraction-space rectified sheet.
+ *
+ * @param {"pre"|"post"} mode
+ * @returns {void}
+ */
+function setRectifiedPreviewMode(mode) {
+  state.preview.searchInsetPreviewForced = false;
+  state.preview.searchInsetPreviewRestoreMode = null;
+  state.preview.rectifiedViewMode = mode === "post" ? "post" : "pre";
+  syncRectifiedViewToggleUi();
+  if (state.geometry.baseRectifiedCanvas || state.geometry.baseRectifiedPageCanvas) {
+    refreshAppearanceOutputs();
+  }
+}
+
+/**
+ * Temporarily switch Panel 2 to `Pre` while Search Inset Margin is being adjusted.
+ *
+ * @returns {void}
+ */
+function beginSearchInsetPreviewOverride() {
+  if (!state.geometry.baseRectifiedPageCanvas) return;
+  if (!state.preview.searchInsetPreviewForced) {
+    state.preview.searchInsetPreviewRestoreMode = state.preview.rectifiedViewMode;
+  }
+  if (state.preview.rectifiedViewMode !== "pre") {
+    state.preview.rectifiedViewMode = "pre";
+    state.preview.searchInsetPreviewForced = true;
+    syncRectifiedViewToggleUi();
+    refreshAppearanceOutputs();
+    return;
+  }
+  if (state.preview.searchInsetPreviewRestoreMode === "post") {
+    state.preview.searchInsetPreviewForced = true;
+  }
+}
+
+/**
+ * Restore the user's prior Panel 2 view after Search Inset Margin interaction ends.
+ *
+ * @returns {void}
+ */
+function endSearchInsetPreviewOverride() {
+  if (!state.preview.searchInsetPreviewForced) return;
+  const restoreMode = state.preview.searchInsetPreviewRestoreMode;
+  state.preview.searchInsetPreviewForced = false;
+  state.preview.searchInsetPreviewRestoreMode = null;
+  if (restoreMode !== "post") return;
+  state.preview.rectifiedViewMode = "post";
+  syncRectifiedViewToggleUi();
+  if (state.geometry.baseRectifiedCanvas || state.geometry.baseRectifiedPageCanvas) {
+    refreshAppearanceOutputs();
+  }
+}
+
+/**
  * Resolve one marker to its refined/overridden rectified-sheet location, falling back to the
  * nominal lattice if that marker is unavailable.
  *
@@ -4183,6 +4434,8 @@ function drawOmittedFrameQuads(ctx, mapRectifiedPointToPreview) {
   const includedFrameCount = getIncludedSourceFrameCount();
   if (!state.geometry.alignmentInfo || includedFrameCount >= totalFrameCount) return;
   ctx.save();
+  // Tint omitted cells before drawing the red outline/slash so exclusion remains legible on busy art.
+  ctx.fillStyle = "rgba(204, 204, 204, 0.4)";
   ctx.strokeStyle = "rgb(200, 0, 0)";
   ctx.lineWidth = getPanelOverlayStrokeWidth(1);
   for (let sourceIndex = includedFrameCount; sourceIndex < totalFrameCount; sourceIndex += 1) {
@@ -4198,6 +4451,7 @@ function drawOmittedFrameQuads(ctx, mapRectifiedPointToPreview) {
     ctx.lineTo(br.x, br.y);
     ctx.lineTo(bl.x, bl.y);
     ctx.closePath();
+    ctx.fill();
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(tr.x, tr.y);
@@ -4729,8 +4983,10 @@ function invalidateMarkerlessNudgedFramesForMarker(markerCol, markerRow) {
  * @returns {void}
  */
 function refreshAppearanceOutputs() {
-  if (!state.geometry.baseRectifiedCanvas) return;
-  state.preview.rectifiedCanvas = state.geometry.baseRectifiedCanvas;
+  const rectifiedDisplayCanvas = getPreferredRectifiedPreviewCanvas();
+  if (!rectifiedDisplayCanvas) return;
+  syncRectifiedViewToggleUi();
+  state.preview.rectifiedCanvas = rectifiedDisplayCanvas;
   state.preview.rectifiedDiagnosticSourceCanvas = null;
   state.preview.rectifiedDiagnosticDirty = true;
   primeRectifiedDragAsset(state.preview.rectifiedCanvas);

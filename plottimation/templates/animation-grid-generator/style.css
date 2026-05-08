@@ -117,6 +117,10 @@ body {
   opacity: 0.45;
 }
 
+.control.is-disabled {
+  opacity: 0.45;
+}
+
 .control select {
   width: 100%;
   padding: 4px 6px;

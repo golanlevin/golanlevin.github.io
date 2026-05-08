@@ -174,7 +174,8 @@ Current behavior:
 The rectified-sheet overlays must stay consistent with this ordering logic:
 
 - green quad = currently displayed frame
-- red omitted quads = source cells excluded by `Frames in Export`
+- red omitted quads = source cells excluded by `Frames in Export`; these are drawn with a
+  semi-transparent gray fill plus red outline and diagonal slash
 
 This is a fragile integration point. If playback/export order changes, check:
 
@@ -186,7 +187,22 @@ This is a fragile integration point. If playback/export order changes, check:
 
 ## Rectified Sheet Behavior
 
-The `Rectified Sheet` panel renders the extraction-space rectified page directly.
+The `Rectified Sheet` panel can render either:
+
+- the full page warp before marker-grid cropping
+- the extraction-space rectified sheet used for frame extraction
+
+The header `Pre` / `Post` radio buttons switch between these retained views:
+
+- `Pre` = full page warp
+- `Post` = cropped extraction-space sheet
+
+Default behavior:
+
+- if a settings file was loaded with the source image, show the extraction-space rectified sheet
+- if no settings file was loaded, show the full page warp so Page & Grid Detection adjustments can
+  be evaluated before the frame-grid crop/re-rectification step
+- the radio choice is a local view preference, not a saved project setting
 
 For large images, the visible panel image may be a downscaled preview canvas while extraction still
 uses the full-resolution `state.geometry.baseRectifiedMat`. Overlay geometry therefore has to be
@@ -202,10 +218,39 @@ display preview:
 
 Overlays currently include:
 
+- blue frame-grid search quad when showing the full page warp
+- magenta Search Inset Margin rectangle when showing the full page warp
 - blue inset ROI rectangle in markerless mode
 - green current-frame quad
 - green connected edge preview while actively editing a marker/corner override
-- red omitted-frame quads with a diagonal slash
+- red omitted-frame quads with a translucent gray fill and diagonal slash
+
+## Threshold Offset Preview
+
+`Thresholding Offset` live scrubbing intentionally uses the lightweight grayscale preview cache for
+Raw Photo page-boundary feedback. If that downscaled preview fails to find a 4-corner page quad, the
+preview path falls back to the full-resolution grayscale source before showing a warning.
+
+Important behavior:
+
+- live scrubbing clears stale Status text
+- live scrubbing must not clear downstream Rectified Sheet / marker / animation outputs by itself
+- the full pipeline on slider release is authoritative and clears or sets the warning state
+- if the low-res preview shows a contour that later fails full-resolution processing, the failure
+  path clears the Raw Photo contour instead of leaving a stale green frame
+
+## Heading Links
+
+Viewer heading text is used as a lightweight asset access surface:
+
+- `Raw Photo` links to the loaded source object URL when available
+- `Rectified Sheet` links to the full-resolution rectified image, generated eagerly for smaller
+  sheets and lazily for larger sheets
+- `Preview & Export` links to the latest generated GIF while `state.export.url` exists, using
+  `state.export.filename` as the anchor `download` filename
+
+Heading sync functions must be idempotent. Rewriting heading `textContent` on redraw breaks text
+selection and looks like flicker.
 
 Hidden-but-retained debug code still exists for the markerless gutter chart:
 

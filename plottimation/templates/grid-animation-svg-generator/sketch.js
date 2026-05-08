@@ -1,4 +1,5 @@
 // Press keys 1-3 for different animation designs. 
+// Press 'x' or 'd' for crosses or dots.
 // Press 's' to save SVG. 
 
 // Some good grid sizes are:
@@ -7,15 +8,19 @@ const nCols = 5;
 const nRows = 4;
 const aspectFrame = 4/3;
 
+const MARKER_CROSS = 0; 
+const MARKER_DOT = 1; 
+let MARKER_STYLE = MARKER_CROSS;
+let ANIMATION_STYLE = 1;
+
 const inch = 96;
 const crossSize = inch / 4;
 const marginPageX = inch * 0.75;
-const marginCell = inch * 0.25;
+const marginCell = inch * 0.2;
 const nFrames = nCols * nRows;
 let bShowDebug = false;
 let bAnimating = true;
 let myFrameCount = 0; 
-let ANIMATION_STYLE = 1;
 
 // For SVG export
 p5.disableFriendlyErrors = true; 
@@ -41,7 +46,7 @@ function setup() {
 function keyPressed(){
   if (key == 's'){ 
     bDoExportSvg = true; 
-  } else if (key == 'd'){
+  } else if (key == 'h'){
     bShowDebug = !bShowDebug;
   } else if (key == ' '){
     bAnimating = !bAnimating; 
@@ -55,6 +60,10 @@ function keyPressed(){
     ANIMATION_STYLE = 2; 
   } else if (key == 3){
     ANIMATION_STYLE = 3; 
+  } else if (key == 'x'){
+    MARKER_STYLE = MARKER_CROSS;
+  } else if (key == 'd'){
+    MARKER_STYLE = MARKER_DOT;
   }
 }
 
@@ -69,6 +78,7 @@ function draw() {
     setSvgGroupByStrokeColor(true); 
     setSvgFlattenTransforms(true); 
   }
+
   
   if (bAnimating){ 
     myFrameCount++; 
@@ -78,6 +88,7 @@ function draw() {
   drawDebugAndRegistrationFeatures(); 
   drawAnimationFrames();
 
+  
   if (bDoExportSvg){
     endRecordSvg();
     bDoExportSvg = false;
@@ -219,10 +230,18 @@ function drawDebugAndRegistrationFeatures(){
     for (let col=0; col<=nCols; col++){
       let C = getCellAndFrameCoords(row,col); 
       
-      // draw registration crosses
-      let d = crossSize/2;
-      line(C.cellx,C.celly-d, C.cellx,C.celly+d);
-      line(C.cellx-d,C.celly, C.cellx+d,C.celly);
+      if (MARKER_STYLE == MARKER_CROSS){
+        // draw registration crosses
+        let d = crossSize/2;
+        line(C.cellx,C.celly-d, C.cellx,C.celly+d);
+        line(C.cellx-d,C.celly, C.cellx+d,C.celly);
+      } else if (MARKER_STYLE == MARKER_DOT) {
+        let diam = crossSize;
+        for (let i=0; i<=diam; i++){
+          circle(C.cellx,C.celly, i); 
+        }
+      }
+      
       
       if (row<nRows && col<nCols){
         // draw animation frame borders

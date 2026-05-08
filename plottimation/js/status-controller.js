@@ -9,6 +9,9 @@ import { t } from "./i18n.js";
 /**
  * Keep the Rectified Sheet heading in sync with the currently displayed diagnostic mode.
  *
+ * This is intentionally idempotent because Rectified Sheet redraws can happen often, and rewriting
+ * unchanged heading text makes the header appear to flicker and prevents text selection.
+ *
  * @param {import("./dom-state.js").dom} dom
  * @param {import("./dom-state.js").state} state
  * @returns {void}
@@ -18,10 +21,14 @@ export function updateRectifiedSheetHeading(dom, state) {
     ? t("panels.convolutionDebugView")
     : t("panels.rectifiedSheet");
   if (dom.rectifiedSheetHeadingText) {
-    dom.rectifiedSheetHeadingText.textContent =
-      String(translatedTitle || "").replace(/^\s*\d+\s*[\.\):\-–—]?\s*/, "") || "Rectified Sheet";
+    const headingText = String(translatedTitle || "").replace(/^\s*\d+\s*[\.\):\-–—]?\s*/, "") || "Rectified Sheet";
+    if (dom.rectifiedSheetHeadingText.textContent !== headingText) {
+      dom.rectifiedSheetHeadingText.textContent = headingText;
+    }
   } else {
-    dom.rectifiedSheetHeading.textContent = translatedTitle;
+    if (dom.rectifiedSheetHeading.textContent !== translatedTitle) {
+      dom.rectifiedSheetHeading.textContent = translatedTitle;
+    }
   }
 }
 
