@@ -65,17 +65,17 @@ Use `Page & Grid Detection` to help the app find the paper and the outer boundar
     Uses OpenCV's Otsu global threshold.
   - `Triangle`
     Uses OpenCV's Triangle global threshold.
-- `Thresholding Offset`
-  Nudges the chosen threshold darker or lighter after thresholding. This is often the first setting
+- `Page Detection Threshold`
+  Adjusts the threshold used to detect the page and its corners. This is often the first setting
   to try if page detection fails. While you drag this slider, the Raw Photo panel shows a quick
   page-boundary preview and clears stale Status text; the full recomputation happens when you
   release the slider.
-- `Search Inset Margin`
-  Insets the coarse boundary search away from the page edge to avoid warped borders and background bleed.
-- `Boundary Threshold`
-  Sets how strong the boundary signal must be before the grid edge is accepted.
-- `Boundary Persistence`
-  Sets how many consecutive pixels must remain above the threshold before that boundary is trusted.
+- `Grid Search Inset`
+  Ignores this many pixels near the edge of the rectified page before searching for the frame grid.
+- `Grid Edge Threshold`
+  Sets the minimum signal required to detect the outer rows and columns of markers.
+- `Grid Edge Run Length`
+  Sets how many consecutive pixels must satisfy the grid edge threshold before a grid edge is accepted.
 - `Post-Rotation`
   Applies a small rotation to the rectified sheet after page rectification and before frame
   alignment. This affects both marker-based alignment and markerless autocorrelation.
@@ -86,7 +86,7 @@ Use `Page & Grid Detection` to help the app find the paper and the outer boundar
 
 If the app cannot detect the page correctly, the `Status` panel will show:
 
-`Unable to find page boundary. Try adjusting the Thresholding Offset or other Page & Grid Detection settings.`
+`Unable to find page boundary. Try adjusting the Page Detection Threshold or other Page & Grid Detection settings.`
 
 and the `Page & Grid Detection` header will display a warning mark.
 
@@ -157,7 +157,7 @@ This mode assumes:
 
 The markerless pipeline estimates a nominal grid automatically, then lets you refine it with post-estimation controls:
 
-- `Search Inset Margin`
+- `Grid Search Inset`
   In markerless mode, this also defines the inset ROI used to seed the autocorrelation search. Large empty page margins can confuse pitch estimation, so increasing this value can help the app ignore blank borders.
 - `Stabilization Method`
   Chooses between the two translation-only stabilization strategies:
@@ -182,7 +182,7 @@ The markerless pipeline estimates a nominal grid automatically, then lets you re
 
 In markerless mode:
 
-- `Boundary Threshold` and `Boundary Persistence` are hidden
+- `Grid Edge Threshold` and `Grid Edge Run Length` are hidden
 - the `Rectified Sheet` shows a blue inset rectangle for the current markerless search ROI
 - panel `3` is renamed `Frame Alignment Centers` on desktop and `Corners` on mobile
 - the mobile `Markers` control tab is renamed `Stabilize`
@@ -390,7 +390,7 @@ The four main viewer panels are:
   - `Pre` shows the full page warp before frame-grid crop/re-rectification.
   - `Post` shows the cropped extraction-space sheet used for frame extraction.
   In `Pre`, the blue outline shows the detected frame-grid search result and the magenta outline
-  shows the current `Search Inset Margin` region.
+  shows the current `Grid Search Inset` region.
   If the source image was loaded with a sibling settings file, this panel shows the cropped
   extraction-space sheet because the saved detection settings are presumed to be correct. If no
   sibling settings file was loaded, it shows the full page warp with the frame-grid search area so

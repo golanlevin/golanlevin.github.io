@@ -1950,7 +1950,7 @@ function buildMarkerlessAlignmentData(
  * - pitch comes from seeded autocorrelation on a reduced blurred image
  * - phase comes from 1D gutter profiles built from darkness / edge-energy / variance cues
  *
- * Search Inset Margin only changes the pitch seed region. That lets the user ignore large blank
+ * Grid Search Inset only changes the pitch seed region. That lets the user ignore large blank
  * page margins without changing the final phase search model.
  *
  * @param {cv.Mat} grayMat
@@ -1977,7 +1977,7 @@ function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0, gutterMe
     const blurKernel = Math.max(3, ((Math.round(baseBlurKernel * blurScale) | 1)));
     cv.GaussianBlur(working, blurred, new cv.Size(blurKernel, blurKernel), 0, 0, cv.BORDER_REPLICATE);
 
-    // Apply Search Inset Margin in the reduced-resolution domain used for seeded autocorrelation.
+    // Apply Grid Search Inset in the reduced-resolution domain used for seeded autocorrelation.
     // This keeps large outer page margins from dominating the nominal period estimate.
     const insetSmall = Math.max(0, Math.round(Math.max(0, paperMarginPx) * scale));
     const insetWidth = Math.max(1, blurred.cols - (insetSmall * 2));

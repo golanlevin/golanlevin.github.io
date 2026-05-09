@@ -31,7 +31,7 @@ Used when frames are separated by explicit crosses or dots.
 Used when frames are separated by empty gutters and there are no registration marks.
 
 - branches immediately after page rectification
-- does not use `Boundary Threshold` or `Boundary Persistence`
+- does not use `Grid Edge Threshold` or `Grid Edge Run Length`
 - estimates a straight lattice from the rectified sheet
 - emits synthetic corner intersections into the same `markerLookup` structure used by the marker pipeline
 
@@ -90,11 +90,11 @@ Current support width:
 The phase is not found by local peak picking. It is found by testing periodic lattice starts and
 choosing the one whose expected gutter positions land on the strongest combined gutter signal.
 
-### Search Inset Margin
+### Grid Search Inset
 
 In markerless mode:
 
-- `Search Inset Margin` is used to define the ROI that seeds pitch estimation
+- `Grid Search Inset` is used to define the ROI that seeds pitch estimation
 - it is visualized in `Rectified Sheet` as a blue rectangle
 - a value of `0` is valid and is the markerless default
 
@@ -219,15 +219,15 @@ display preview:
 Overlays currently include:
 
 - blue frame-grid search quad when showing the full page warp
-- magenta Search Inset Margin rectangle when showing the full page warp
+- magenta Grid Search Inset rectangle when showing the full page warp
 - blue inset ROI rectangle in markerless mode
 - green current-frame quad
 - green connected edge preview while actively editing a marker/corner override
 - red omitted-frame quads with a translucent gray fill and diagonal slash
 
-## Threshold Offset Preview
+## Page Detection Threshold Preview
 
-`Thresholding Offset` live scrubbing intentionally uses the lightweight grayscale preview cache for
+`Page Detection Threshold` live scrubbing intentionally uses the lightweight grayscale preview cache for
 Raw Photo page-boundary feedback. If that downscaled preview fails to find a 4-corner page quad, the
 preview path falls back to the full-resolution grayscale source before showing a warning.
 
@@ -293,7 +293,7 @@ Recent large-image work changed the internal image model:
 
 - the `styled` CV branch is now BGR, not RGBA
 - the `vision` CV branch is now grayscale, not color
-- the lightweight Thresholding Offset preview keeps only grayscale caches; the old persistent raw
+- the lightweight Page Detection Threshold preview keeps only grayscale caches; the old persistent raw
   `source.cvMat` cache was removed
 
 To reduce peak memory during consecutive large reprocesses:

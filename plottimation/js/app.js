@@ -948,7 +948,7 @@ function updateMarkerlessPaperBackdropColor(canvas) {
 /**
  * Release cached OpenCV source mats that are tied to the currently loaded raw image.
  *
- * The lightweight Thresholding Offset preview reuses these mats so slider drags do not keep
+ * The lightweight Page Detection Threshold preview reuses these mats so slider drags do not keep
  * re-reading the source canvas or redoing full-image grayscale conversion.
  *
  * @returns {void}
@@ -1019,7 +1019,7 @@ function ensureSourceCvCaches() {
 }
 
 /**
- * Recompute just the page boundary and redraw the Raw panel while Thresholding Offset is dragged.
+ * Recompute just the page boundary and redraw the Raw panel while Page Detection Threshold is dragged.
  *
  * This intentionally skips page warp, grid detection, marker alignment, and frame extraction. The
  * fast downscaled preview can produce false negatives near threshold edge cases, so failures are
@@ -2880,7 +2880,7 @@ function getActiveAlignmentPipeline() {
 }
 
 /**
- * Preserve the markerless default of zero Search Inset Margin when switching away from marker mode.
+ * Preserve the markerless default of zero Grid Search Inset when switching away from marker mode.
  *
  * @param {"markerless"|"markers"} pipeline
  * @returns {void}
@@ -4300,7 +4300,7 @@ function setRectifiedPreviewMode(mode) {
 }
 
 /**
- * Temporarily switch Panel 2 to `Pre` while Search Inset Margin is being adjusted.
+ * Temporarily switch Panel 2 to `Pre` while Grid Search Inset is being adjusted.
  *
  * @returns {void}
  */
@@ -4322,7 +4322,7 @@ function beginSearchInsetPreviewOverride() {
 }
 
 /**
- * Restore the user's prior Panel 2 view after Search Inset Margin interaction ends.
+ * Restore the user's prior Panel 2 view after Grid Search Inset interaction ends.
  *
  * @returns {void}
  */

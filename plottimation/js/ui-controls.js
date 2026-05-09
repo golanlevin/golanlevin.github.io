@@ -235,7 +235,7 @@ function attachAlignmentMarkerTypeControls({
 }
 
 /**
- * Wire `Search Inset Margin`.
+ * Wire `Grid Search Inset`.
  *
  * In markerless mode this slider behaves like a scrubbed preview control: dragging updates only
  * the rectified-sheet ROI overlay immediately, while the expensive reprocess waits until release.
