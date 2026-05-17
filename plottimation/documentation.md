@@ -1,12 +1,19 @@
 # Plottimation Documentation
 
-![plottimation_overview.jpg](doc/plottimation_overview.jpg)
+![plottimation_overview.jpg](doc/plottimation_zinehug.gif)
+
+**Quick Links**
+
+* [**Plottimation Tool**](https://golanlevin.github.io/plottimation/)
+* [**Quickstart Instructions**](README.md#quickstart-instructions) 
 
 **Contents**: 
 
+* [Alignment Pipeline](#alignment-pipeline)
 * [Layout](#layout)
 * [Page & Grid Detection](#page--grid-detection)
-* [Automatic Frame Alignment / Stabilization](#automatic-frame-alignment--stabilization)
+* [Automatic Frame Alignment](#automatic-frame-alignment)
+* [Stabilization](#stabilization)
 * [Appearance](#appearance)
 * [Crop & Geometry](#crop--geometry)
 * [Export Options](#export-options)
@@ -16,263 +23,223 @@
 * [Sibling Settings Files](#sibling-settings-files)
 * [Language Selection](#language-selection)
 
+
+---
+
+## Alignment Pipeline
+
+*Use `Alignment Pipeline` to choose between the two different workflows for finding and aligning the animation frames.*
+
+<img src="doc/ui_alignment_pipeline.png" width="330">
+
+* `Markers (crosses, dots)` – 
+  This mode expects a page with registration markers between frames. The markers can be small crosses (`+`) or filled circular dots (`●`), rendered in a high-contrast ink. This pipeline produces the most stable results.
+* `Markerless (gutters, frames)` – 
+  This mode estimates the frame grid without registration markers, strictly using the spacing and gutters between frames. Markerless alignment may be more "jittery" or inaccurate, depending on your design.
+
+
 ---
 
 ## Layout
 
-Use `Layout` to tell the app how your frame-sheet is organized.
+<img src="doc/ui_layout.png" width="330">
 
-- `Frame Columns`
+*Use `Layout` to tell the app how your frame-sheet is organized.*
+
+* `Frame Columns` –
   Number of animation frames across the sheet.
-- `Frame Rows`
+* `Frame Rows` –
   Number of animation frames down the sheet.
-- `Paper Orientation`
-  Choose `Landscape` or `Portrait`. This changes the displayed width/height order of the paper presets and the effective aspect ratio used by the page warp.
-- `Paper Aspect`
-  Select a preset paper format such as `Letter`, `Tabloid`, or `A4`.
-- `Source (width:height)`
-  Uses the raw source image dimensions as an aspect-ratio hint. This is still just an aspect
-  guide; it does not request a rectified sheet or export at that literal pixel size.
-- `Custom`
-  If `Paper Aspect` is set to `Custom`, the `Sheet Width` and `Sheet Height` fields appear.
-- `Sheet Width`
-  Custom paper width, used only as an aspect-ratio hint.
-- `Sheet Height`
-  Custom paper height, used only as an aspect-ratio hint.
+* `Paper Orientation` –
+  Choose `Landscape` or `Portrait`. This changes the effective aspect ratio used by the page warp.
+* `Paper Aspect` –
+  Select a preset paper format such as `Letter`, `Tabloid`, `A4`, `Source`, or `Custom`.
+  * `Source (width:height)` – This option uses the raw source image dimensions as an aspect-ratio hint. This is still just an aspect guide; it does not request a rectified sheet or export at that literal pixel size.
+  * `Custom` –
+  If `Paper Aspect` is set to `Custom`, the `Sheet Width` and `Sheet Height` fields appear. These are used only as aspect-ratio hints.
 
-Notes:
-
-- Paper aspect is not treated as a literal pixel resolution request.
-- It is used to guide the aspect ratio of the rectified page.
-- `Frame Columns` and `Frame Rows` are clamped to `1...20`.
 
 ---
 
 ## Page & Grid Detection
 
-Use `Page & Grid Detection` to help the app find the paper and the outer boundary of the frame grid.
+*Use `Page & Grid Detection` to help the app find the paper and the outer boundary of the frame grid.*
 
-- `Light-on-dark design`
-  Use this when the artwork is made with light ink on dark paper. In `Markers` mode, the app
-  internally inverts the raw photo for page finding and marker localization while keeping the
-  displayed rectified sheet and extracted frames in their original colors. In `Markerless` mode,
-  the same checkbox flips the darkness cue so darker gutters are favored instead of lighter ones.
-- `Thresholding Method`
-  Chooses how the grayscale photo is thresholded for page detection.
-  - `Offset Peak`
-    Uses a simple histogram-peak-based threshold.
-  - `Otsu`
-    Uses OpenCV's Otsu global threshold.
-  - `Triangle`
-    Uses OpenCV's Triangle global threshold.
-- `Page Detection Threshold`
-  Adjusts the threshold used to detect the page and its corners. This is often the first setting
-  to try if page detection fails. While you drag this slider, the Raw Photo panel shows a quick
-  page-boundary preview and clears stale Status text; the full recomputation happens when you
-  release the slider.
-- `Grid Search Inset`
-  Ignores this many pixels near the edge of the rectified page before searching for the frame grid.
-- `Grid Edge Threshold`
+<img src="doc/ui_page_and_grid_detection.png" width="330">
+
+* `Light-on-dark design` – 
+  Use this when the artwork consists of light regions on dark paper.
+* `Thresholding Method` –
+  Chooses how the raw image is thresholded for page detection. Choices include `Offset Peak` (a simple histogram-peak-based threshold); `Otsu` (OpenCV's Otsu global threshold); and `Triangle` (OpenCV's Triangle global threshold).
+* `Page Detection Threshold` –
+  Adjusts the threshold used to detect the page and its corners. This is often the first setting to try if page detection fails!
+* `Grid Search Inset` –
+  Ignores this many pixels near the edge of the rectified page before searching for the frame grid. This can be helpful if the edge of the page does not appear straight.
+* `Grid Edge Threshold` –
   Sets the minimum signal required to detect the outer rows and columns of markers.
-- `Grid Edge Run Length`
+* `Grid Edge Run Length` –
   Sets how many consecutive pixels must satisfy the grid edge threshold before a grid edge is accepted.
-- `Post-Rotation`
-  Applies a small rotation to the rectified sheet after page rectification and before frame
-  alignment. This affects both marker-based alignment and markerless autocorrelation.
-  - positive values rotate clockwise
-  - negative values rotate counterclockwise
-  - while you drag this slider, the app pauses playback and shows a preview-only rotated view; the
-    expensive full recomputation still happens only when you release the slider
+* `Post-Rotation` –
+  Applies a small rotation to the rectified sheet after page rectification and before frame alignment.
 
-If the app cannot detect the page correctly, the `Status` panel will show:
+If the app cannot detect the page correctly, the `Page & Grid Detection` header will display a ⚠️ warning mark, and the `Status` panel will show:
 
-`Unable to find page boundary. Try adjusting the Page Detection Threshold or other Page & Grid Detection settings.`
+```Unable to find page boundary. Try adjusting the Page Detection Threshold or other Page & Grid Detection settings.```
 
-and the `Page & Grid Detection` header will display a warning mark.
 
 ---
 
-## Automatic Frame Alignment / Stabilization
+## Automatic Frame Alignment
 
-Plottimation now supports two different alignment pipelines:
+*In the `Markers` pipeline, `Automatic Frame Alignment` refines the frame corners using the printed registration markers.*
 
-- `Markers (crosses, dots)`
-  Uses printed registration markers between frames.
-- `Markerless (gutters, frames)`
-  Estimates the frame grid without registration markers, using the spacing and gutters between frames.
+<img src="doc/ui_automatic_frame_alignment.png" width="330">
 
-Use `Alignment Pipeline` to choose between these modes.
+The `Markers` pipeline assumes the frames are separated by crosses or dots. If those markers are printed as light ink on dark paper, be sure to enable `Light-on-dark design` under `Page & Grid Detection`.
 
-### Markers Pipeline
-
-In `Markers` mode, `Automatic Frame Alignment` refines the frame corners using the printed registration markers.
-
-This mode assumes the frames are separated by crosses or dots. If those markers are printed as
-light ink on dark paper, enable `Light-on-dark design` under `Page & Grid Detection`.
-
-- `Alignment Marker Type`
+* `Alignment Marker Type` –
   Chooses the type of registration markers.
-  - `Auto`
+  - `Auto` –
     Tries to determine whether the sheet uses crosses or dots.
-  - `Crosses`
+  - `Crosses` –
     Uses cross-shaped markers.
-  - `Dots`
+  - `Dots` –
     Uses dot-shaped markers.
-- `Alignment Marker Region Size`
+* `Alignment Marker Region Size` –
   Sets the size of the square ROI used to inspect each alignment marker.
-- `Do subpixel alignment using markers`
-  When enabled, the app uses the detected markers to refine frame extraction beyond a purely nominal equal-spaced grid.
-- `Detect crosses with convolution`
+* `Do subpixel alignment using markers` –
+  When enabled (the default), the app uses sub-pixel precision to refine frame extraction.
+* `Detect crosses with convolution` –
   When enabled, each cross-marker ROI is localized using a convolution-based detector instead of the default profile-based method.
 
-The `Frame Alignment Markers` viewer shows the marker ROIs used for this step. Each tile can display:
+<img src="doc/ui_frame_alignment_markers.png" width="330">
 
-- whether that marker was accepted or rejected
-- contrast metrics
-- ink fraction
-- convolution score when convolution mode is enabled
+The `Frame Alignment Markers` panel displays the individual marker regions used for this step. In the desktop version of Plottimation, it is possible to manually override the positions of markers, if necessary:
 
-Manual overrides are also available on desktop:
-
-- `Enable Overrides`
+* `Enable Overrides`
   Turns on interactive marker editing.
-- drag a marker tile
+* drag a marker tile
   Repositions that marker's reticle and updates affected frames live.
-- double-click an edited marker
+* double-click an edited marker
   Restores it to the originally detected location.
-- `Clear Edits`
+* `Clear Edits`
   Removes all saved marker overrides.
 
 Override edits are saved into exported settings files.
 
-### Markerless Pipeline
 
-In `Markerless` mode, the same control area is renamed `Stabilization`.
+---
 
-This mode assumes:
+## Stabilization
 
-- the sheet has no registration markers
-- frames are arranged on a straight grid
-- neighboring frames are separated by visible empty gutters
+*In `Markerless` mode, the `Automatic Frame Alignment` control area is replaced with `Stabilization` controls.*
 
-The markerless pipeline estimates a nominal grid automatically, then lets you refine it with post-estimation controls:
+<img src="doc/ui_stabilization.png" width="330">
 
-- `Grid Search Inset`
-  In markerless mode, this also defines the inset ROI used to seed the autocorrelation search. Large empty page margins can confuse pitch estimation, so increasing this value can help the app ignore blank borders.
-- `Stabilization Method`
+The Markerless alignment pipeline assumes:
+
+* your sheet has no registration markers
+* frames are arranged on a straight grid
+* neighboring frames are separated by clear, empty gutters
+
+The Markerless pipeline initially estimates a nominal grid, and then lets you refine it with post-estimation controls:
+
+* `Enable Stabilization` –
+  Turns stabilization on or off; when disabled, no stabilization is applied. *Note:* Stabilization consists only of changes in translation (not scale, rotation, shear, or perspective).
+* `Grid Search Inset` –
+  In Markerless mode, this defines the inset (margin) used to initialize the grid search. Large empty page margins can confuse the grid estimation, so increasing this value can help the app ignore blank borders.
+* `Stabilization Method` –
   Chooses between the two translation-only stabilization strategies:
-  - `Neighbor Comparison`
+  - `Neighbor Comparison` –
     Compares frames against neighboring frames in the sheet/loop and solves one weighted global offset field.
-  - `Median-Frame Comparison`
-    Compares each frame independently against a single grayscale median reference frame built from the whole animation.
-- `Enable Stabilization`
-  Turns translation-only stabilization on or off. When disabled, no stabilization translation is applied.
-- `Stabilization Strength`
-  Scales the solved translation-only stabilization offsets from `0%` to `125%`.
-- `Stabilization Rigidity`
+  - `Median-Frame Comparison` –
+    Compares each frame independently against a single median reference frame built from the whole animation.
+* `Stabilization Strength` –
+  Scales the translation-only stabilization offsets from `0%` to `125%`.
+* `Stabilization Rigidity` –
   Controls how resistant the neighbor-comparison solver is to large per-frame corrections. This control is inactive when `Median-Frame Comparison` is selected.
-- `Horizontal Phase Offset`
+* `Horizontal Phase Offset` –
   Shifts the extracted grid left or right relative to the automatically estimated phase.
-- `Vertical Phase Offset`
+* `Vertical Phase Offset` –
   Shifts the extracted grid up or down relative to the automatically estimated phase.
-- `Vertical Drift Compensation`
-  Applies a post-stabilization vertical correction distributed smoothly over the full animation to counter slow top-to-bottom drift.
-- `Frame Corner Region Size`
+* `Vertical Drift Compensation` –
+  Applies a post-stabilization vertical correction distributed smoothly over the full animation to counter any top-to-bottom drift.
+* `Frame Corner Region Size` –
   Sets the size of the square tiles shown in the corner editor. This does not change the extracted frame size.
 
-In markerless mode:
+The `Frame Alignment Centers` (or `Frame Alignment Markers`) viewer shows the current corner locations used for extraction. In Markerless mode, these are the stabilized corner positions, not raw marker detections.
 
-- `Grid Edge Threshold` and `Grid Edge Run Length` are hidden
-- the `Rectified Sheet` shows a blue inset rectangle for the current markerless search ROI
-- panel `3` is renamed `Frame Alignment Centers` on desktop and `Corners` on mobile
-- the mobile `Markers` control tab is renamed `Stabilize`
+In the desktop version, it is still possible in Markerless mode to edit individual alignment centers:
 
-The `Frame Alignment Centers` viewer shows the current corner locations used for extraction. In markerless mode, these are the stabilized corner positions, not raw marker detections.
-
-Desktop markerless editing:
-
-- `Enable Overrides`
+- `Enable Overrides` –
   Turns on interactive corner editing.
-- drag a corner tile
+- drag a corner tile –
   Applies a post-stabilization extraction nudge at that corner.
-- double-click an edited corner
+- double-click an edited corner –
   Restores it to the current automatic location.
-- `Clear Edits`
+- `Clear Edits` –
   Removes all saved corner overrides.
 
 Markerless overrides are post-stabilization nudges, so they do not feed back into the stabilization solve itself.
 
-Technical summary:
+Technicallly, the grid pitch is estimated by applying an autocorrelation to a reduced blurred grayscale version of the rectified sheet. The phase of the grid is estimated from a gutter-support metric built from a multiplicative combination of lightness, edge energy, and texture variance measurements.
 
-- markerless pitch is estimated from a reduced blurred grayscale version of the rectified sheet
-- phase is estimated from a gutter-support metric built from:
-  - darkness
-  - texture / edge energy
-  - variance
-- the gutter-support cues are currently combined multiplicatively, which helps emphasize positions where all cues agree on a likely gutter
-- stabilization remains translation-only throughout; no rotation, scale, shear, or perspective correction is applied
 
 ---
 
 ## Appearance
 
-Use `Appearance` to adjust the look of the extracted animation frames after geometry is settled.
+*Use `Appearance` to adjust the look of the extracted animation frames after geometry is settled.*
 
-- `Brightness`
+<img src="doc/ui_appearance.png" width="330">
+
+* `Brightness` –
   Raises or lowers perceptual lightness.
-- `Contrast`
+* `Contrast` –
   Expands or compresses tonal contrast around the midpoint.
-- `Vibrance`
+* `Vibrance` –
   Boosts muted colors more than already-saturated colors.
-- `Color Temperature`
+* `Color Temperature` –
   Shifts the image cooler or warmer.
-- `Unsharp Mask Amount`
+* `Unsharp Mask Amount` –
   Controls how strongly the sharpening effect is applied.
-- `Unsharp Mask Radius`
+* `Unsharp Mask Radius` –
   Controls the blur radius used by the unsharp mask.
-- `Invert`
-  Inverts the final extracted animation like a negative.
-- `Reset`
+* `Invert` –
+  Inverts the final extracted animation, like a negative.
+* `Reset` –
   Restores all Appearance settings to defaults.
-
-These settings affect:
-
-- the live `Preview`
-- exported GIFs
-- exported MP4s
-- exported ZIP frames
-
-They do not recolor the `Rectified Sheet`, which remains a geometry/debug view.
 
 
 ---
 
 ## Crop & Geometry
 
-Use `Crop & Geometry` to trim the extracted frame and apply simple post-crop transforms.
+*Use `Crop & Geometry` to trim the extracted frame and apply simple post-crop transforms.*
 
-- `Crop Left`
+<img src="doc/ui_crop_and_geometry.png" width="330">
+
+* `Crop Left` –
   Removes pixels from the left side of each frame.
-- `Crop Right`
+* `Crop Right` –
   Removes pixels from the right side of each frame.
-- `Crop Top`
+* `Crop Top` –
   Removes pixels from the top of each frame.
-- `Crop Bottom`
+* `Crop Bottom` –
   Removes pixels from the bottom of each frame.
-- `Aspect Ratio`
+* `Aspect Ratio` –
   Read-only display showing the current post-crop aspect ratio and pixel dimensions.
-- `Flip Horizontal`
+* `Flip Horizontal` –
   Mirrors the output frames left-to-right.
-- `Flip Vertical`
+* `Flip Vertical` –
   Mirrors the output frames top-to-bottom.
-- `Rotate 90° CW`
+* `Rotate 90° CW` –
   Rotates the output frames clockwise.
-  If you have customized `Output Width` and `Output Height`, toggling this option swaps those two
-  values so the rotated animation keeps the intended aspect ratio.
-- `Reset`
+* `Reset` –
   Restores all crop and geometry settings to defaults.
 
 Cropping and geometry changes affect preview and all export formats.
+
 
 ---
 
@@ -280,199 +247,165 @@ Cropping and geometry changes affect preview and all export formats.
 
 Use `Export Options` to control the size, timing, ordering, and encoding of the exported animation.
 
-- `Frame Rate (fps)`
-  Playback rate for the live preview and for exported animation files.
-- `Output Width`
-  Final export width in pixels.
-- `Output Height`
-  Final export height in pixels.
-- These two fields stay proportional:
-  - typing one updates the other
-  - values are clamped to `1...1999`
-- If a settings file loads both values explicitly, that exact pair is preserved until you edit one
-  of the fields manually.
-- `Frames in Export`
-  Limits how many source cells are included in preview and export. If this is smaller than
-  `Frame Columns × Frame Rows`, the highest-indexed frames are omitted.
-- `Loops in Export`
-  Repeats the frame sequence in exported files only. It does not change the live preview.
+<img src="doc/ui_export_options.png" width="330">
 
-- `Reverse Order`
+* `Frame Rate (fps)` –
+  Playback rate for the live preview and for exported animation files.
+* Output dimensions: 
+  * `Output Width` –
+  Final export width in pixels.
+  * `Output Height` –
+  Final export height in pixels.
+  * These two fields stay proportional when edited.
+* `Frames in Export` –
+  Limits how many source cells are included in preview and export. If this is smaller than `Frame Columns × Frame Rows`, the highest-indexed frames are omitted.
+* `Loops in Export` –
+  Repeats the frame sequence in exported files only. It does not change the live preview.
+* `Reverse Order` –
   Reverses frame order in both preview playback and exported files.
-- `Boustrophedon Order`
-  Reads each printed row alternately left-to-right, then right-to-left, before any reverse or
-  ping-pong expansion is applied.
-- `Ping-Pong (doubles file size)`
+* `Boustrophedon Order` –
+  Reads each printed row alternately left-to-right, then right-to-left, before any reverse or ping-pong expansion is applied.
+* `Ping-Pong (doubles file size)` –
   Plays or exports the sequence forward and backward without duplicating the turnaround endpoints.
-- `Encoding Quality`
-  Shared `1...100` quality control.
-  - for GIF export, this is mapped internally onto gif.js's inverse quality scale
-  - for MP4 export, it drives the H.264 bitrate
-- `Resampling`
-  Chooses the interpolation method used during extraction and output resizing.
-  Available options may include:
+* `Encoding Quality` –
+  Quality control for exported media. For GIF export, it controls lossy compression; for MP4 export, it drives the H.264 bitrate.
+* `Resampling` –
+  Chooses the interpolation method used during extraction and output resizing. Available options may include:
   - `Linear`
   - `Cubic`
-  - `Maximum Detail (Lanczos)` when supported by the OpenCV build
+  - `Maximum Detail (Lanczos)` 
   - `Strong Reduction (Area)`
   - `Pixelated (Nearest Neighbor)`
-- `GIF Dithering`
+* `GIF Dithering` –
   Chooses the dithering algorithm used during GIF color quantization.
-- `Use Global Palette`
+* `Use Global Palette` –
   Forces the GIF encoder to use one palette for all frames.
-- `Save Settings file`
+* `Save Settings file` –
   Downloads a standalone settings text file.
-- `Reset`
+* `Reset` –
   Restores Export Options to defaults and returns output size to the native extracted frame size.
-  
+
+
 ---
 
 ## Preview Panel Header Buttons
 
-The `Preview & Export` panel header contains the export actions.
+*The `Preview & Export` panel header contains the export actions.*
 
-- `Play/Pause`
+<img src="doc/ui_preview_and_export.png" width="330">
+
+* `Play/Pause` –
   Starts or stops the live preview animation.
-- `↓ZIP`
-  Downloads a ZIP archive containing:
-  - PNG frames in a `frames/` folder
-  - a settings text file
-- `↓MP4`
-  Downloads an H.264 MP4 when the current browser supports WebCodecs + MP4 muxing.
-- `↓GIF`
+* `↓GIF` –
   Generates and downloads an animated GIF.
+* `↓MP4` –
+  Downloads an H.264 movie (if your browser supports WebCodecs + MP4 muxing).
+* `↓ZIP` –
+  Downloads a ZIP archive (containing PNG frames in a `frames/` folder, and a settings text file)
 
-After a GIF has been generated, the `Preview & Export` heading text also becomes a download link to
-that GIF for the current browser session.
+After a GIF has been generated, the `Preview & Export` heading text also becomes a download link to that GIF for the current browser session.
 
-The exported filename includes:
-
-- the source image name
-- a compact timestamp
-- output dimensions
-- quality for GIF/MP4
 
 ---
 
 ## Status
 
-The `Status` panel reports the current state of the pipeline.
+*The `Status` panel reports the current state of the pipeline.*
 
-Typical messages include:
+<img src="doc/ui_status.png" width="330">
 
-- image loading
-- page analysis
-- frame extraction counts
-- export progress
-- failure details
+Typical messages and diagnostic data include:
 
-It also surfaces page-detection failures and other diagnostic information.
+* image loading
+* page analysis
+* frame extraction counts
+* export progress
+* failure details
 
-The `Enable Tooltips` / `Disable Tooltips` button in the panel header toggles explanatory tooltips
-for the interface, including pipeline-specific controls in both `Markers` and `Markerless` modes.
-The main `Plottimation Tool` title also has a tooltip summarizing what the app does.
+The `Enable Tooltips` / `Disable Tooltips` button in the panel header toggles explanatory tooltips for the entire interface, including pipeline-specific controls in both `Markers` and `Markerless` modes. 
 
 
 ---
 
 ## Viewer Panels
 
+<img src="doc/ui_viewer_panels.png" width="330">
+
 The four main viewer panels are:
 
-- `1. Raw Photo`
-  Shows the source photo, with the detected page outline drawn in green.
-  The small line under this header shows `source_credit` from the settings file when present; if
-  no credit is available, it falls back to the loaded source filename.
-- `2. Rectified Sheet`
-  Shows either the full rectified page warp or the cropped rectified sheet used for frame
-  extraction, along with the current frame quad.
-  Use the header `Pre` / `Post` buttons to switch between those two views:
-  - `Pre` shows the full page warp before frame-grid crop/re-rectification.
+1. `Raw Photo` –
+  Shows the source photo, with the detected page outline drawn in green. The small line under this header shows `source_credit` metadata from the settings file when present; if no credit is available, it falls back to the loaded source filename.
+2. `Rectified Sheet` –
+  Shows either the full rectified page warp or the cropped rectified sheet used for frame extraction, along with the current frame quad. Use the header's `Pre` / `Post` buttons to switch between those two views:
+  - `Pre` shows the full page warp before frame-grid crop/re-rectification. In `Pre`, the blue outline shows the detected frame-grid search result and the magenta outline shows the current `Grid Search Inset` region.
   - `Post` shows the cropped extraction-space sheet used for frame extraction.
-  In `Pre`, the blue outline shows the detected frame-grid search result and the magenta outline
-  shows the current `Grid Search Inset` region.
-  If the source image was loaded with a sibling settings file, this panel shows the cropped
-  extraction-space sheet because the saved detection settings are presumed to be correct. If no
-  sibling settings file was loaded, it shows the full page warp with the frame-grid search area so
-  you can tune `Page & Grid Detection` before the grid crop is applied.
-  On very large source images, this panel may display a downscaled preview of the rectified sheet
-  even though extraction still uses the full-resolution rectified image internally.
-  In markerless mode it can also show the blue inset ROI rectangle used for the markerless search.
-  If `Frames in Export` omits cells, those omitted source cells are shown here as red slashed quads
-  with a translucent gray fill.
-- `3. Frame Alignment Markers` or `3. Frame Alignment Centers`
-  In `Markers` mode, this panel shows the marker ROI tiles used for frame alignment.
-  In `Markerless` mode, it shows the extracted corner tiles used for corner nudging.
-- `4. Preview & Export`
-  Shows the live animation preview and the export controls. After `↓GIF` has generated an exported
-  GIF, the `Preview & Export` heading text links to that GIF using the exported filename.
+  - On very large source images, this panel may display a downscaled preview of the rectified sheet even though extraction still uses the full-resolution rectified image internally. In markerless mode it can also show the blue inset ROI rectangle used for the markerless search.
+  - If `Frames in Export` omits cells, those omitted source cells are shown here as red slashed quads with a translucent gray fill.
+3. `Frame Alignment Markers` or `3. Frame Alignment Centers` –
+  In `Markers` mode, this panel shows the marker ROI tiles used for frame alignment. In `Markerless` mode, it shows the extracted corner tiles used for corner nudging.
+4. `Preview & Export` –
+  Shows the live animation preview and the export controls. After `↓GIF` has generated an exported GIF, the `Preview & Export` heading text links to that GIF using the exported filename.
 
-Desktop notes:
 
-- Clicking `Rectified Sheet` toggles the convolution diagnostic view.
-- Clicking the `Rectified Sheet` header link downloads the full-resolution rectified image.
-  The visible panel image may be downscaled for display, but the download is sourced from the
-  full-resolution rectified sheet.
-- Dragging the `Raw Photo`, `Rectified Sheet`, or exported GIF can download those assets directly.
+### Mobile Display
 
-Mobile notes:
+On mobile devices: 
 
-- the interface switches to a single-column layout with tabs for `Raw`, `Rectified`, `Markers` or `Corners`, and `Preview`
-- in markerless mode, the third mobile control tab is renamed `Stabilize`
-- some advanced controls are hidden
-- the marker panel is read-only
-- the `Status` panel moves to the bottom
+* some advanced controls are hidden
+* the interface switches to a single-column layout with tabs for `Raw`, `Rectified`, `Markers` or `Corners`, and `Preview`
+* in markerless mode, the third mobile control tab is renamed `Stabilize`
+* the marker panel is read-only
+* the `Status` panel moves to the bottom
+
 
 ---
 
 ## Sibling Settings Files
 
-Plottimation can save and reload a companion settings file for a source image.
+*Plottimation can save and reload a companion settings file for a given source image.*
 
-The filename format is:
+<img src="doc/ui_settings_files.png" width="330">
 
-- `<imagename>_settings.txt`
-
-For example:
+The settings filename format is: `<imagename>_settings.txt`. For example:
 
 - `myDrawing.jpg`
 - `myDrawing_settings.txt`
 
 These settings files store the current UI state, including:
 
-- layout choices
-- detection settings
-- appearance settings
-- crop/export settings
-- any manual marker overrides
-- optional metadata such as `source_credit`, which can display a creator credit in the Raw Photo header
-  or fall back to the source filename when no credit text is provided
+* page layout specifications
+* frame detection and alignment settings
+* appearance settings
+* crop/export settings
+* any manual marker overrides
+* optional metadata
 
 How they are used:
 
-- when a demo or URL-based image is loaded, the app will try to load a sibling settings file automatically
-- if you drag an image and its matching settings file together, both will be loaded
-- if you drag a settings file onto an already loaded image, it will override the current settings for that image
-- `Save Settings file` downloads the same tab-separated settings manifest used inside ZIP export
+* if you drag an image and its matching settings file together, both will be loaded
+* if you drag a settings file onto an already loaded image, it will override the current settings for that image
+* `Save Settings file` (in `Export Options`) allows you to save the current settings file. 
+* When exporting a ZIP bundle, the settings file is also included.
 
-Important:
+Note:
 
-- pressing `Reset` restores built-in defaults, not values from a loaded settings file
-- if a settings file omits `frame_count_to_export`, the app assumes all `Frame Columns × Frame Rows`
-  cells should be included
-- if you choose a lone local image file from the browser file picker, the browser does not let the app inspect the rest of that directory automatically, so a sibling settings file may need to be provided separately
+* Pressing `Reset` restores built-in defaults, not values from a loaded settings file
+* If you load a lone local image file from the browser file picker, the browser's security settings do not permit the app to inspect the rest of that directory automatically, so a sibling settings file may need to be provided separately.
+
 
 ---
 
 ## Language Selection
 
-The app supports automatic localization.
+*The Plottimation app supports automatic and user-selected localization.*
 
-- By default, it uses the language preferences reported by your browser.
+<img src="doc/ui_language.png" width="330">
+
+- By default, Plottimation uses the language preferences reported by your browser.
 - If the browser prefers a supported language, the interface will switch automatically.
 - If no supported language is detected, the app falls back to English.
 
-You can also force a specific language with the page URL:
+You can also force a specific language with the page URL. The following internationalizations are available:
 
 - `?lang=en` for English
 - `?lang=fr` for French

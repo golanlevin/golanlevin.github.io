@@ -1,11 +1,11 @@
 # Plottimation Tool
 
-[This free tool](https://golanlevin.github.io/plottimation/) builds a looping GIF from a scan or photograph of an animation contact-sheet. It automatically aligns the frames; works both with or without alignment markers; and can even work with casual photographs. You can find the tool [**here**](https://golanlevin.github.io/plottimation/).<br/>
+[**This free tool**](https://golanlevin.github.io/plottimation/) builds a looping GIF from a scan or photograph of an animation contact-sheet. It automatically aligns the frames; works both with or without alignment markers; and can even work with casual photographs. You can find the tool [**here**](https://golanlevin.github.io/plottimation/).<br/>
 Version 1.15 • By @GolanLevin, Spring 2026.
 
 * [**Plottimation Tool Online Here**](https://golanlevin.github.io/plottimation/)
-* [**Quickstart Instructions**](#quickstart-instructions) (below)
-* [**Documentation**](documentation.md)
+* [**Quickstart Instructions**](#quickstart-instructions)
+* [**Documentation**](documentation.md)<br />—<br/>
 * [p5.js Design Templates](templates/README.md)
 * [Demonstration Video](https://www.youtube.com/watch?v=MOXB63DgItQ)
 * [GIF Gallery](#plottimation-gif-gallery)
@@ -29,8 +29,8 @@ Version 1.15 • By @GolanLevin, Spring 2026.
    - `Markerless (gutters, frames)` for gutter-separated sheets without registration marks
 8. If you select `Markerless`, you will probably want to **enable stabilization** in the *Stabilization* tab. 
 9. According to your taste, **adjust** the settings under the *Appearance* and *Crop & Geometry* tabs. Changes to these settings are reflected in the animation shown in the *Preview & Export* panel.
-10. To generate and download your GIF animation, **click** `↓GIF`. You can also download your animation as an MP4 movie or a zipped folder of frames. There are advanced settings in the *Export Options* tab for adjusting output dimensions, compression quality, and playback modes.
-11. You can **save** your animations' settings file to save time later; find a button for doing this at the bottom of the "Export Options" panel.
+10. To generate and download your GIF animation, **click** `↓GIF` in the *Preview & Export* panel. You can also download your animation as an MP4 movie or a zipped folder of frames. There are advanced settings in the *Export Options* tab for adjusting output dimensions, compression quality, and playback modes.
+11. You can also **save** your animations' settings file to save time later; find a button for doing this at the bottom of the *Export Options* tab.
 
 ---
 
