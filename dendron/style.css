@@ -1,0 +1,40 @@
+/* Fill screen, black bg, no scroll shimmer */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #000;
+  overscroll-behavior: none;
+}
+
+/* Center the canvas in the viewport */
+#stage {
+  position: fixed; /* prevents reflow on mobile toolbars */
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The canvas will be sized via CSS (for display), but keep
+   its internal drawing resolution fixed in JS for stable logic. */
+canvas {
+  display: block;
+  outline: none;
+  touch-action: none;     /* stops page panning on touch devices */
+  -webkit-tap-highlight-color: transparent;
+  image-rendering: auto;  /* or 'pixelated' if you want chunky scaling */
+}
+
+/* Cursor auto-hide after short inactivity (toggled by small JS helper) */
+.cursor-hidden, .cursor-hidden * {
+  cursor: none !important;
+}
+
+/* Optional: full-bleed on notch devices */
+@supports (padding: env(safe-area-inset-top)) {
+  body {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+}

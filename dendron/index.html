@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Make sure the local p5.js is present; or swap to CDN if you prefer -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/p5@1.11.13/lib/p5.min.js"></script> -->
+    <script src="p5.js"></script>
+
+    <!-- Kiosk friendliness -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+
+    <link rel="stylesheet" href="style.css" />
+    <title>Dendron</title>
+  </head>
+
+  <!-- Prevent the context menu and accidental scrolling/overscroll effects -->
+  <body class="kiosk" oncontextmenu="return false;">
+    <!-- A flexbox stage that centers the canvas -->
+    <main id="stage" aria-label="Artwork stage"></main>
+
+    <!-- The artwork -->
+    <script src="dendron.js"></script>
+
+    <!-- Optional: very small helper to hide the cursor after inactivity -->
+    <script>
+      (function () {
+        let t, root = document.documentElement;
+        const HIDE_MS = 3000;
+        const reset = () => {
+          root.classList.remove('cursor-hidden');
+          clearTimeout(t);
+          t = setTimeout(() => root.classList.add('cursor-hidden'), HIDE_MS);
+        };
+        ['mousemove','mousedown','touchstart','keydown'].forEach(ev =>
+          window.addEventListener(ev, reset, {passive: true})
+        );
+        reset();
+      })();
+    </script>
+    
+  </body>
+</html>
