@@ -73,8 +73,10 @@
   Chooses how the raw image is thresholded for page detection. Choices include `Offset Peak` (a simple histogram-peak-based threshold); `Otsu` (OpenCV's Otsu global threshold); and `Triangle` (OpenCV's Triangle global threshold).
 * `Page Detection Threshold` –
   Adjusts the threshold used to detect the page and its corners. This is often the first setting to try if page detection fails!
-* `Grid Search Inset` –
-  Ignores this many pixels near the edge of the rectified page before searching for the frame grid. This can be helpful if the edge of the page does not appear straight.
+* `Grid Search Inset X` –
+  Ignores this many pixels near the left and right edges of the rectified page before searching for the frame grid.
+* `Grid Search Inset Y` –
+  Ignores this many pixels near the top and bottom edges of the rectified page before searching for the frame grid.
 * `Grid Edge Threshold` –
   Sets the minimum signal required to detect the outer rows and columns of markers.
 * `Grid Edge Run Length` –
@@ -146,8 +148,8 @@ The Markerless pipeline initially estimates a nominal grid, and then lets you re
 
 * `Enable Stabilization` –
   Turns stabilization on or off; when disabled, no stabilization is applied. *Note:* Stabilization consists only of changes in translation (not scale, rotation, shear, or perspective).
-* `Grid Search Inset` –
-  In Markerless mode, this defines the inset (margin) used to initialize the grid search. Large empty page margins can confuse the grid estimation, so increasing this value can help the app ignore blank borders.
+* `Grid Search Inset X` / `Grid Search Inset Y` –
+  In Markerless mode, these define the horizontal and vertical insets used to initialize the grid search. Large empty page margins can confuse the grid estimation, so increasing these values can help the app ignore blank borders.
 * `Stabilization Method` –
   Chooses between the two translation-only stabilization strategies:
   - `Neighbor Comparison` –
@@ -337,7 +339,7 @@ The four main viewer panels are:
   Shows the source photo, with the detected page outline drawn in green. The small line under this header shows `source_credit` metadata from the settings file when present; if no credit is available, it falls back to the loaded source filename.
 2. `Rectified Sheet` –
   Shows either the full rectified page warp or the cropped rectified sheet used for frame extraction, along with the current frame quad. Use the header's `Pre` / `Post` buttons to switch between those two views:
-  - `Pre` shows the full page warp before frame-grid crop/re-rectification. In `Pre`, the blue outline shows the detected frame-grid search result and the magenta outline shows the current `Grid Search Inset` region.
+  - `Pre` shows the full page warp before frame-grid crop/re-rectification. In `Pre`, the blue outline shows the detected frame-grid search result and the magenta outline shows the current `Grid Search Inset X/Y` region.
   - `Post` shows the cropped extraction-space sheet used for frame extraction.
   - On very large source images, this panel may display a downscaled preview of the rectified sheet even though extraction still uses the full-resolution rectified image internally. In markerless mode it can also show the blue inset ROI rectangle used for the markerless search.
   - If `Frames in Export` omits cells, those omitted source cells are shown here as red slashed quads with a translucent gray fill.

@@ -26,6 +26,8 @@ let myFrameCount = 0;
 p5.disableFriendlyErrors = true; 
 let bDoExportSvg = false; 
 let exportSvgButton;
+let markerTypeRadio;
+let designRadio;
 
 //-------------------------------------------------
 function setup() {
@@ -39,6 +41,27 @@ function setup() {
   exportSvgButton.mousePressed(function () {
     bDoExportSvg = true;
   });
+
+  markerTypeRadio = createRadio();
+  markerTypeRadio.option('crosses', 'Crosses');
+  markerTypeRadio.option('dots', 'Dots');
+  markerTypeRadio.selected('crosses');
+  markerTypeRadio.position(10, 40);
+  markerTypeRadio.changed(function () {
+    setMarkerStyle(markerTypeRadio.value());
+  });
+  styleRadioControl(markerTypeRadio);
+
+  designRadio = createRadio();
+  designRadio.option('1', 'Design 1');
+  designRadio.option('2', 'Design 2');
+  designRadio.option('3', 'Design 3');
+  designRadio.selected('1');
+  designRadio.position(10, 62);
+  designRadio.changed(function () {
+    setAnimationStyle(designRadio.value());
+  });
+  styleRadioControl(designRadio);
 }
 
 
@@ -55,16 +78,63 @@ function keyPressed(){
   } else if (!bAnimating && keyCode === RIGHT_ARROW) {
     myFrameCount++;
   } else if (key == 1){
-    ANIMATION_STYLE = 1; 
+    setAnimationStyle(1); 
   } else if (key == 2){
-    ANIMATION_STYLE = 2; 
+    setAnimationStyle(2); 
   } else if (key == 3){
-    ANIMATION_STYLE = 3; 
+    setAnimationStyle(3); 
   } else if (key == 'x'){
-    MARKER_STYLE = MARKER_CROSS;
+    setMarkerStyle('crosses');
   } else if (key == 'd'){
-    MARKER_STYLE = MARKER_DOT;
+    setMarkerStyle('dots');
   }
+}
+
+
+//-------------------------------------------------
+function setMarkerStyle(value){
+  MARKER_STYLE = (value === 'dots') ? MARKER_DOT : MARKER_CROSS;
+  if (markerTypeRadio){
+    markerTypeRadio.selected(MARKER_STYLE === MARKER_DOT ? 'dots' : 'crosses');
+  }
+}
+
+
+//-------------------------------------------------
+function setAnimationStyle(value){
+  ANIMATION_STYLE = int(value);
+  ANIMATION_STYLE = constrain(ANIMATION_STYLE, 1, 3);
+  if (designRadio){
+    designRadio.selected(String(ANIMATION_STYLE));
+  }
+}
+
+
+//-------------------------------------------------
+function styleRadioControl(radio){
+  radio.style('font-family', 'Arial, Helvetica, sans-serif');
+  radio.style('font-size', '12px');
+  radio.style('line-height', '1.1');
+  radio.style('height', '18px');
+  radio.style('display', 'flex');
+  radio.style('align-items', 'center');
+  radio.style('gap', '8px');
+
+  const labels = radio.elt.querySelectorAll('label');
+  labels.forEach(function (label) {
+    label.style.display = 'inline-flex';
+    label.style.alignItems = 'center';
+    label.style.marginRight = '8px';
+    label.style.fontFamily = 'Arial, Helvetica, sans-serif';
+    label.style.fontSize = '12px';
+    label.style.lineHeight = '1.1';
+  });
+
+  const inputs = radio.elt.querySelectorAll('input');
+  inputs.forEach(function (input) {
+    input.style.margin = '0 3px 0 0';
+    input.style.transform = 'scale(0.85)';
+  });
 }
 
 
@@ -237,7 +307,7 @@ function drawDebugAndRegistrationFeatures(){
         line(C.cellx-d,C.celly, C.cellx+d,C.celly);
       } else if (MARKER_STYLE == MARKER_DOT) {
         let diam = crossSize;
-        for (let i=0; i<=diam; i++){
+        for (let i=0; i<=diam/2; i++){
           circle(C.cellx,C.celly, i); 
         }
       }
@@ -341,4 +411,3 @@ function getLineClippedToRect(ax, ay, bx, by, rx, ry, rw, rh) {
   }
   return null; // no intersection with the rectangle
 }
-

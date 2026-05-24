@@ -1,5 +1,5 @@
 source_filename	8_riso_zinehug_summoner.jpg
-source_credit	Riso by Zack Lydon (@zinehug)
+source_credit	"Summoner" Riso by Zack Lydon (@zinehug)
 paper_preset	source
 paper_orientation	landscape
 paper_width	3302
@@ -9,7 +9,8 @@ frame_rows	6
 threshold_method	offset-peak
 threshold_offset	-20
 light_on_dark_design	false
-search_inset_margin_px	0
+search_inset_margin_x_px	0
+search_inset_margin_y_px	0
 boundary_threshold	8
 boundary_persistence_px	7
 post_rotation_deg	-0.3
@@ -19,16 +20,16 @@ stabilization_enabled	true
 stabilization_strength	100
 alignment_marker_type	auto
 alignment_marker_region_scale_pct	41
-stabilization_lambda	0.01
+stabilization_lambda	0.005
 markerless_phase_x	0.055
-markerless_phase_y	0.13
+markerless_phase_y	0.125
 vertical_drift_compensation	0
 detect_crosses_with_convolution	false
 use_cross_alignment	true
 crop_left	3
 crop_right	1
 crop_top	1
-crop_bottom	192
+crop_bottom	194
 flip_horizontal	false
 flip_vertical	false
 rotate_90_cw	false

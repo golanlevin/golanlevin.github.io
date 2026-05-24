@@ -1,7 +1,7 @@
 # Plottimation Tool
 
 [**This free tool**](https://golanlevin.github.io/plottimation/) builds a looping GIF from a scan or photograph of an animation contact-sheet. It automatically aligns the frames; works both with or without alignment markers; and can even work with casual photographs. You can find the tool [**here**](https://golanlevin.github.io/plottimation/).<br/>
-Version 1.15 • By @GolanLevin, Spring 2026.
+Version 1.16 • By @GolanLevin, Spring 2026.
 
 * [**Plottimation Tool Online Here**](https://golanlevin.github.io/plottimation/)
 * [**Quickstart Instructions**](#quickstart-instructions)
@@ -23,7 +23,7 @@ Version 1.15 • By @GolanLevin, Spring 2026.
 3. **Open** the [**Plottimation Tool**](https://golanlevin.github.io/plottimation/) in a browser, from [**here**](https://golanlevin.github.io/plottimation).
 4. **Load** the image of your frame sheet into the Plottimation Tool. You can do this by dragging your image file onto the Tool's load target (where it says "Drop a photo or scan here"), or by clicking the target to load a file.
 5. Under the *Layout* tab, **set** `Frame Columns` and `Frame Rows` to match the layout of your sheet's grid of frames. You should also set your sheet's orientation (landscape or portrait) and page size (11×8.5, etc.).
-6. It's time to **detect** your page and **extract** its grid of frames. **Adjust** the `Page Detection Threshold` slider in the *Page & Grid Detection* tab until you see a bright green frame around your page in the `Raw Photo` panel. You may also need to adjust other settings, such as the `Grid Search Inset`. If your sheet uses light ink on dark paper, enable `Light-on-dark design`.<br><img src="doc/page-rectification.png" height="250">
+6. It's time to **detect** your page and **extract** its grid of frames. **Adjust** the `Page Detection Threshold` slider in the *Page & Grid Detection* tab until you see a bright green frame around your page in the `Raw Photo` panel. You may also need to adjust other settings, such as `Grid Search Inset X` and `Grid Search Inset Y`. If your sheet uses light ink on dark paper, enable `Light-on-dark design`.<br><img src="doc/page-rectification.png" height="250">
 7. **Choose** the correct `Alignment Pipeline` for your frame sheet:
    - `Markers (crosses, dots)` for marker-separated sheets, or 
    - `Markerless (gutters, frames)` for gutter-separated sheets without registration marks
@@ -45,6 +45,14 @@ Version 1.15 • By @GolanLevin, Spring 2026.
 ![Plot by Julien Gachadoat (@julienv3ga)](doc/4_plot_julienv3ga.gif) 
 [![4_plot_julienv3ga.jpg](doc/4_plot_julienv3ga_i.jpg)](demo/4_plot_julienv3ga.jpg)
 <br>Plot by Julien Gachadoat ([@julienv3ga](https://www.instagram.com/julienv3ga/))
+
+![Plot by Golan Levin (@golanlevin)](doc/5_plot_bubblewalker_3626.gif) 
+[![5_plot_bubblewalker_3626.gif](doc/5_plot_bubblewalker_3626_i.jpg)](demo/5_plot_bubblewalker_3628_i.jpg)
+<br>"Bubblewalker 3626" Plot by Golan Levin (@golanlevin)
+
+![Plot by Golan Levin (@golanlevin)](doc/5_plot_bubblewalker_3628.gif) 
+[![5_plot_bubblewalker_3628.gif](doc/5_plot_bubblewalker_3628_i.jpg)](demo/5_plot_bubblewalker_3628_i.jpg)
+<br>"Bubblewalker 3628" Plot by Golan Levin (@golanlevin)
 
 ![Riso by Alex Barsky (@zinehug)](doc/6_riso_zinehug_anim.gif) 
 [![6_riso_zinehug_workshop_i.jpg](doc/6_riso_zinehug_workshop_i.jpg)](demo/6_riso_zinehug_workshop.jpg) 

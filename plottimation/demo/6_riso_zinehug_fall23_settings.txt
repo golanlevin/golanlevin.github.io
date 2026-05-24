@@ -9,7 +9,8 @@ frame_rows	7
 threshold_method	offset-peak
 threshold_offset	-20
 light_on_dark_design	false
-search_inset_margin_px	0
+search_inset_margin_x_px	0
+search_inset_margin_y_px	0
 boundary_threshold	8
 boundary_persistence_px	7
 post_rotation_deg	-0.15

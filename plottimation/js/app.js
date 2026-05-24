@@ -1148,18 +1148,22 @@ function setGeometryProcessingCursor(active) {
  * Keep the Preview header spinner aligned with any busy state that can stall or delay playback.
  *
  * This includes source-image loading, geometry-processing rebuilds, and the chunked stabilization
- * comparison job whose own progress UI lives in Status.
+ * comparison job whose own progress UI lives in Status. It also includes final preview-frame cache
+ * warmup: the CV pipeline may be complete while output-sized canvases are still being generated.
  *
  * @returns {void}
  */
 function syncPreviewBusyIndicator() {
   if (!dom.previewBusy) return;
   document.body.classList.toggle("stabilization-processing", !!state.processing.stabilizationMeasurementActive);
+  document.body.classList.toggle("preview-warmup-processing", !!state.processing.previewWarmupActive);
   dom.previewBusy.hidden = !(
     !!state.runtime.busy ||
     document.body.classList.contains("geometry-processing") ||
     document.body.classList.contains("stabilization-processing") ||
-    !!state.processing.stabilizationMeasurementActive
+    document.body.classList.contains("preview-warmup-processing") ||
+    !!state.processing.stabilizationMeasurementActive ||
+    !!state.processing.previewWarmupActive
   );
 }
 
@@ -1261,6 +1265,34 @@ function buildStatusWithTiming(baseText) {
 }
 
 /**
+ * Use compact Rectified Sheet header labels when both background jobs are reporting progress.
+ *
+ * @returns {void}
+ */
+function updateRectifiedProgressCompactLabels() {
+  const stabilizationProgress = dom.rectifiedSheetProgress;
+  const frameProgress = dom.rectifiedSheetFrameProgress;
+  if (!stabilizationProgress || !frameProgress) return;
+
+  const stabilizationActive = !!state.processing.stabilizationMeasurementActive;
+  const frameWarmupActive = !!state.processing.previewWarmupActive;
+  if (!stabilizationActive || !frameWarmupActive) return;
+
+  const stabilizationCompleted = state.processing.stabilizationMeasurementProgressCompleted || 0;
+  const stabilizationTotal = Math.max(1, state.processing.stabilizationMeasurementProgressTotal || 1);
+  const frameCompleted = state.processing.previewWarmupProgressCompleted || 0;
+  const frameTotal = Math.max(1, state.processing.previewWarmupProgressTotal || 1);
+  stabilizationProgress.textContent = t("status.stabilizingProgressCompact", {
+    completed: stabilizationCompleted,
+    total: stabilizationTotal,
+  });
+  frameProgress.textContent = t("status.processingFramesProgressCompact", {
+    completed: frameCompleted,
+    total: frameTotal,
+  });
+}
+
+/**
  * Keep the temporary pairwise-measurement progress bar in sync with current work.
  *
  * @returns {void}
@@ -1287,15 +1319,47 @@ function updateStabilizationProgressUi() {
   }
   bar.max = total;
   bar.value = Math.max(0, Math.min(total, completed));
+  updateRectifiedProgressCompactLabels();
 }
 
 /**
- * Refresh the Status panel so the temporary stabilization progress text and bar stay visible.
+ * Keep the temporary output-frame generation progress bar in sync with current warmup work.
+ *
+ * @returns {void}
+ */
+function updatePreviewFrameProgressUi() {
+  const container = dom.statusFrameProgress;
+  const label = dom.statusFrameProgressLabel;
+  const bar = dom.statusFrameProgressBar;
+  const rectifiedProgress = dom.rectifiedSheetFrameProgress;
+  if (!container || !label || !bar) return;
+  const active = !!state.processing.previewWarmupActive;
+  syncPreviewBusyIndicator();
+  container.hidden = !active;
+  if (rectifiedProgress) {
+    rectifiedProgress.hidden = !active;
+  }
+  if (!active) return;
+  const completed = state.processing.previewWarmupProgressCompleted || 0;
+  const total = Math.max(1, state.processing.previewWarmupProgressTotal || 1);
+  const progressText = t("status.processingFramesProgress", { completed, total });
+  label.textContent = progressText;
+  if (rectifiedProgress) {
+    rectifiedProgress.textContent = progressText;
+  }
+  bar.max = total;
+  bar.value = Math.max(0, Math.min(total, completed));
+  updateRectifiedProgressCompactLabels();
+}
+
+/**
+ * Refresh the Status panel so temporary progress text and bars stay visible.
  *
  * @returns {void}
  */
 function refreshStatusDisplay() {
   updateStabilizationProgressUi();
+  updatePreviewFrameProgressUi();
   if (lastBaseStatusText) {
     setStatus(buildStatusWithTiming(lastBaseStatusText));
   }
@@ -1347,6 +1411,135 @@ function cancelStabilizationMeasurement() {
   state.processing.stabilizationMeasurementRedrawPending = false;
   state.processing.stabilizationMeasurementPromise = null;
   updateStabilizationProgressUi();
+}
+
+/**
+ * Cancel any queued background generation of output-sized preview frames.
+ *
+ * @returns {void}
+ */
+function cancelPreviewFrameWarmup() {
+  state.processing.previewWarmupToken += 1;
+  if (state.processing.previewWarmupRaf) {
+    window.cancelAnimationFrame(state.processing.previewWarmupRaf);
+  }
+  state.processing.previewWarmupActive = false;
+  state.processing.previewWarmupProgressCompleted = 0;
+  state.processing.previewWarmupProgressTotal = 0;
+  state.processing.previewWarmupRaf = 0;
+  updatePreviewFrameProgressUi();
+}
+
+/**
+ * Return whether final output-frame warmup should wait for async stabilization measurements.
+ *
+ * When Neighbor Comparison is enabled but its pairwise shifts are not ready yet, warming all
+ * preview frames would build an unstabilized cache that must be thrown away moments later.
+ *
+ * @returns {boolean}
+ */
+function previewFrameWarmupShouldWaitForStabilization() {
+  const config = readConfig();
+  if (!config.stabilizationEnabled) return false;
+  if ((config.stabilizationStrengthPct || 0) <= 0) return false;
+  if (config.stabilizationMethod !== "pairwise-cyclic") return false;
+  return !state.frames.stabilizationPairwise?.length;
+}
+
+/**
+ * Build the preview/export frame outputs in small RAF slices so playback stops paying the full
+ * extraction/resampling cost one frame at a time.
+ *
+ * @param {number} requestId
+ * @returns {void}
+ */
+function schedulePreviewFrameWarmupForSourceIndices(sourceIndices, requestId) {
+  cancelPreviewFrameWarmup();
+  if (previewFrameWarmupShouldWaitForStabilization()) return;
+  const frameCount = getIncludedSourceFrameCount();
+  if (frameCount <= 0) return;
+
+  const orderedSourceIndices = [];
+  const seen = new Set();
+  for (const sourceIndex of sourceIndices) {
+    if (sourceIndex >= 0 && sourceIndex < frameCount && !seen.has(sourceIndex)) {
+      seen.add(sourceIndex);
+      orderedSourceIndices.push(sourceIndex);
+    }
+  }
+  if (!orderedSourceIndices.length) return;
+
+  const token = state.processing.previewWarmupToken + 1;
+  state.processing.previewWarmupToken = token;
+  state.processing.previewWarmupActive = true;
+  state.processing.previewWarmupProgressCompleted = 0;
+  state.processing.previewWarmupProgressTotal = orderedSourceIndices.length;
+  updatePreviewFrameProgressUi();
+
+  let cursor = 0;
+  const step = () => {
+    if (token !== state.processing.previewWarmupToken || requestId !== state.processing.requestId) {
+      return;
+    }
+    try {
+      const start = performance.now();
+      do {
+        getAdjustedFrameCanvas(orderedSourceIndices[cursor]);
+        cursor += 1;
+        state.processing.previewWarmupProgressCompleted = cursor;
+      } while (cursor < orderedSourceIndices.length && performance.now() - start < 8);
+      updatePreviewFrameProgressUi();
+
+      if (cursor < orderedSourceIndices.length) {
+        state.processing.previewWarmupRaf = window.requestAnimationFrame(step);
+        return;
+      }
+    } catch (error) {
+      console.error(error);
+    }
+
+    state.processing.previewWarmupActive = false;
+    state.processing.previewWarmupProgressCompleted = Math.min(cursor, orderedSourceIndices.length);
+    state.processing.previewWarmupRaf = 0;
+    updatePreviewFrameProgressUi();
+  };
+
+  state.processing.previewWarmupRaf = window.requestAnimationFrame(step);
+}
+
+/**
+ * Build the preview/export frame outputs in small RAF slices so playback stops paying the full
+ * extraction/resampling cost one frame at a time.
+ *
+ * @param {number} requestId
+ * @returns {void}
+ */
+function schedulePreviewFrameWarmup(requestId) {
+  const sourceIndices = [];
+  const orderedFrameCount = getOrderedFrameCount();
+  for (let previewIndex = 0; previewIndex < orderedFrameCount; previewIndex += 1) {
+    sourceIndices.push(getOrderedFrameIndex(previewIndex));
+  }
+  schedulePreviewFrameWarmupForSourceIndices(sourceIndices, requestId);
+}
+
+/**
+ * Warm final preview/export frames for the currently active processing generation.
+ *
+ * @returns {void}
+ */
+function scheduleCurrentPreviewFrameWarmup() {
+  schedulePreviewFrameWarmup(state.processing.requestId);
+}
+
+/**
+ * Warm selected source frames for the currently active processing generation.
+ *
+ * @param {number[]} sourceIndices
+ * @returns {void}
+ */
+function scheduleCurrentPreviewFrameWarmupForSourceIndices(sourceIndices) {
+  schedulePreviewFrameWarmupForSourceIndices(sourceIndices, state.processing.requestId);
 }
 
 /**
@@ -1414,6 +1607,7 @@ function makeLivePreviewDragCue() {
  * @returns {void}
  */
 function clearDerivedPreviews() {
+  cancelPreviewFrameWarmup();
   releaseRectifiedCvCache();
   state.runtime.appliedPostRotationDeg = 0;
   state.preview.rectifiedCanvas = null;
@@ -1432,6 +1626,7 @@ function clearDerivedPreviews() {
   state.geometry.baseRectifiedPageHeight = 0;
   state.geometry.rectifiedDownloadUsesRawSource = false;
   state.geometry.pagePreviewGridQuad = null;
+  state.geometry.pagePreviewGridBounds = null;
   state.geometry.alignmentInfo = null;
   state.geometry.frameCount = 0;
   state.geometry.manualMarkerOverrides.clear();
@@ -1507,6 +1702,7 @@ function clearAllPreviews() {
  * @returns {void}
  */
 function clearDerivedOutputsForDetectionFailure() {
+  cancelPreviewFrameWarmup();
   releaseRectifiedCvCache();
   state.runtime.appliedPostRotationDeg = 0;
   state.preview.rectifiedCanvas = null;
@@ -1525,6 +1721,7 @@ function clearDerivedOutputsForDetectionFailure() {
   state.geometry.baseRectifiedPageHeight = 0;
   state.geometry.rectifiedDownloadUsesRawSource = false;
   state.geometry.pagePreviewGridQuad = null;
+  state.geometry.pagePreviewGridBounds = null;
   state.geometry.alignmentInfo = null;
   state.geometry.frameCount = 0;
   state.runtime.markerEditingEnabled = false;
@@ -1717,6 +1914,7 @@ function attachUi() {
     scheduleStabilizationPreviewUpdate,
     scheduleMarkerlessPhasePreviewUpdate,
     schedulePostRotationPreviewUpdate,
+    schedulePreviewFrameWarmup: scheduleCurrentPreviewFrameWarmup,
     runTimedHeavyPath,
     warmCurrentStabilizationMethod: scheduleCurrentStabilizationWarmup,
     beginStabilizationStrengthScrub,
@@ -1877,6 +2075,7 @@ function resetAppearanceControls() {
   invalidateAppearanceCache();
   refreshAppearanceOutputs();
   drawCurrentGifPreview();
+  scheduleCurrentPreviewFrameWarmup();
 }
 
 /**
@@ -1955,6 +2154,7 @@ function resetExportControls() {
     previousOutputSize.height !== nextOutputSize.height
   ) {
     invalidateFrameOutputCaches();
+    scheduleCurrentPreviewFrameWarmup();
   }
   drawCurrentGifPreview();
 }
@@ -2005,6 +2205,7 @@ function cancelInFlightProcessing() {
   state.processing.requestId += 1;
   state.processing.pending = false;
   window.clearTimeout(state.processing.timer);
+  cancelPreviewFrameWarmup();
   setGeometryProcessingCursor(false);
 }
 
@@ -2024,6 +2225,7 @@ function scheduleAppearancePreviewUpdate(includeRectified = false) {
     }
     state.preview.appearancePreviewNeedsRectified = false;
     drawCurrentGifPreview();
+    scheduleCurrentPreviewFrameWarmup();
   });
 }
 
@@ -2583,7 +2785,8 @@ function scheduleProcess(delayMs = 220) {
  *   frameRows:number,
  *   thresholdMethod:string,
  *   thresholdOffset:number,
- *   paperMarginPx:number,
+ *   paperMarginXPx:number,
+ *   paperMarginYPx:number,
  *   boundarySensitivity:number,
  *   boundaryPersistencePx:number,
  *   postRotationDeg:number,
@@ -2638,6 +2841,17 @@ function readConfig() {
   const frameRows = Math.max(1, Math.min(20, Math.round(Number(dom.frameRows.value) || SETTINGS_DEFAULTS.layout.frameRows)));
   const sourceFrameCount = Math.max(1, frameCols * frameRows);
   const encodingQuality = getEncodingQualityValue();
+  const readSearchInset = (input, fallback) => Math.max(
+    0,
+    Math.min(
+      256,
+      Math.round(
+        Number.isFinite(Number(input?.value))
+          ? Number(input.value)
+          : fallback
+      )
+    )
+  );
   return {
     paperOrientation,
     paperPreset,
@@ -2648,17 +2862,8 @@ function readConfig() {
     frameRows,
     thresholdMethod: dom.thresholdMethod.value || SETTINGS_DEFAULTS.detection.thresholdMethod,
     thresholdOffset: Math.max(-128, Math.min(128, Math.round(Number(dom.thresholdOffset.value) || SETTINGS_DEFAULTS.detection.thresholdOffset))),
-    paperMarginPx: Math.max(
-      0,
-      Math.min(
-        256,
-        Math.round(
-          Number.isFinite(Number(dom.paperMargin.value))
-            ? Number(dom.paperMargin.value)
-            : SETTINGS_DEFAULTS.detection.paperMarginPx
-        )
-      )
-    ),
+    paperMarginXPx: readSearchInset(dom.paperMarginX, SETTINGS_DEFAULTS.detection.paperMarginXPx),
+    paperMarginYPx: readSearchInset(dom.paperMarginY, SETTINGS_DEFAULTS.detection.paperMarginYPx),
     boundarySensitivity: Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)),
     boundaryPersistencePx: Math.max(1, Math.min(15, Math.round(Number(dom.boundaryPersistence.value) || SETTINGS_DEFAULTS.detection.boundaryPersistencePx))),
     postRotationDeg: Math.max(
@@ -2689,8 +2894,8 @@ function readConfig() {
     crossRoiScale: Math.max(0.18, Math.min(1.1, (Number(dom.crossRoiScale.value) || SETTINGS_DEFAULTS.detection.crossRoiScalePct) / 100)),
     stabilizationLambda: Math.max(0.001, Math.min(0.1, Number(dom.stabilizationLambda.value) || SETTINGS_DEFAULTS.detection.stabilizationLambda)),
     markerlessAutocorrelationBlurScale: 1,
-    markerlessPhaseX: Math.max(-0.25, Math.min(0.25, Number(dom.markerlessPhaseX.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseX)),
-    markerlessPhaseY: Math.max(-0.25, Math.min(0.25, Number(dom.markerlessPhaseY.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseY)),
+    markerlessPhaseX: Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseX.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseX)),
+    markerlessPhaseY: Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseY.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseY)),
     verticalDriftCompensation: Math.max(
       -0.05,
       Math.min(
@@ -2880,7 +3085,7 @@ function getActiveAlignmentPipeline() {
 }
 
 /**
- * Preserve the markerless default of zero Grid Search Inset when switching away from marker mode.
+ * Preserve the markerless default of zero Grid Search Inset X/Y when switching away from marker mode.
  *
  * @param {"markerless"|"markers"} pipeline
  * @returns {void}
@@ -2888,11 +3093,14 @@ function getActiveAlignmentPipeline() {
 function applyAlignmentPipelineDefaults(pipeline) {
   if (
     pipeline === "markerless" &&
-    dom.paperMargin &&
-    Number(dom.paperMargin.value) === SETTINGS_DEFAULTS.detection.paperMarginPx
+    dom.paperMarginX &&
+    dom.paperMarginY &&
+    Number(dom.paperMarginX.value) === SETTINGS_DEFAULTS.detection.paperMarginXPx &&
+    Number(dom.paperMarginY.value) === SETTINGS_DEFAULTS.detection.paperMarginYPx
   ) {
     // Markerless mode defaults to no search inset. Preserve any non-default user/saved value.
-    dom.paperMargin.value = "0";
+    dom.paperMarginX.value = "0";
+    dom.paperMarginY.value = "0";
   }
 }
 
@@ -2950,7 +3158,7 @@ function syncAlignmentPipelineLabels(flags) {
     frameAlignmentSummaryLabel.textContent = showMarkerlessControls ? t("alignment.summaryMarkerless") : t("alignment.summary");
   }
   if (dropGuidanceNote) {
-    dropGuidanceNote.textContent = showMarkerlessControls ? t("photo.dropNoteMarkerless") : t("photo.dropNote");
+    dropGuidanceNote.textContent = t("photo.dropNote");
   }
   const isMobileViewerMode = state.runtime.mobileSingleViewerMode;
   const headingText = isMobileViewerMode
@@ -3074,7 +3282,8 @@ function syncAlignmentPipelineVisibility(flags) {
     dom.stabilizationStrengthRow.hidden = !showMarkerlessControls;
   }
   dom.alignmentMarkerTypeField.hidden = !showMarkersPipelineControls;
-  dom.useCrossAlignmentRow.hidden = showMarkerlessControls;
+  // Keep marker subpixel alignment as a settings-file/default option, not a visible UI control.
+  dom.useCrossAlignmentRow.hidden = true;
   dom.detectCrossesWithConvolutionRow.hidden = !showCrossOnlyControls;
   dom.stabilizationLambdaRow.hidden = !showMarkerlessControls;
   dom.markerlessPhaseXRow.hidden = !showMarkerlessControls;
@@ -3310,6 +3519,7 @@ function clearMarkerEdits() {
   syncMarkerEditingUi();
   renderCrossRoiGrid(state.geometry.alignmentInfo);
   scheduleStabilizationPreviewUpdate();
+  scheduleCurrentPreviewFrameWarmup();
 }
 
 function loadCompanionSettingsText(src, filename, settingsFile = null) {
@@ -3403,13 +3613,22 @@ function updateSliderReadouts() {
   dom.unsharpRadiusValue.textContent = (Math.max(0.1, Math.min(100, Number(dom.unsharpRadius.value) || SETTINGS_DEFAULTS.appearance.unsharpRadius))).toFixed(1);
   dom.unsharpAmountValue.textContent = (Math.max(0, Math.min(500, Number(dom.unsharpAmount.value) || SETTINGS_DEFAULTS.appearance.unsharpAmount))).toFixed(1);
   dom.thresholdOffsetValue.textContent = formatSignedValue(dom.thresholdOffset.value);
-  dom.paperMarginValue.textContent = `${Math.max(
+  dom.paperMarginXValue.textContent = `${Math.max(
     0,
     Math.min(
       256,
-      Number.isFinite(Number(dom.paperMargin.value))
-        ? Number(dom.paperMargin.value)
-        : SETTINGS_DEFAULTS.detection.paperMarginPx
+      Number.isFinite(Number(dom.paperMarginX.value))
+        ? Number(dom.paperMarginX.value)
+        : SETTINGS_DEFAULTS.detection.paperMarginXPx
+    )
+  )} px`;
+  dom.paperMarginYValue.textContent = `${Math.max(
+    0,
+    Math.min(
+      256,
+      Number.isFinite(Number(dom.paperMarginY.value))
+        ? Number(dom.paperMarginY.value)
+        : SETTINGS_DEFAULTS.detection.paperMarginYPx
     )
   )} px`;
   dom.boundarySensitivityValue.textContent = `${Math.max(0, Math.min(20, Number(dom.boundarySensitivity.value) || SETTINGS_DEFAULTS.detection.boundarySensitivity)).toFixed(1)}`;
@@ -3439,8 +3658,8 @@ function updateSliderReadouts() {
     dom.stabilizationStrengthValue.textContent = `${stabilizationStrengthPct}%`;
   }
   dom.stabilizationLambdaValue.textContent = `${Math.max(0.001, Math.min(0.1, Number(dom.stabilizationLambda.value) || SETTINGS_DEFAULTS.detection.stabilizationLambda)).toFixed(3)}`;
-  dom.markerlessPhaseXValue.textContent = formatSignedDecimal(Math.max(-0.25, Math.min(0.25, Number(dom.markerlessPhaseX.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseX)));
-  dom.markerlessPhaseYValue.textContent = formatSignedDecimal(Math.max(-0.25, Math.min(0.25, Number(dom.markerlessPhaseY.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseY)));
+  dom.markerlessPhaseXValue.textContent = formatSignedDecimal(Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseX.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseX)));
+  dom.markerlessPhaseYValue.textContent = formatSignedDecimal(Math.max(-0.4, Math.min(0.4, Number(dom.markerlessPhaseY.value) || SETTINGS_DEFAULTS.detection.markerlessPhaseY)));
   if (dom.verticalDriftCompensationValue) {
     dom.verticalDriftCompensationValue.textContent = `${formatSignedDecimal(
       Math.max(
@@ -3785,6 +4004,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
 
   state.processing.active = true;
   cancelStabilizationMeasurement();
+  cancelPreviewFrameWarmup();
   setBusyState(true);
   updateExportControlsAvailability(true);
   trimCachesBeforeReprocess();
@@ -3827,6 +4047,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
       state.geometry.baseRectifiedPageHeight = result.pagePreviewHeight || result.pagePreviewCanvas?.height || 0;
       state.geometry.rectifiedDownloadUsesRawSource = !!result.rectifiedDownloadUsesRawSource;
       state.geometry.pagePreviewGridQuad = result.pagePreviewGridQuad;
+      state.geometry.pagePreviewGridBounds = result.pagePreviewGridBounds || null;
       state.runtime.appliedPostRotationDeg = config.postRotationDeg;
       state.source.rawPageContour = result.pageQuadPoints;
       stashOriginalMarkerDetections(state.geometry.alignmentInfo);
@@ -3865,6 +4086,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     lastProcessTimingSummary = finishTimingProfile(timingProfile);
     updatePageGridDetectionHeading(false);
     setStatus(buildStatusWithTiming(result.statusText));
+    schedulePreviewFrameWarmup(requestId);
     if (config.alignmentPipeline === "markerless") {
       scheduleMarkerlessStabilizationWarmup(requestId);
     }
@@ -4041,17 +4263,18 @@ function renderRectifiedPreview(rectifiedCanvas) {
     ctx.stroke();
   }
   if (showingPageWarpPreview) {
-    const insetPx = Math.max(
+    const insetXPx = Math.max(
       0,
-      Math.min(
-        Math.floor(fullRectifiedWidth * 0.5) - 1,
-        Math.min(Math.floor(fullRectifiedHeight * 0.5) - 1, config.paperMarginPx || 0)
-      )
+      Math.min(Math.floor(fullRectifiedWidth * 0.5) - 1, config.paperMarginXPx || 0)
     );
-    const insetTl = mapDisplayPointToPreview({ x: insetPx, y: insetPx });
-    const insetTr = mapDisplayPointToPreview({ x: fullRectifiedWidth - insetPx, y: insetPx });
-    const insetBr = mapDisplayPointToPreview({ x: fullRectifiedWidth - insetPx, y: fullRectifiedHeight - insetPx });
-    const insetBl = mapDisplayPointToPreview({ x: insetPx, y: fullRectifiedHeight - insetPx });
+    const insetYPx = Math.max(
+      0,
+      Math.min(Math.floor(fullRectifiedHeight * 0.5) - 1, config.paperMarginYPx || 0)
+    );
+    const insetTl = mapDisplayPointToPreview({ x: insetXPx, y: insetYPx });
+    const insetTr = mapDisplayPointToPreview({ x: fullRectifiedWidth - insetXPx, y: insetYPx });
+    const insetBr = mapDisplayPointToPreview({ x: fullRectifiedWidth - insetXPx, y: fullRectifiedHeight - insetYPx });
+    const insetBl = mapDisplayPointToPreview({ x: insetXPx, y: fullRectifiedHeight - insetYPx });
     ctx.strokeStyle = "rgba(255, 0, 255, 1)";
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -4063,17 +4286,18 @@ function renderRectifiedPreview(rectifiedCanvas) {
     ctx.stroke();
   }
   if (config.alignmentPipeline === "markerless" && !state.preview.showRectifiedDiagnostic) {
-    const insetPx = Math.max(
+    const insetXPx = Math.max(
       0,
-      Math.min(
-        Math.floor(fullRectifiedWidth * 0.5) - 1,
-        Math.min(Math.floor(fullRectifiedHeight * 0.5) - 1, config.paperMarginPx || 0)
-      )
+      Math.min(Math.floor(fullRectifiedWidth * 0.5) - 1, config.paperMarginXPx || 0)
     );
-    const insetTl = mapRectifiedPointToPreview({ x: insetPx, y: insetPx });
-    const insetTr = mapRectifiedPointToPreview({ x: fullRectifiedWidth - insetPx, y: insetPx });
-    const insetBr = mapRectifiedPointToPreview({ x: fullRectifiedWidth - insetPx, y: fullRectifiedHeight - insetPx });
-    const insetBl = mapRectifiedPointToPreview({ x: insetPx, y: fullRectifiedHeight - insetPx });
+    const insetYPx = Math.max(
+      0,
+      Math.min(Math.floor(fullRectifiedHeight * 0.5) - 1, config.paperMarginYPx || 0)
+    );
+    const insetTl = mapRectifiedPointToPreview({ x: insetXPx, y: insetYPx });
+    const insetTr = mapRectifiedPointToPreview({ x: fullRectifiedWidth - insetXPx, y: insetYPx });
+    const insetBr = mapRectifiedPointToPreview({ x: fullRectifiedWidth - insetXPx, y: fullRectifiedHeight - insetYPx });
+    const insetBl = mapRectifiedPointToPreview({ x: insetXPx, y: fullRectifiedHeight - insetYPx });
     ctx.strokeStyle = "rgb(0, 90, 220)";
     ctx.lineWidth = getPanelOverlayStrokeWidth(1);
     ctx.beginPath();
@@ -4300,7 +4524,7 @@ function setRectifiedPreviewMode(mode) {
 }
 
 /**
- * Temporarily switch Panel 2 to `Pre` while Grid Search Inset is being adjusted.
+ * Temporarily switch Panel 2 to `Pre` while Grid Search Inset X/Y is being adjusted.
  *
  * @returns {void}
  */
@@ -4322,7 +4546,7 @@ function beginSearchInsetPreviewOverride() {
 }
 
 /**
- * Restore the user's prior Panel 2 view after Grid Search Inset interaction ends.
+ * Restore the user's prior Panel 2 view after Grid Search Inset X/Y interaction ends.
  *
  * @returns {void}
  */
@@ -4536,15 +4760,11 @@ function mapRectifiedPointToPagePreview(point) {
   if (!alignmentInfo || !previewQuad || typeof cv === "undefined") {
     return { x: point.x, y: point.y };
   }
-  const tlMarker = alignmentInfo.markerLookup?.get(getMarkerKey(0, 0));
-  const trMarker = alignmentInfo.markerLookup?.get(getMarkerKey(alignmentInfo.cols, 0));
-  const brMarker = alignmentInfo.markerLookup?.get(getMarkerKey(alignmentInfo.cols, alignmentInfo.rows));
-  const blMarker = alignmentInfo.markerLookup?.get(getMarkerKey(0, alignmentInfo.rows));
-  const bounds = alignmentInfo.gridBounds;
-  const srcTl = tlMarker ? { x: tlMarker.detectedX, y: tlMarker.detectedY } : { x: bounds.left, y: bounds.top };
-  const srcTr = trMarker ? { x: trMarker.detectedX, y: trMarker.detectedY } : { x: bounds.left + bounds.width, y: bounds.top };
-  const srcBr = brMarker ? { x: brMarker.detectedX, y: brMarker.detectedY } : { x: bounds.left + bounds.width, y: bounds.top + bounds.height };
-  const srcBl = blMarker ? { x: blMarker.detectedX, y: blMarker.detectedY } : { x: bounds.left, y: bounds.top + bounds.height };
+  const bounds = state.geometry.pagePreviewGridBounds || alignmentInfo.gridBounds;
+  const srcTl = { x: bounds.left, y: bounds.top };
+  const srcTr = { x: bounds.left + bounds.width, y: bounds.top };
+  const srcBr = { x: bounds.left + bounds.width, y: bounds.top + bounds.height };
+  const srcBl = { x: bounds.left, y: bounds.top + bounds.height };
   const srcCorners = cv.matFromArray(4, 1, cv.CV_32FC2, [
     srcTl.x, srcTl.y,
     srcTr.x, srcTr.y,
@@ -4617,6 +4837,7 @@ function getRectifiedConvolutionCanvas(sourceCanvas) {
  * @returns {void}
  */
 function invalidateAppearanceCache() {
+  cancelPreviewFrameWarmup();
   state.frames.adjustedCache.clear();
   state.frames.adjustedOutputEpoch.clear();
 }
@@ -4740,6 +4961,7 @@ function bumpFrameOutputEpoch() {
  * @returns {void}
  */
 function clearFrameOutputCachesOnly() {
+  cancelPreviewFrameWarmup();
   state.frames.base = new Array(state.geometry.frameCount);
   state.frames.baseOutputEpoch = new Array(state.geometry.frameCount);
   state.frames.stabilizedCache.clear();
@@ -4769,6 +4991,7 @@ function invalidateFrameOutputCaches() {
  * @returns {void}
  */
 function invalidatePhaseAdjustedOutputCaches() {
+  cancelPreviewFrameWarmup();
   state.frames.phaseAdjustedCache.clear();
   state.frames.adjustedCache.clear();
   state.frames.adjustedOutputEpoch.clear();
@@ -4784,10 +5007,7 @@ function invalidatePhaseAdjustedOutputCaches() {
  */
 function rebuildAllFrameOutputCaches() {
   invalidateFrameOutputCaches();
-  const frameCount = state.geometry.frameCount;
-  for (let index = 0; index < frameCount; index += 1) {
-    getAdjustedFrameCanvas(index);
-  }
+  scheduleCurrentPreviewFrameWarmup();
 }
 
 /**
@@ -4797,10 +5017,7 @@ function rebuildAllFrameOutputCaches() {
  */
 function rebuildAllPhaseAdjustedOutputCaches() {
   invalidatePhaseAdjustedOutputCaches();
-  const frameCount = state.geometry.frameCount;
-  for (let index = 0; index < frameCount; index += 1) {
-    getAdjustedFrameCanvas(index);
-  }
+  scheduleCurrentPreviewFrameWarmup();
 }
 
 /**
@@ -4811,6 +5028,7 @@ function rebuildAllPhaseAdjustedOutputCaches() {
  * @returns {void}
  */
 function invalidateStabilizationOffsetsCache() {
+  cancelPreviewFrameWarmup();
   state.frames.stabilizationOffsets = null;
   state.frames.stabilizedCache.clear();
   state.frames.stabilizedOutputEpoch.clear();
@@ -4826,6 +5044,7 @@ function invalidateStabilizationOffsetsCache() {
  */
 function invalidateFrameCaches() {
   cancelStabilizationMeasurement();
+  cancelPreviewFrameWarmup();
   state.frames.outputEpoch += 1;
   clearFrameOutputCachesOnly();
   state.frames.stabilizationMatchData = null;
@@ -4940,19 +5159,35 @@ function getAffectedFrameIndicesForMarker(markerCol, markerRow) {
  *
  * @param {number} markerCol
  * @param {number} markerRow
- * @returns {void}
+ * @returns {number[] | null} affected frame indices, or null when stabilization makes the
+ * whole output sequence dependent on the edit
  */
 function invalidateFramesForMarker(markerCol, markerRow) {
-  state.frames.stabilizedCache.clear();
-  state.frames.phaseAdjustedCache.clear();
-  state.frames.stabilizationMatchData = null;
-  state.frames.stabilizationAverageReference = null;
-  state.frames.stabilizationOffsets = null;
-  state.frames.stabilizationPairwise = null;
-  state.frames.adjustedCache.clear();
-  for (const index of getAffectedFrameIndicesForMarker(markerCol, markerRow)) {
-    state.frames.base[index] = undefined;
+  const affected = getAffectedFrameIndicesForMarker(markerCol, markerRow);
+  const config = readConfig();
+  const stabilizationCanMoveUneditedFrames =
+    config.stabilizationEnabled &&
+    (config.stabilizationStrengthPct || 0) > 0;
+  if (stabilizationCanMoveUneditedFrames) {
+    state.frames.stabilizedCache.clear();
+    state.frames.phaseAdjustedCache.clear();
+    state.frames.stabilizationMatchData = null;
+    state.frames.stabilizationAverageReference = null;
+    state.frames.stabilizationOffsets = null;
+    state.frames.stabilizationPairwise = null;
+    state.frames.adjustedCache.clear();
+    state.frames.adjustedOutputEpoch.clear();
   }
+  for (const index of affected) {
+    state.frames.base[index] = undefined;
+    state.frames.baseOutputEpoch[index] = undefined;
+    state.frames.stabilizedCache.delete(index);
+    state.frames.stabilizedOutputEpoch.delete(index);
+    state.frames.phaseAdjustedCache.delete(index);
+    state.frames.adjustedCache.delete(index);
+    state.frames.adjustedOutputEpoch.delete(index);
+  }
+  return stabilizationCanMoveUneditedFrames ? null : affected;
 }
 
 /**
@@ -5413,7 +5648,9 @@ async function measureStabilizationEdgesChunked(frames, descriptors, token) {
 async function ensureStabilizationPairwiseMeasurements(options = {}) {
   const { redrawWhenReady = false } = options;
   const frameCount = state.geometry.frameCount;
-  if (frameCount <= 1) return null;
+  if (frameCount <= 1) {
+    return null;
+  }
   if (state.frames.stabilizationPairwise?.length) {
     return state.frames.stabilizationPairwise;
   }
@@ -5425,7 +5662,9 @@ async function ensureStabilizationPairwiseMeasurements(options = {}) {
   }
 
   const frames = getStabilizationMatchDataFrames();
-  if (!frames) return null;
+  if (!frames) {
+    return null;
+  }
   const descriptors = buildStabilizationEdgeDescriptors(frames.length);
   const token = state.processing.stabilizationMeasurementToken + 1;
   state.processing.stabilizationMeasurementToken = token;
@@ -5449,7 +5688,12 @@ async function ensureStabilizationPairwiseMeasurements(options = {}) {
         state.processing.stabilizationMeasurementRedrawPending = false;
         refreshStatusDisplay();
         if (needsRedraw && state.frames.stabilizationPairwise?.length) {
+          // If the user watched frames before the async pairwise measurements finished, those
+          // displayed outputs may be unstabilized. Once measurements are available, force derived
+          // outputs to rebuild and then warm the final stabilized frame cache exactly once.
+          invalidateStabilizationOffsetsCache();
           scheduleStabilizationPreviewUpdate();
+          schedulePreviewFrameWarmup(state.processing.requestId);
         }
       }
     }
@@ -5543,20 +5787,28 @@ function solveStabilizationOffsetField(edges, frameCount) {
  */
 function getStabilizationOffsets() {
   return timeProfiled("getStabilizationOffsets", () => {
-    if (!readConfig().stabilizationEnabled) return null;
+    if (!readConfig().stabilizationEnabled) {
+      return null;
+    }
     const frameCount = state.geometry.frameCount;
-    if (frameCount <= 1) return null;
+    if (frameCount <= 1) {
+      return null;
+    }
     if (state.frames.stabilizationOffsets?.length === frameCount) {
       return state.frames.stabilizationOffsets;
     }
     const sampleFrame = getStabilizationSourceFrameCanvas(0);
-    if (!sampleFrame) return null;
+    if (!sampleFrame) {
+      return null;
+    }
     const method = readConfig().stabilizationMethod;
     let offsets = null;
     if (method === "difference-from-average") {
       const reference = getAverageReferenceMatchData();
       const matchFrames = getStabilizationMatchDataFrames();
-      if (!reference || !matchFrames?.length) return null;
+      if (!reference || !matchFrames?.length) {
+        return null;
+      }
       offsets = matchFrames.map((frame) => {
         const shift = estimateLoopPairShift(reference, frame);
         return { x: shift.dx, y: shift.dy };
@@ -5587,8 +5839,12 @@ function getStabilizationOffsets() {
  */
 function scheduleMarkerlessStabilizationWarmup(requestId) {
   window.setTimeout(() => {
-    if (requestId !== state.processing.requestId) return;
-    if (!readConfig().stabilizationEnabled) return;
+    if (requestId !== state.processing.requestId) {
+      return;
+    }
+    if (!readConfig().stabilizationEnabled) {
+      return;
+    }
     scheduleCurrentStabilizationWarmup();
   }, 0);
 }
@@ -5603,9 +5859,15 @@ function scheduleMarkerlessStabilizationWarmup(requestId) {
  */
 function scheduleCurrentStabilizationWarmup() {
   window.setTimeout(() => {
-    if (readConfig().alignmentPipeline !== "markerless") return;
-    if (!readConfig().stabilizationEnabled) return;
-    if (state.processing.active) return;
+    if (readConfig().alignmentPipeline !== "markerless") {
+      return;
+    }
+    if (!readConfig().stabilizationEnabled) {
+      return;
+    }
+    if (state.processing.active) {
+      return;
+    }
     try {
       const warmupProfile = beginTimingProfile("Warmup");
       if (readConfig().stabilizationMethod === "difference-from-average") {
@@ -6774,12 +7036,13 @@ function applyMarkerOverride(tile, local, finalize) {
       state.preview.markerOverrideScrubbing = true;
     }
   }
+  let affectedMarkerFrames = null;
   if (isMarkerless && !finalize) {
     invalidateCurrentPreviewFrameForMarker(tile.col, tile.row);
   } else if (isMarkerless) {
     invalidateMarkerlessNudgedFramesForMarker(tile.col, tile.row);
   } else {
-    invalidateFramesForMarker(tile.col, tile.row);
+    affectedMarkerFrames = invalidateFramesForMarker(tile.col, tile.row);
   }
   syncMarkerEditingUi();
   if (finalize) {
@@ -6790,6 +7053,13 @@ function applyMarkerOverride(tile, local, finalize) {
     }
     renderCrossRoiGrid(state.geometry.alignmentInfo);
     scheduleStabilizationPreviewUpdate();
+    if (!isMarkerless) {
+      if (affectedMarkerFrames) {
+        scheduleCurrentPreviewFrameWarmupForSourceIndices(affectedMarkerFrames);
+      } else {
+        scheduleCurrentPreviewFrameWarmup();
+      }
+    }
     return;
   }
   scheduleStabilizationPreviewUpdate();
@@ -6821,14 +7091,22 @@ function restoreMarkerOverride(tile) {
     }
   }
   revokeGifUrl();
+  let affectedMarkerFrames = null;
   if (isMarkerless) {
     invalidateMarkerlessNudgedFramesForMarker(tile.col, tile.row);
   } else {
-    invalidateFramesForMarker(tile.col, tile.row);
+    affectedMarkerFrames = invalidateFramesForMarker(tile.col, tile.row);
   }
   syncMarkerEditingUi();
   renderCrossRoiGrid(state.geometry.alignmentInfo);
   scheduleStabilizationPreviewUpdate();
+  if (!isMarkerless) {
+    if (affectedMarkerFrames) {
+      scheduleCurrentPreviewFrameWarmupForSourceIndices(affectedMarkerFrames);
+    } else {
+      scheduleCurrentPreviewFrameWarmup();
+    }
+  }
 }
 
 function makeSettingsFilename(sourceFilename) {
@@ -6941,6 +7219,7 @@ function saveSettingsFile() {
 function setStatus(text) {
   syncStatusText(dom, state, text);
   updateStabilizationProgressUi();
+  updatePreviewFrameProgressUi();
   const hasLoadedImage = Boolean(state.source.filename || state.source.canvas);
   const showWarning = Boolean(state.runtime.pageBoundaryWarningVisible);
   if (hasLoadedImage && showWarning && dom.statusGroup) {

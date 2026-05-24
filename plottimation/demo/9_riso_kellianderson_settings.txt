@@ -1,5 +1,5 @@
 source_filename	9_riso_kellianderson.jpg
-source_credit	Riso by Kelli Anderson (@kellianderson)
+source_credit	"A" Riso by Kelli Anderson (@kellianderson)
 paper_preset	source
 paper_orientation	landscape
 paper_width	1831
@@ -9,7 +9,8 @@ frame_rows	14
 threshold_method	offset-peak
 threshold_offset	-20
 light_on_dark_design	false
-search_inset_margin_px	0
+search_inset_margin_x_px	0
+search_inset_margin_y_px	0
 boundary_threshold	8
 boundary_persistence_px	7
 post_rotation_deg	0

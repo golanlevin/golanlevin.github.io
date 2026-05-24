@@ -29,6 +29,8 @@ const RECTIFIED_PREVIEW_LONG_EDGE_PX = 2200;
 const NEAR_IDENTITY_PAGE_AREA_PCT = 0.998;
 const NEAR_IDENTITY_CORNER_TOLERANCE_PX = 2;
 const NEAR_IDENTITY_DIM_TOLERANCE_PX = 2;
+const PAGE_DETECTION_FALLBACK_LONG_EDGE_PX = 512;
+const BORDER_QUAD_REFINEMENT_MIN_AREA_PCT = 0.10;
 // High-resolution extraction should track the real source-image resolution instead of a fixed
 // paper-size number. The long edge of the extraction warp is capped at 90% of the source-image
 // diagonal so extraction preserves more detail while still preventing pathological warp sizes.
@@ -236,6 +238,7 @@ function clampPositiveConvolutionToUint8(conv32, target8) {
  *   pagePreviewWidth: number,
  *   pagePreviewHeight: number,
  *   pagePreviewGridQuad: {tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}} | null,
+ *   pagePreviewGridBounds: {left:number, top:number, width:number, height:number} | null,
  *   alignmentInfo: object,
  *   statusText: string,
  *   pageQuadPoints: {x:number, y:number}[],
@@ -279,6 +282,14 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
 
     // Detect the page quadrilateral in raw-photo coordinates.
     pageQuad = findLargestQuad(thresh, sourceCanvas.width * sourceCanvas.height);
+    pageQuad = refineBorderPageQuadWithDownscaledDetection(
+      grayImg,
+      pageQuad,
+      config.thresholdMethod,
+      config.thresholdOffset,
+      sourceCanvas.width,
+      sourceCanvas.height
+    );
     const ordered = orderCorners(pageQuad.points);
     throwIfAborted(requestId);
 
@@ -349,6 +360,9 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
       pageWarpHigh = null;
     }
     applyPostRectificationRotation(rectifiedWarp, config.postRotationDeg);
+    const pagePreviewGridBounds = rectifiedWarp.previewGridQuad
+      ? { ...rectifiedWarp.gridBounds }
+      : null;
     throwIfAborted(requestId);
 
     // Resolve the marker lattice if enabled; otherwise keep the nominal grid and unrefined ROI views.
@@ -361,7 +375,8 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
               config.frameRows,
               config.crossRoiScale,
               rectifiedWarp.gridBounds,
-              config.paperMarginPx,
+              config.paperMarginXPx,
+              config.paperMarginYPx,
               {
                 useDarkness: config.markerlessUseDarkness,
                 useTexture: config.markerlessUseTexture,
@@ -441,6 +456,7 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
       pagePreviewWidth: pageWarpPreviewWidth,
       pagePreviewHeight: pageWarpPreviewHeight,
       pagePreviewGridQuad: rectifiedWarp.previewGridQuad || null,
+      pagePreviewGridBounds,
       alignmentInfo,
       statusText,
       pageQuadPoints: pageQuad.points,
@@ -516,7 +532,7 @@ function shouldUseNearIdentityRectificationFastPath(pageQuad, ordered, pageSizeH
  * @param {{visionMat:cv.Mat, styledMat:cv.Mat, inverseTransform:number[]}} pageWarpHigh
  * @param {object} config
  * @param {boolean} useRectifiedAsSource
- * @returns {{visionMat:cv.Mat, styledMat:cv.Mat, gridBounds:{left:number, top:number, width:number, height:number}, includeCornerCrosses:boolean}}
+ * @returns {{visionMat:cv.Mat, styledMat:cv.Mat, gridBounds:{left:number, top:number, width:number, height:number}, includeCornerCrosses:boolean, previewGridQuad:{tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}}, previewGridBounds:{left:number, top:number, width:number, height:number}}}
  */
 function buildFrameGridRectification_fromCrosses(visionSrc, styledSrc, pageWarpHigh, config, useRectifiedAsSource) {
   // New path: detect the frame-grid bounds directly from cross activity instead of corner circles.
@@ -525,7 +541,8 @@ function buildFrameGridRectification_fromCrosses(visionSrc, styledSrc, pageWarpH
     config.frameCols,
     config.frameRows,
     {
-      paperMarginPx: config.paperMarginPx,
+      paperMarginXPx: config.paperMarginXPx,
+      paperMarginYPx: config.paperMarginYPx,
       boundarySensitivity: config.boundarySensitivity,
       boundaryPersistencePx: config.boundaryPersistencePx,
     }
@@ -551,7 +568,12 @@ function buildFrameGridRectification_fromCrosses(visionSrc, styledSrc, pageWarpH
     rectifiedSize,
     detectionPadding
   );
-  return { ...rectifiedWarp, includeCornerCrosses: true, previewGridQuad: coarseGridQuadHigh };
+  return {
+    ...rectifiedWarp,
+    includeCornerCrosses: true,
+    previewGridQuad: coarseGridQuadHigh,
+    previewGridBounds: { ...rectifiedWarp.gridBounds },
+  };
 }
 
 /**
@@ -805,6 +827,99 @@ function findLargestQuad(binaryMat, totalArea) {
 }
 
 /**
+ * If full-resolution thresholding collapses the whole photo into the largest contour, retry page
+ * detection on a small image. The low-res pass matches the live slider preview and is less prone to
+ * choosing a one-pixel-connected image border when the paper/background tones are close.
+ *
+ * This fallback is intentionally narrow: scanner-like inputs can still use the source boundary as
+ * the page when the downscaled pass does not find a substantial interior quad.
+ *
+ * @param {cv.Mat} grayImg
+ * @param {{points:{x:number,y:number}[], areaPx:number, quadAreaPx:number, areaPct:number}} pageQuad
+ * @param {string} thresholdMethod
+ * @param {number} thresholdOffset
+ * @param {number} sourceWidth
+ * @param {number} sourceHeight
+ * @returns {{points:{x:number,y:number}[], areaPx:number, quadAreaPx:number, areaPct:number}}
+ */
+function refineBorderPageQuadWithDownscaledDetection(
+  grayImg,
+  pageQuad,
+  thresholdMethod,
+  thresholdOffset,
+  sourceWidth,
+  sourceHeight
+) {
+  if (!isNearSourceBorderQuad(pageQuad?.points, sourceWidth, sourceHeight)) return pageQuad;
+
+  const sourceLongEdge = Math.max(sourceWidth, sourceHeight);
+  if (sourceLongEdge <= PAGE_DETECTION_FALLBACK_LONG_EDGE_PX) return pageQuad;
+
+  const scale = PAGE_DETECTION_FALLBACK_LONG_EDGE_PX / sourceLongEdge;
+  const previewWidth = Math.max(1, Math.round(sourceWidth * scale));
+  const previewHeight = Math.max(1, Math.round(sourceHeight * scale));
+  const previewGray = new cv.Mat();
+  const previewThresh = new cv.Mat();
+  try {
+    cv.resize(
+      grayImg,
+      previewGray,
+      new cv.Size(previewWidth, previewHeight),
+      0,
+      0,
+      cv.INTER_AREA
+    );
+    applyPaperThreshold(previewGray, previewThresh, thresholdMethod, thresholdOffset);
+    const previewQuad = findLargestQuad(previewThresh, previewWidth * previewHeight);
+    if (isNearSourceBorderQuad(previewQuad.points, previewWidth, previewHeight)) return pageQuad;
+    if (previewQuad.areaPct < BORDER_QUAD_REFINEMENT_MIN_AREA_PCT) return pageQuad;
+
+    const scaledPoints = previewQuad.points.map((point) => ({
+      x: point.x / scale,
+      y: point.y / scale,
+    }));
+    const scaledContourArea = previewQuad.areaPx / (scale * scale);
+    const scaledQuadArea = getPolygonArea(scaledPoints);
+    return {
+      points: scaledPoints,
+      areaPx: scaledContourArea,
+      quadAreaPx: scaledQuadArea,
+      areaPct: scaledContourArea / Math.max(1, sourceWidth * sourceHeight),
+    };
+  } catch {
+    return pageQuad;
+  } finally {
+    previewGray.delete();
+    previewThresh.delete();
+  }
+}
+
+/**
+ * Detect quads that coincide with the raw image boundary, usually meaning the mask selected the
+ * entire photograph rather than the page inside it.
+ *
+ * @param {{x:number,y:number}[] | null | undefined} points
+ * @param {number} width
+ * @param {number} height
+ * @returns {boolean}
+ */
+function isNearSourceBorderQuad(points, width, height) {
+  if (!Array.isArray(points) || points.length !== 4) return false;
+  const ordered = orderCorners(points);
+  const tolerance = NEAR_IDENTITY_CORNER_TOLERANCE_PX;
+  const expected = [
+    { actual: ordered.tl, expected: { x: 0, y: 0 } },
+    { actual: ordered.tr, expected: { x: width - 1, y: 0 } },
+    { actual: ordered.br, expected: { x: width - 1, y: height - 1 } },
+    { actual: ordered.bl, expected: { x: 0, y: height - 1 } },
+  ];
+  return expected.every(({ actual, expected }) =>
+    Math.abs(actual.x - expected.x) <= tolerance &&
+    Math.abs(actual.y - expected.y) <= tolerance
+  );
+}
+
+/**
  * Estimate a higher-resolution page warp size from the raw quad area while never going below the low-res warp.
  *
  * @param {number} quadAreaPx
@@ -994,7 +1109,7 @@ function mapQuadThroughHomography(quad, homography) {
  * @param {cv.Mat} pageMat
  * @param {number} cols
  * @param {number} rows
- * @param {{paperMarginPx?:number, boundarySensitivity?:number, boundaryPersistencePx?:number}} [options={}]
+ * @param {{paperMarginXPx?:number, paperMarginYPx?:number, boundarySensitivity?:number, boundaryPersistencePx?:number}} [options={}]
  * @returns {{tl:{x:number,y:number}, tr:{x:number,y:number}, br:{x:number,y:number}, bl:{x:number,y:number}}}
  */
 function findFrameGridQuadFromCrosses(pageMat, cols, rows, options = {}) {
@@ -1005,11 +1120,12 @@ function findFrameGridQuadFromCrosses(pageMat, cols, rows, options = {}) {
   let roi = null;
 
   try {
-    const insetPx = Math.max(0, Math.min(256, options.paperMarginPx ?? 80));
-    const roiWidth = Math.max(1, gray.cols - insetPx * 2);
-    const roiHeight = Math.max(1, gray.rows - insetPx * 2);
+    const insetXPx = Math.max(0, Math.min(Math.floor(gray.cols * 0.5) - 1, 256, options.paperMarginXPx ?? 80));
+    const insetYPx = Math.max(0, Math.min(Math.floor(gray.rows * 0.5) - 1, 256, options.paperMarginYPx ?? 80));
+    const roiWidth = Math.max(1, gray.cols - insetXPx * 2);
+    const roiHeight = Math.max(1, gray.rows - insetYPx * 2);
     // Ignore a tunable paper margin so page-edge clutter does not pollute the boundary sweeps.
-    roi = gray.roi(new cv.Rect(insetPx, insetPx, roiWidth, roiHeight));
+    roi = gray.roi(new cv.Rect(insetXPx, insetYPx, roiWidth, roiHeight));
     roi.convertTo(src32, cv.CV_32F);
     // Keep the cross kernel unnormalized so true cross matches produce the strongest response.
     cv.filter2D(src32, conv32, cv.CV_32F, kernelMat, new cv.Point(-1, -1), 0, cv.BORDER_CONSTANT);
@@ -1034,10 +1150,10 @@ function findFrameGridQuadFromCrosses(pageMat, cols, rows, options = {}) {
     const coarseBottom = bottom;
 
     return {
-      tl: { x: insetPx + coarseLeft, y: insetPx + coarseTop },
-      tr: { x: insetPx + coarseRight, y: insetPx + coarseTop },
-      br: { x: insetPx + coarseRight, y: insetPx + coarseBottom },
-      bl: { x: insetPx + coarseLeft, y: insetPx + coarseBottom },
+      tl: { x: insetXPx + coarseLeft, y: insetYPx + coarseTop },
+      tr: { x: insetXPx + coarseRight, y: insetYPx + coarseTop },
+      br: { x: insetXPx + coarseRight, y: insetYPx + coarseBottom },
+      bl: { x: insetXPx + coarseLeft, y: insetYPx + coarseBottom },
     };
   } finally {
     roi?.delete();
@@ -1718,6 +1834,7 @@ function buildUnrefinedCrossRegionInfo(rectifiedMat, cols, rows, reason = "disab
  * @param {number} rows
  * @param {number} [crossRoiScale=0.75]
  * @param {{left:number, top:number, width:number, height:number} | null} [gridBounds=null]
+ * @param {{markerType?:string, includeCornerCrosses?:boolean, detectCrossesWithConvolution?:boolean}} [options={}]
  * @returns {object}
  */
 function buildCrossAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 0.75, gridBounds = null, options = {}) {
@@ -1820,6 +1937,9 @@ function buildCrossAlignmentData(rectifiedMat, cols, rows, crossRoiScale = 0.75,
  * @param {number} rows
  * @param {number} [crossRoiScale=0.75]
  * @param {{left:number, top:number, width:number, height:number} | null} [gridBounds=null]
+ * @param {number} [paperMarginXPx=0]
+ * @param {number} [paperMarginYPx=0]
+ * @param {{useDarkness?:boolean, useTexture?:boolean, useVariance?:boolean, lightOnDark?:boolean, blurScale?:number}} [gutterMetricFlags={}]
  * @returns {object}
  */
 function buildMarkerlessAlignmentData(
@@ -1828,7 +1948,8 @@ function buildMarkerlessAlignmentData(
   rows,
   crossRoiScale = 0.75,
   gridBounds = null,
-  paperMarginPx = 0,
+  paperMarginXPx = 0,
+  paperMarginYPx = 0,
   gutterMetricFlags = {},
 ) {
   const bounds = gridBounds || { left: 0, top: 0, width: rectifiedMat.cols, height: rectifiedMat.rows };
@@ -1836,7 +1957,7 @@ function buildMarkerlessAlignmentData(
   const boundedGray = extractBoundsRoi(grayMat, bounds);
 
   try {
-    const estimate = estimateMarkerlessGrid(boundedGray, cols, rows, paperMarginPx, gutterMetricFlags);
+    const estimate = estimateMarkerlessGrid(boundedGray, cols, rows, paperMarginXPx, paperMarginYPx, gutterMetricFlags);
     if (!estimate) {
       return buildUnrefinedCrossRegionInfo(
         rectifiedMat,
@@ -1950,16 +2071,18 @@ function buildMarkerlessAlignmentData(
  * - pitch comes from seeded autocorrelation on a reduced blurred image
  * - phase comes from 1D gutter profiles built from darkness / edge-energy / variance cues
  *
- * Grid Search Inset only changes the pitch seed region. That lets the user ignore large blank
+ * Grid Search Inset X/Y only changes the pitch seed region. That lets the user ignore large blank
  * page margins without changing the final phase search model.
  *
  * @param {cv.Mat} grayMat
  * @param {number} cols
  * @param {number} rows
+ * @param {number} [paperMarginXPx=0]
+ * @param {number} [paperMarginYPx=0]
  * @param {{useDarkness?:boolean, useTexture?:boolean, useVariance?:boolean, lightOnDark?:boolean, blurScale?:number}} [gutterMetricFlags={}]
  * @returns {{pitchX:number, pitchY:number, startX:number, startY:number, xPositions:number[], yPositions:number[], workingBlurCanvas:HTMLCanvasElement} | null}
  */
-function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0, gutterMetricFlags = {}) {
+function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginXPx = 0, paperMarginYPx = 0, gutterMetricFlags = {}) {
   const working = new cv.Mat();
   const blurred = new cv.Mat();
   const insetRoi = new cv.Mat();
@@ -1977,16 +2100,17 @@ function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0, gutterMe
     const blurKernel = Math.max(3, ((Math.round(baseBlurKernel * blurScale) | 1)));
     cv.GaussianBlur(working, blurred, new cv.Size(blurKernel, blurKernel), 0, 0, cv.BORDER_REPLICATE);
 
-    // Apply Grid Search Inset in the reduced-resolution domain used for seeded autocorrelation.
+    // Apply Grid Search Inset X/Y in the reduced-resolution domain used for seeded autocorrelation.
     // This keeps large outer page margins from dominating the nominal period estimate.
-    const insetSmall = Math.max(0, Math.round(Math.max(0, paperMarginPx) * scale));
-    const insetWidth = Math.max(1, blurred.cols - (insetSmall * 2));
-    const insetHeight = Math.max(1, blurred.rows - (insetSmall * 2));
+    const insetXSmall = Math.max(0, Math.min(Math.floor(blurred.cols * 0.5) - 1, Math.round(Math.max(0, paperMarginXPx) * scale)));
+    const insetYSmall = Math.max(0, Math.min(Math.floor(blurred.rows * 0.5) - 1, Math.round(Math.max(0, paperMarginYPx) * scale)));
+    const insetWidth = Math.max(1, blurred.cols - (insetXSmall * 2));
+    const insetHeight = Math.max(1, blurred.rows - (insetYSmall * 2));
     const useInsetForPitch =
       insetWidth >= MARKERLESS_MIN_PITCH_PX * Math.max(1, cols) &&
       insetHeight >= MARKERLESS_MIN_PITCH_PX * Math.max(1, rows);
     const pitchSource = useInsetForPitch
-      ? blurred.roi(new cv.Rect(insetSmall, insetSmall, insetWidth, insetHeight)).clone()
+      ? blurred.roi(new cv.Rect(insetXSmall, insetYSmall, insetWidth, insetHeight)).clone()
       : blurred.clone();
     insetRoi.create(pitchSource.rows, pitchSource.cols, pitchSource.type());
     pitchSource.copyTo(insetRoi);
@@ -2020,14 +2144,15 @@ function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0, gutterMe
     const scaleY = grayMat.rows / blurred.rows;
     const predictedPitchX = pitchXSmall * scaleX;
     const predictedPitchY = pitchYSmall * scaleY;
-    const insetHigh = Math.max(0, Math.round(Math.max(0, paperMarginPx)));
-    const insetWidthHigh = Math.max(1, grayMat.cols - (insetHigh * 2));
-    const insetHeightHigh = Math.max(1, grayMat.rows - (insetHigh * 2));
+    const insetXHigh = Math.max(0, Math.min(Math.floor(grayMat.cols * 0.5) - 1, Math.round(Math.max(0, paperMarginXPx))));
+    const insetYHigh = Math.max(0, Math.min(Math.floor(grayMat.rows * 0.5) - 1, Math.round(Math.max(0, paperMarginYPx))));
+    const insetWidthHigh = Math.max(1, grayMat.cols - (insetXHigh * 2));
+    const insetHeightHigh = Math.max(1, grayMat.rows - (insetYHigh * 2));
     const useInsetForPitchHigh = useInsetForPitch &&
       insetWidthHigh >= 1 &&
       insetHeightHigh >= 1;
     pitchSourceHigh = useInsetForPitchHigh
-      ? grayMat.roi(new cv.Rect(insetHigh, insetHigh, insetWidthHigh, insetHeightHigh)).clone()
+      ? grayMat.roi(new cv.Rect(insetXHigh, insetYHigh, insetWidthHigh, insetHeightHigh)).clone()
       : grayMat.clone();
     // Refine the coarse low-resolution lag on the original-resolution bounded sheet, but only in a
     // small local window so we keep near-full pitch precision without paying for a full wide-window
@@ -2048,8 +2173,8 @@ function estimateMarkerlessGrid(grayMat, cols, rows, paperMarginPx = 0, gutterMe
     );
     const refineOffsetX = pitchX - Math.round(predictedPitchX);
     const refineOffsetY = pitchY - Math.round(predictedPitchY);
-    const insetOffsetX = useInsetForPitch ? (insetSmall * scaleX) : 0;
-    const insetOffsetY = useInsetForPitch ? (insetSmall * scaleY) : 0;
+    const insetOffsetX = useInsetForPitch ? (insetXSmall * scaleX) : 0;
+    const insetOffsetY = useInsetForPitch ? (insetYSmall * scaleY) : 0;
     // Phase is solved in padded/inset working coordinates, then translated back into the original
     // bounded rectified-sheet coordinates used by the rest of the pipeline.
     const startX = ((startXSmall - padXSmall) * scaleX) + insetOffsetX;

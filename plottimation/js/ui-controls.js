@@ -136,6 +136,7 @@ function attachAlignmentPipelineControls({
  *   updateSliderReadouts: () => void,
  *   invalidateStabilizationCache: () => void,
  *   scheduleStabilizationPreviewUpdate: () => void,
+ *   schedulePreviewFrameWarmup: () => void,
  *   syncAlignmentMarkerUi: () => void,
  *   warmCurrentStabilizationMethod: () => void
  * }} deps
@@ -148,6 +149,7 @@ function attachStabilizationMethodControls({
   updateSliderReadouts,
   invalidateStabilizationCache,
   scheduleStabilizationPreviewUpdate,
+  schedulePreviewFrameWarmup,
   syncAlignmentMarkerUi,
   warmCurrentStabilizationMethod,
 }) {
@@ -163,6 +165,7 @@ function attachStabilizationMethodControls({
       invalidateStabilizationCache();
       if (!alignmentDom.stabilizationEnabled?.checked) {
         scheduleStabilizationPreviewUpdate();
+        schedulePreviewFrameWarmup();
         return;
       }
       setGeometryProcessingCursor(true);
@@ -170,6 +173,7 @@ function attachStabilizationMethodControls({
         try {
           warmCurrentStabilizationMethod();
           scheduleStabilizationPreviewUpdate();
+          schedulePreviewFrameWarmup();
         } catch (error) {
           console.error(error);
         } finally {
@@ -235,9 +239,9 @@ function attachAlignmentMarkerTypeControls({
 }
 
 /**
- * Wire `Grid Search Inset`.
+ * Wire `Grid Search Inset X/Y`.
  *
- * In markerless mode this slider behaves like a scrubbed preview control: dragging updates only
+ * In markerless mode these sliders behave like scrubbed preview controls: dragging updates only
  * the rectified-sheet ROI overlay immediately, while the expensive reprocess waits until release.
  * In marker mode it stays a regular geometry-affecting control.
  *
@@ -270,7 +274,10 @@ function attachMarkerlessSearchInsetControls({
   const alignmentDom = dom.alignment;
   const pageDetectionDom = dom.pageDetection;
   const isMarkerless = () => alignmentDom.alignmentPipelineMarkerless.checked;
-  const paperMargin = pageDetectionDom.paperMargin;
+  const searchInsetInputs = [
+    pageDetectionDom.paperMarginX,
+    pageDetectionDom.paperMarginY,
+  ].filter(Boolean);
   const finishSearchInsetInteraction = () => {
     if (isMarkerless()) {
       endMarkerlessPhaseScrub();
@@ -278,37 +285,39 @@ function attachMarkerlessSearchInsetControls({
     endSearchInsetPreviewOverride();
   };
 
-  paperMargin.addEventListener("pointerdown", () => {
-    beginSearchInsetPreviewOverride();
-    if (!isMarkerless()) return;
-    beginMarkerlessPhaseScrub();
-  });
-  paperMargin.addEventListener("pointerup", () => {
-    finishSearchInsetInteraction();
-  });
-  paperMargin.addEventListener("pointercancel", () => {
-    finishSearchInsetInteraction();
-  });
-  paperMargin.addEventListener("blur", () => {
-    finishSearchInsetInteraction();
-  });
-  paperMargin.addEventListener("input", () => {
-    revokeGifUrl();
-    updateSliderReadouts();
-    beginSearchInsetPreviewOverride();
-    if (state.preview.rectifiedCanvas) {
-      renderRectifiedPreview(state.preview.rectifiedCanvas);
-    }
-    if (isMarkerless()) {
+  searchInsetInputs.forEach((input) => {
+    input.addEventListener("pointerdown", () => {
+      beginSearchInsetPreviewOverride();
+      if (!isMarkerless()) return;
       beginMarkerlessPhaseScrub();
-      return;
-    }
-    scheduleProcess(700);
-  });
-  paperMargin.addEventListener("change", () => {
-    revokeGifUrl();
-    finishSearchInsetInteraction();
-    scheduleProcess();
+    });
+    input.addEventListener("pointerup", () => {
+      finishSearchInsetInteraction();
+    });
+    input.addEventListener("pointercancel", () => {
+      finishSearchInsetInteraction();
+    });
+    input.addEventListener("blur", () => {
+      finishSearchInsetInteraction();
+    });
+    input.addEventListener("input", () => {
+      revokeGifUrl();
+      updateSliderReadouts();
+      beginSearchInsetPreviewOverride();
+      if (state.preview.rectifiedCanvas) {
+        renderRectifiedPreview(state.preview.rectifiedCanvas);
+      }
+      if (isMarkerless()) {
+        beginMarkerlessPhaseScrub();
+        return;
+      }
+      scheduleProcess(700);
+    });
+    input.addEventListener("change", () => {
+      revokeGifUrl();
+      finishSearchInsetInteraction();
+      scheduleProcess();
+    });
   });
 }
 
@@ -329,7 +338,8 @@ function attachMarkerlessSearchInsetControls({
  *   invalidateCurrentPreviewStabilizationCaches: () => void,
  *   invalidateStabilizedOutputCaches: () => void,
  *   invalidateStabilizationOffsetsCache: () => void,
- *   scheduleStabilizationPreviewUpdate: () => void
+ *   scheduleStabilizationPreviewUpdate: () => void,
+ *   schedulePreviewFrameWarmup: () => void,
  * }} deps
  * @returns {void}
  */
@@ -344,6 +354,7 @@ function attachStabilizationControls({
   invalidateStabilizedOutputCaches,
   invalidateStabilizationOffsetsCache,
   scheduleStabilizationPreviewUpdate,
+  schedulePreviewFrameWarmup,
 }) {
   const alignmentDom = dom.alignment;
   if (alignmentDom.stabilizationEnabled) {
@@ -356,6 +367,7 @@ function attachStabilizationControls({
             updateSliderReadouts();
             invalidateStabilizedOutputCaches();
             scheduleStabilizationPreviewUpdate();
+            schedulePreviewFrameWarmup();
           } finally {
             requestAnimationFrame(() => {
               setGeometryProcessingCursor(false);
@@ -382,6 +394,7 @@ function attachStabilizationControls({
       updateSliderReadouts();
       onChangeInvalidate();
       scheduleStabilizationPreviewUpdate();
+      schedulePreviewFrameWarmup();
       endStabilizationStrengthScrub();
     });
   };
@@ -408,6 +421,7 @@ function attachStabilizationControls({
  *   updateSliderReadouts: () => void,
  *   invalidateCurrentPreviewFrameCaches: () => void,
  *   scheduleMarkerlessPhasePreviewUpdate: () => void,
+ *   schedulePreviewFrameWarmup: () => void,
  *   drawCurrentGifPreview: () => void
  * }} deps
  * @returns {void}
@@ -421,6 +435,7 @@ function attachMarkerlessPhaseControls({
   updateSliderReadouts,
   invalidateCurrentPreviewFrameCaches,
   scheduleMarkerlessPhasePreviewUpdate,
+  schedulePreviewFrameWarmup,
   drawCurrentGifPreview,
 }) {
   const alignmentDom = dom.alignment;
@@ -448,6 +463,7 @@ function attachMarkerlessPhaseControls({
       // frame without forcing an eager whole-batch rebuild on release.
       endMarkerlessPhaseScrub();
       drawCurrentGifPreview();
+      schedulePreviewFrameWarmup();
     };
     input.addEventListener("pointerdown", () => {
       beginMarkerlessPhaseScrub();
@@ -553,6 +569,7 @@ function attachMarkerlessPhaseMetricToggles({
  *   scheduleStabilizationPreviewUpdate: () => void,
  *   scheduleMarkerlessPhasePreviewUpdate: () => void,
  *   schedulePostRotationPreviewUpdate: () => void,
+ *   schedulePreviewFrameWarmup: () => void,
  *   runTimedHeavyPath: <T>(label:string, fn:() => T) => T,
  *   warmCurrentStabilizationMethod: () => void,
  *   beginStabilizationStrengthScrub: () => void,
@@ -622,6 +639,7 @@ export function attachUi({
   scheduleStabilizationPreviewUpdate,
   scheduleMarkerlessPhasePreviewUpdate,
   schedulePostRotationPreviewUpdate,
+  schedulePreviewFrameWarmup,
   runTimedHeavyPath,
   warmCurrentStabilizationMethod,
   beginStabilizationStrengthScrub,
@@ -817,6 +835,7 @@ export function attachUi({
     updateSliderReadouts,
     invalidateStabilizationCache,
     scheduleStabilizationPreviewUpdate,
+    schedulePreviewFrameWarmup,
     syncAlignmentMarkerUi,
     warmCurrentStabilizationMethod,
   });
@@ -927,6 +946,7 @@ export function attachUi({
     invalidateStabilizedOutputCaches,
     invalidateStabilizationOffsetsCache,
     scheduleStabilizationPreviewUpdate,
+    schedulePreviewFrameWarmup,
   });
   attachMarkerlessPhaseControls({
     dom,
@@ -937,6 +957,7 @@ export function attachUi({
     updateSliderReadouts,
     invalidateCurrentPreviewFrameCaches,
     scheduleMarkerlessPhasePreviewUpdate,
+    schedulePreviewFrameWarmup,
     drawCurrentGifPreview,
   });
   attachMarkerlessPhaseMetricToggles({
@@ -1029,6 +1050,7 @@ export function attachUi({
       runTimedHeavyPath("Heavy path: preview-redraw", () => {
         drawCurrentGifPreview();
       });
+      schedulePreviewFrameWarmup();
       return;
     }
     const redraw = () => {
@@ -1039,6 +1061,9 @@ export function attachUi({
         if (requiresFrameCacheRebuild(input)) rebuildAllFrameOutputCaches();
         drawCurrentGifPreview();
       });
+      if (!requiresFrameCacheRebuild(input)) {
+        schedulePreviewFrameWarmup();
+      }
     };
     if (!showBusyCursor) {
       redraw();

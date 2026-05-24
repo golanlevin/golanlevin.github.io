@@ -125,7 +125,16 @@ export function applyLoadedSettingsText({
   setIfPresent("threshold_method", dom.thresholdMethod);
   setIfPresent("threshold_offset", dom.thresholdOffset);
   setCheckedIfPresent("light_on_dark_design", dom.lightOnDarkDesign);
-  setIfPresent("search_inset_margin_px", dom.paperMargin);
+  if (entries.has("search_inset_margin_x_px") || entries.has("search_inset_margin_y_px")) {
+    const insetX = entries.get("search_inset_margin_x_px") ?? entries.get("search_inset_margin_y_px");
+    const insetY = entries.get("search_inset_margin_y_px") ?? entries.get("search_inset_margin_x_px");
+    if (insetX !== undefined && dom.paperMarginX) dom.paperMarginX.value = String(insetX);
+    if (insetY !== undefined && dom.paperMarginY) dom.paperMarginY.value = String(insetY);
+  } else if (entries.has("search_inset_margin_px")) {
+    // Legacy settings used one value for both axes.
+    setIfPresent("search_inset_margin_px", dom.paperMarginX);
+    setIfPresent("search_inset_margin_px", dom.paperMarginY);
+  }
   setIfPresent("boundary_threshold", dom.boundarySensitivity);
   setIfPresent("boundary_persistence_px", dom.boundaryPersistence);
   setIfPresent("post_rotation_deg", dom.postRotation);
@@ -272,7 +281,8 @@ export function buildSettingsTsv({
     ["threshold_method", config.thresholdMethod],
     ["threshold_offset", String(config.thresholdOffset)],
     ["light_on_dark_design", String(config.lightOnDarkDesign)],
-    ["search_inset_margin_px", String(config.paperMarginPx)],
+    ["search_inset_margin_x_px", String(config.paperMarginXPx)],
+    ["search_inset_margin_y_px", String(config.paperMarginYPx)],
     ["boundary_threshold", String(config.boundarySensitivity)],
     ["boundary_persistence_px", String(config.boundaryPersistencePx)],
     ["post_rotation_deg", String(config.postRotationDeg)],

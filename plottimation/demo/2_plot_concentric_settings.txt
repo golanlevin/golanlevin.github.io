@@ -9,12 +9,15 @@ frame_rows	4
 threshold_method	offset-peak
 threshold_offset	-20
 light_on_dark_design	false
-search_inset_margin_px	80
+search_inset_margin_x_px	80
+search_inset_margin_y_px	160
 boundary_threshold	8
 boundary_persistence_px	7
+post_rotation_deg	0
 alignment_pipeline	markers
 stabilization_method	pairwise-cyclic
 stabilization_enabled	false
+stabilization_strength	100
 alignment_marker_type	crosses
 alignment_marker_region_scale_pct	52
 stabilization_lambda	0.01
@@ -36,7 +39,7 @@ vibrance	25
 color_temperature	0
 unsharp_amount	32
 unsharp_radius	19.4
-invert	true
+invert	false
 fps	20
 loop_count	1
 frame_count_to_export	20

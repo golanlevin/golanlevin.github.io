@@ -8,7 +8,8 @@ frame_cols	6
 frame_rows	6
 threshold_method	offset-peak
 threshold_offset	-20
-search_inset_margin_px	80
+search_inset_margin_x_px	80
+search_inset_margin_y_px	80
 boundary_threshold	8
 boundary_persistence_px	7
 alignment_marker_type	crosses

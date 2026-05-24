@@ -28,7 +28,8 @@ export const SETTINGS_DEFAULTS = {
     thresholdMethod: "offset-peak",
     thresholdOffset: -20,
     lightOnDarkDesign: false,
-    paperMarginPx: 80,
+    paperMarginXPx: 80,
+    paperMarginYPx: 80,
     boundarySensitivity: 8.0,
     boundaryPersistencePx: 7,
     postRotationDeg: 0,
@@ -131,7 +132,8 @@ export function applyNonLayoutDefaults(dom) {
   if (dom.lightOnDarkDesign) {
     dom.lightOnDarkDesign.checked = SETTINGS_DEFAULTS.detection.lightOnDarkDesign;
   }
-  dom.paperMargin.value = String(SETTINGS_DEFAULTS.detection.paperMarginPx);
+  dom.paperMarginX.value = String(SETTINGS_DEFAULTS.detection.paperMarginXPx);
+  dom.paperMarginY.value = String(SETTINGS_DEFAULTS.detection.paperMarginYPx);
   dom.boundarySensitivity.value = SETTINGS_DEFAULTS.detection.boundarySensitivity.toFixed(1);
   dom.boundaryPersistence.value = String(SETTINGS_DEFAULTS.detection.boundaryPersistencePx);
   if (dom.postRotation) {

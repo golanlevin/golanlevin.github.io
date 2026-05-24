@@ -90,11 +90,11 @@ Current support width:
 The phase is not found by local peak picking. It is found by testing periodic lattice starts and
 choosing the one whose expected gutter positions land on the strongest combined gutter signal.
 
-### Grid Search Inset
+### Grid Search Inset X/Y
 
 In markerless mode:
 
-- `Grid Search Inset` is used to define the ROI that seeds pitch estimation
+- `Grid Search Inset X` and `Grid Search Inset Y` define the horizontal and vertical ROI that seeds pitch estimation
 - it is visualized in `Rectified Sheet` as a blue rectangle
 - a value of `0` is valid and is the markerless default
 
@@ -219,7 +219,7 @@ display preview:
 Overlays currently include:
 
 - blue frame-grid search quad when showing the full page warp
-- magenta Grid Search Inset rectangle when showing the full page warp
+- magenta Grid Search Inset X/Y rectangle when showing the full page warp
 - blue inset ROI rectangle in markerless mode
 - green current-frame quad
 - green connected edge preview while actively editing a marker/corner override
