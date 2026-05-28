@@ -1447,9 +1447,13 @@ function previewFrameWarmupShouldWaitForStabilization() {
 }
 
 /**
- * Build the preview/export frame outputs in small RAF slices so playback stops paying the full
- * extraction/resampling cost one frame at a time.
+ * Build selected final preview/export frame outputs in small RAF slices.
  *
+ * This is shared by whole-sequence warmup and targeted marker-override warmup. It deliberately
+ * warms source-frame indices rather than preview-sequence indices because ordering modes can repeat
+ * or reverse the same underlying source frame.
+ *
+ * @param {number[]} sourceIndices
  * @param {number} requestId
  * @returns {void}
  */
@@ -1508,8 +1512,7 @@ function schedulePreviewFrameWarmupForSourceIndices(sourceIndices, requestId) {
 }
 
 /**
- * Build the preview/export frame outputs in small RAF slices so playback stops paying the full
- * extraction/resampling cost one frame at a time.
+ * Warm every source frame currently reachable through preview/export ordering.
  *
  * @param {number} requestId
  * @returns {void}
@@ -5155,7 +5158,9 @@ function getAffectedFrameIndicesForMarker(markerCol, markerRow) {
  * Invalidate only the extracted/adjusted frames touched by one edited marker.
  *
  * This keeps interactive marker dragging responsive by avoiding unnecessary re-extraction of
- * frames that do not depend on the moved marker.
+ * frames that do not depend on the moved marker. Stabilization is the exception: once enabled with
+ * nonzero strength, a changed source frame can alter the solved offset field, so callers must treat
+ * a null return value as a whole-sequence dependency.
  *
  * @param {number} markerCol
  * @param {number} markerRow

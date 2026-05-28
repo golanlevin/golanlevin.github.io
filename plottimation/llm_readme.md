@@ -1,6 +1,10 @@
 # Plottimation Web Tool: Technical Handoff
 
-This file is a technical handoff for future agents. Additionally:
+This file is a technical handoff for future agents:
+
+`codex resume 019dd258-f4b8-70b0-a8c4-0783ed8eb9df`
+
+Additionally:
 
 * Repo-level rules, workflow expectations, and durable invariants live in [AGENTS.md](/Users/gl/Desktop/plottimation/plottimation_webtool/AGENTS.md).
 * User-facing explanations belong in [documentation.md](/Users/gl/Desktop/plottimation/plottimation_webtool/documentation.md).
@@ -184,6 +188,58 @@ This is a fragile integration point. If playback/export order changes, check:
 - rectified-sheet green quad
 - omitted red quads
 - GIF/MP4/ZIP frame counts
+
+## Preview Frame Warmup
+
+Final preview/export frames are not the raw canvases returned by `runPipeline()`.
+
+After geometry extraction, each displayed/exported frame may still need:
+
+- source-cell extraction from `baseRectifiedMat`
+- post-crop flip/rotation
+- output-size scaling and resampling
+- stabilization
+- markerless phase/drift/corner nudges
+- appearance filters
+
+These final canvases are cached lazily through `getAdjustedFrameCanvas()`. To avoid silent playback
+lag where the animation builds those canvases one frame at a time, `js/app.js` schedules chunked
+warmup with `requestAnimationFrame`.
+
+User-visible behavior:
+
+- the Status panel shows `Processing frames n/m` with a progress bar
+- the `Rectified Sheet` header shows the same progress text
+- if stabilization progress is also active, the header uses compact labels such as
+  `Stabilizing i/j; Processing m/n`
+
+Important implementation details:
+
+- `schedulePreviewFrameWarmupForSourceIndices()` can warm a subset of source frames; this is used by
+  marker overrides so moving one marker does not unnecessarily regenerate the whole animation
+- `schedulePreviewFrameWarmup()` warms the current ordered preview/export source-frame set
+- pairwise markerless stabilization intentionally blocks final frame warmup until pairwise
+  measurements exist; otherwise the warmup would build unstabilized frames and immediately discard
+  them when measurements finish
+- synchronous all-frame rebuilds should be avoided unless there is a specific export-time reason
+
+## Marker Override Cache Invalidation
+
+Marker-mode manual overrides patch the current `alignmentInfo` in place and should not rerun the
+full marker detector.
+
+For a marker at lattice coordinate `(col, row)`, only up to four neighboring source cells can depend
+on that marker:
+
+- `(col - 1, row - 1)`
+- `(col, row - 1)`
+- `(col - 1, row)`
+- `(col, row)`
+
+`invalidateFramesForMarker()` returns that affected source-frame list when stabilization is disabled
+or zero-strength, so the app can warm only those frames and show a short `Processing frames n/m`
+phase. If stabilization is enabled with nonzero strength, it returns `null` because changed source
+frames can affect the stabilization solve and the full output sequence may need regeneration.
 
 ## Rectified Sheet Behavior
 

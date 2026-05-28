@@ -42,6 +42,8 @@ function setup() {
     bDoExportSvg = true;
   });
 
+  // The radios mirror the keyboard shortcuts so SVG exports can be configured without memorizing
+  // keys, while the key handlers below still keep the UI state synchronized.
   markerTypeRadio = createRadio();
   markerTypeRadio.option('crosses', 'Crosses');
   markerTypeRadio.option('dots', 'Dots');
@@ -112,6 +114,7 @@ function setAnimationStyle(value){
 
 //-------------------------------------------------
 function styleRadioControl(radio){
+  // p5 creates plain inline form markup; styling it here keeps this standalone template portable.
   radio.style('font-family', 'Arial, Helvetica, sans-serif');
   radio.style('font-size', '12px');
   radio.style('line-height', '1.1');

@@ -44,6 +44,14 @@
 - If a settings file provides both `output_width` and `output_height`, preserve that exact pair instead of re-deriving one dimension from the other during load.
 - If `source_credit` is absent, the Raw Photo header should fall back to the loaded source filename.
 - `Frames in Export` limits preview and export from the same source-cell subset.
+- `Processing frames n/m` reports chunked generation of final preview/export canvases after
+  extraction, appearance, crop/geometry, stabilization, or targeted marker-override invalidation.
+  Do not replace this with a synchronous all-frame rebuild.
+- If pairwise markerless stabilization is enabled and its measurements are still running, final
+  preview-frame warmup should wait; otherwise it can build unstabilized frames that are immediately
+  invalidated when stabilization completes.
+- Marker-mode manual marker overrides should invalidate only the neighboring frame cells touched
+  by that marker unless enabled stabilization makes the whole sequence dependent on the edit.
 - Page Detection Threshold live scrubbing is a lightweight Raw Photo page-boundary preview. Keep it
   responsive and non-destructive; the full pipeline result on slider release is authoritative.
 - Preview/export ordering changes must stay consistent with:
@@ -65,6 +73,7 @@
 
 ## Fragile Areas
 - Cache invalidation in `js/app.js`
+- Preview-frame warmup and the `Processing frames n/m` progress UI
 - Mode-switched labels and tooltips
 - Rectified-sheet overlays
 - Header/link sync for viewer titles should be idempotent. Avoid rewriting heading `textContent`
