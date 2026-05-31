@@ -36,7 +36,7 @@ Used when frames are separated by empty gutters and there are no registration ma
 
 - branches immediately after page rectification
 - does not use `Grid Edge Threshold` or `Grid Edge Run Length`
-- estimates a straight lattice from the rectified sheet
+- estimates a straight lattice from the rectified grid
 - emits synthetic corner intersections into the same `markerLookup` structure used by the marker pipeline
 
 This shared output structure is why the same editing panel can be reused as:
@@ -65,15 +65,15 @@ Implemented in [js/pipeline.js](/Users/gl/Desktop/plottimation/plottimation_webt
 
 ### Pitch
 
-- rectified sheet ROI -> grayscale
+- rectified grid ROI -> grayscale
 - reduced to a manageable working size
 - blurred
 - horizontal and vertical pitch estimated from seeded autocorrelation
 
 The seed period uses the inset ROI:
 
-- `(rectifiedWidth - 2*searchInsetMargin) / nCols`
-- `(rectifiedHeight - 2*searchInsetMargin) / nRows`
+- `(rectifiedWidth - 2*searchInsetMarginX) / nCols`
+- `(rectifiedHeight - 2*searchInsetMarginY) / nRows`
 
 ### Phase
 
@@ -99,7 +99,7 @@ choosing the one whose expected gutter positions land on the strongest combined 
 In markerless mode:
 
 - `Grid Search Inset X` and `Grid Search Inset Y` define the horizontal and vertical ROI that seeds pitch estimation
-- it is visualized in `Rectified Sheet` as a blue rectangle
+- it is visualized in `Rectified Grid` as a blue rectangle
 - a value of `0` is valid and is the markerless default
 
 ## Markerless Stabilization
@@ -175,7 +175,7 @@ Current behavior:
 - vertical paused stepping wraps within the valid cells of the current column, which matters when
   the last printed row is incomplete because `Frames in Export` omits trailing cells
 
-The rectified-sheet overlays must stay consistent with this ordering logic:
+The rectified-grid overlays must stay consistent with this ordering logic:
 
 - green quad = currently displayed frame
 - red omitted quads = source cells excluded by `Frames in Export`; these are drawn with a
@@ -185,7 +185,7 @@ This is a fragile integration point. If playback/export order changes, check:
 
 - preview playback
 - paused stepping
-- rectified-sheet green quad
+- rectified-grid green quad
 - omitted red quads
 - GIF/MP4/ZIP frame counts
 
@@ -209,7 +209,7 @@ warmup with `requestAnimationFrame`.
 User-visible behavior:
 
 - the Status panel shows `Processing frames n/m` with a progress bar
-- the `Rectified Sheet` header shows the same progress text
+- the `Rectified Grid` header shows the same progress text
 - if stabilization progress is also active, the header uses compact labels such as
   `Stabilizing i/j; Processing m/n`
 
@@ -241,21 +241,21 @@ or zero-strength, so the app can warm only those frames and show a short `Proces
 phase. If stabilization is enabled with nonzero strength, it returns `null` because changed source
 frames can affect the stabilization solve and the full output sequence may need regeneration.
 
-## Rectified Sheet Behavior
+## Rectified Grid Behavior
 
-The `Rectified Sheet` panel can render either:
+The `Rectified Grid` panel can render either:
 
 - the full page warp before marker-grid cropping
-- the extraction-space rectified sheet used for frame extraction
+- the extraction-space rectified grid used for frame extraction
 
 The header `Pre` / `Post` radio buttons switch between these retained views:
 
 - `Pre` = full page warp
-- `Post` = cropped extraction-space sheet
+- `Post` = cropped extraction-space grid
 
 Default behavior:
 
-- if a settings file was loaded with the source image, show the extraction-space rectified sheet
+- if a settings file was loaded with the source image, show the extraction-space rectified grid
 - if no settings file was loaded, show the full page warp so Page & Grid Detection adjustments can
   be evaluated before the frame-grid crop/re-rectification step
 - the radio choice is a local view preference, not a saved project setting
@@ -264,10 +264,10 @@ For large images, the visible panel image may be a downscaled preview canvas whi
 uses the full-resolution `state.geometry.baseRectifiedMat`. Overlay geometry therefore has to be
 mapped from full rectified coordinates into the displayed preview size.
 
-The `Rectified Sheet` header link is sourced from the full-resolution rectified image, not from the
+The `Rectified Grid` header link is sourced from the full-resolution rectified image, not from the
 display preview:
 
-- if the rectified sheet long edge is `<= 3000 px`, a full-resolution download URL may be prepared
+- if the rectified grid long edge is `<= 3000 px`, a full-resolution download URL may be prepared
   eagerly
 - otherwise the full-resolution asset is generated on demand from `state.geometry.baseRectifiedMat`
 - the visible panel preview and the downloadable asset are intentionally different representations
@@ -284,23 +284,47 @@ Overlays currently include:
 ## Page Detection Threshold Preview
 
 `Page Detection Threshold` live scrubbing intentionally uses the lightweight grayscale preview cache for
-Raw Photo page-boundary feedback. If that downscaled preview fails to find a 4-corner page quad, the
+Page Corners page-boundary feedback. If that downscaled preview fails to find a 4-corner page quad, the
 preview path falls back to the full-resolution grayscale source before showing a warning.
 
 Important behavior:
 
 - live scrubbing clears stale Status text
-- live scrubbing must not clear downstream Rectified Sheet / marker / animation outputs by itself
+- live scrubbing must not clear downstream Rectified Grid / marker / animation outputs by itself
 - the full pipeline on slider release is authoritative and clears or sets the warning state
 - if the low-res preview shows a contour that later fails full-resolution processing, the failure
-  path clears the Raw Photo contour instead of leaving a stale green frame
+  path clears the Page Corners contour instead of leaving a stale green frame
+
+## Manual Page Corners Overrides
+
+The `Page Corners` panel can store a manually edited source-space page quadrilateral in
+`state.source.manualPageContour`.
+
+Important behavior:
+
+- `Enable Overrides` lets the user drag the green page-corner handles in the source image
+- if no valid page boundary exists and the warning state is active, enabling overrides seeds a
+  simple inset rectangle so the user can create a quad from scratch
+- while a corner is dragged, a magnified picture-in-picture inset is shown in the opposite quadrant
+- `Clear Edits` removes the manual quad and returns to automatic page detection
+- when manual page-corner edits exist, `Page Detection Threshold` is disabled and its tooltip should
+  tell the user to clear edits before using automatic threshold detection again
+- manual page-corner edits are saved as `page_corner_override_tl`, `_tr`, `_br`, and `_bl`
+
+Do not confuse these source-space page overrides with marker or markerless frame-corner overrides:
+page-corner overrides feed the page rectification step, while frame/marker overrides happen after the
+page has already been rectified.
+
+Also keep preview fallback quads separate from true manual overrides. The lightweight
+`Page Detection Threshold` preview may temporarily display a fallback quad, but it must not populate
+`state.source.manualPageContour` unless the user explicitly edits Page Corners.
 
 ## Heading Links
 
 Viewer heading text is used as a lightweight asset access surface:
 
-- `Raw Photo` links to the loaded source object URL when available
-- `Rectified Sheet` links to the full-resolution rectified image, generated eagerly for smaller
+- `Page Corners` links to the loaded source object URL when available
+- `Rectified Grid` links to the full-resolution rectified image, generated eagerly for smaller
   sheets and lazily for larger sheets
 - `Preview & Export` links to the latest generated GIF while `state.export.url` exists, using
   `state.export.filename` as the anchor `download` filename
@@ -324,6 +348,8 @@ Recent important keys:
 - `stabilization_method`
 - `stabilization_strength`
 - `light_on_dark_design`
+- `search_inset_margin_x_px`
+- `search_inset_margin_y_px`
 - `post_rotation_deg`
 - `vertical_drift_compensation`
 - `frame_count_to_export`
@@ -331,6 +357,10 @@ Recent important keys:
 - `output_height`
 - `source_credit`
 - `stabilization_enabled`
+- `page_corner_override_tl`
+- `page_corner_override_tr`
+- `page_corner_override_br`
+- `page_corner_override_bl`
 
 Backward-compatibility note:
 
@@ -338,8 +368,10 @@ Backward-compatibility note:
 - UI sync helpers are expected to supply correct defaults in that case
 - in particular, a missing `frame_count_to_export` field should resolve to the full grid size, not
   to a one-frame export
-- `source_credit` is optional metadata shown in the Raw Photo header when present
-- if `source_credit` is absent, the Raw Photo header falls back to the loaded source filename
+- `source_credit` is currently rendered at the top of Status; the older Page Corners header credit
+  line is still synchronized but hidden for header-space reasons
+- legacy `search_inset_margin_px` should populate both `Grid Search Inset X` and
+  `Grid Search Inset Y`
 - when a settings file supplies both `output_width` and `output_height`, treat them as an exact
   stored pair during restore instead of recalculating one dimension from the other
 
@@ -356,7 +388,7 @@ To reduce peak memory during consecutive large reprocesses:
 
 - `trimCachesBeforeReprocess()` drops old rectified Mats and large frame/stabilization caches
   before the next `runPipeline()` begins
-- the `Rectified Sheet` panel uses a bounded preview canvas instead of materializing another
+- the `Rectified Grid` panel uses a bounded preview canvas instead of materializing another
   full-size RGBA display copy for very large rectified pages
 
 ## Layout UI Notes
@@ -365,12 +397,12 @@ To reduce peak memory during consecutive large reprocesses:
   effective sheet width/height did not actually change.
 - `Sheet Width` and `Sheet Height` typing is intentionally debounced in the UI, while pressing
   `Enter` commits immediately.
-- `Post-Rotation` is a page-detection-stage control: it rotates the rectified sheet after page
+- `Post-Rotation` is a page-detection-stage control: it rotates the rectified grid after page
   rectification and before marker detection or markerless autocorrelation.
 - `Post-Rotation` positive values are intentionally clockwise in both the scrub preview and the
   final processed result.
 - While scrubbing `Post-Rotation`, playback pauses and the app shows a preview-only rotated
-  `Rectified Sheet` plus preview-only Panel 3 tile updates. The expensive CV pipeline still runs
+  `Rectified Grid` plus preview-only Panel 3 tile updates. The expensive CV pipeline still runs
   only on release.
 - The scrub preview is delta-based relative to the last processed rotation, not an absolute redraw
   from zero. This avoids double-applying an already-committed rotation when dragging from a
@@ -402,7 +434,7 @@ Only the roles most relevant to future editing are listed here. See `AGENTS.md` 
   - main orchestration
   - config reading
   - preview rendering
-  - rectified-sheet overlays
+  - rectified-grid overlays
   - extraction/stabilization integration
   - cache invalidation
 

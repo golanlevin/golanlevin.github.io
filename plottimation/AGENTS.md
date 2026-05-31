@@ -16,12 +16,12 @@
 - Large-image CV now uses a split image model:
   - styled/full-color Mats are BGR
   - vision/alignment Mats are grayscale
-  - the `Rectified Sheet` panel may show a downscaled preview while extraction still uses the full `baseRectifiedMat`
+  - the `Rectified Grid` panel may show a downscaled preview while extraction still uses the full `baseRectifiedMat`
 
 ## Key Files
 - `index.html`: primary UI markup
 - `style.css`: global UI styling
-- `js/app.js`: main orchestration, extraction flow, preview logic, rectified-sheet overlays
+- `js/app.js`: main orchestration, extraction flow, preview logic, rectified-grid overlays
 - `js/pipeline.js`: page detection, marker detection, markerless estimation
 - `js/ui-controls.js`: event wiring and interaction behavior
 - `js/i18n.js`: locale tables, tooltips, translation helpers
@@ -42,7 +42,14 @@
 - Saved settings should remain backward-compatible when practical.
 - If a settings file omits `frame_count_to_export`, treat that as `Frame Rows × Frame Columns`.
 - If a settings file provides both `output_width` and `output_height`, preserve that exact pair instead of re-deriving one dimension from the other during load.
-- If `source_credit` is absent, the Raw Photo header should fall back to the loaded source filename.
+- `source_credit` metadata is shown at the top of the Status text. The old Page Corners header
+  credit line is kept synchronized in code, but hidden to preserve header space for override buttons.
+- Manual Page Corners overrides are source-image-space page quadrilaterals. They should override
+  automatic page detection, disable `Page Detection Threshold`, and persist through settings files.
+- If page detection fails entirely, enabling Page Corners overrides seeds a simple inset rectangle
+  so the user can build a page quad manually.
+- Live Page Detection Threshold preview fallback quads must not be stored as manual Page Corners
+  overrides. Only explicit user edits should populate `state.source.manualPageContour`.
 - `Frames in Export` limits preview and export from the same source-cell subset.
 - `Processing frames n/m` reports chunked generation of final preview/export canvases after
   extraction, appearance, crop/geometry, stabilization, or targeted marker-override invalidation.
@@ -52,13 +59,13 @@
   invalidated when stabilization completes.
 - Marker-mode manual marker overrides should invalidate only the neighboring frame cells touched
   by that marker unless enabled stabilization makes the whole sequence dependent on the edit.
-- Page Detection Threshold live scrubbing is a lightweight Raw Photo page-boundary preview. Keep it
+- Page Detection Threshold live scrubbing is a lightweight Page Corners page-boundary preview. Keep it
   responsive and non-destructive; the full pipeline result on slider release is authoritative.
 - Preview/export ordering changes must stay consistent with:
   - preview playback
   - paused arrow-key stepping
-  - rectified-sheet green current-frame overlay
-  - rectified-sheet red omitted-frame overlays
+  - rectified-grid green current-frame overlay
+  - rectified-grid red omitted-frame overlays
   - exported GIF/MP4/ZIP frame ordering
 - If an exported GIF exists in the current session, the `Preview & Export` heading text links to
   that GIF via the generated object URL and `download` filename. Revoking the GIF URL must also
@@ -75,7 +82,7 @@
 - Cache invalidation in `js/app.js`
 - Preview-frame warmup and the `Processing frames n/m` progress UI
 - Mode-switched labels and tooltips
-- Rectified-sheet overlays
+- Rectified-grid overlays
 - Header/link sync for viewer titles should be idempotent. Avoid rewriting heading `textContent`
   during redraw loops unless the text actually changed, because that breaks text selection and
   appears as flicker.
@@ -103,7 +110,13 @@
 - If shared UI changes, check both pipelines.
 - If viewer-tab or mobile-control naming changes, check mobile mode behavior.
 - If settings-bearing controls change, check settings round-trip behavior.
-- If `Rectified Sheet` preview or rectified-image download behavior changes, check both:
+- If Page Corners override behavior changes, check:
+  - detected-page correction by dragging an existing green corner
+  - no-page-detected fallback rectangle creation
+  - `Clear Edits`
+  - disabled `Page Detection Threshold` while edits exist
+  - settings save/load of the edited page quad
+- If `Rectified Grid` preview or rectified-image download behavior changes, check both:
   - the visible panel preview on large images
   - the full-resolution header-link download path sourced from `baseRectifiedMat`
 - If paper-size / custom-sheet behavior changes, check:

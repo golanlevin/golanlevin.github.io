@@ -174,7 +174,7 @@ export function buildCrossConvolutionCanvas(sourceCanvas, targetCanvas) {
 }
 
 /**
- * Recompute only the page threshold and largest page quadrilateral for lightweight Raw-panel
+ * Recompute only the page threshold and largest page quadrilateral for lightweight Page Corners
  * feedback while the user drags the threshold offset slider.
  *
  * @param {cv.Mat} grayImg
@@ -242,6 +242,7 @@ function clampPositiveConvolutionToUint8(conv32, target8) {
  *   alignmentInfo: object,
  *   statusText: string,
  *   pageQuadPoints: {x:number, y:number}[],
+ *   pageQuadSource: "pipeline-detection" | "manual-override" | "threshold-preview-fallback",
  *   rectifiedDownloadUsesRawSource: boolean
  * }}
  */
@@ -261,6 +262,7 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
   let pageWarpPreviewCanvas = null;
   let pageWarpPreviewWidth = 0;
   let pageWarpPreviewHeight = 0;
+  let pageQuadSource = "pipeline-detection";
 
   try {
     // Keep one full-color styled branch for extraction/display, but reduce the vision branch to
@@ -280,16 +282,32 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
     const threshVal = applyPaperThreshold(grayImg, thresh, config.thresholdMethod, config.thresholdOffset);
     throwIfAborted(requestId);
 
-    // Detect the page quadrilateral in raw-photo coordinates.
-    pageQuad = findLargestQuad(thresh, sourceCanvas.width * sourceCanvas.height);
-    pageQuad = refineBorderPageQuadWithDownscaledDetection(
-      grayImg,
-      pageQuad,
-      config.thresholdMethod,
-      config.thresholdOffset,
-      sourceCanvas.width,
-      sourceCanvas.height
-    );
+    // Detect the page quadrilateral in raw-photo coordinates, unless the user has supplied a
+    // manual page-corner override from the Page Corners panel. A live threshold-preview quad is only
+    // used as a fallback after automatic detection fails; it must not mask successful high-res
+    // detection, or slider scrubbing can make the app stick to a low-resolution preview contour.
+    const manualPageQuad = makeManualPageQuad(config.manualPageQuadPoints, sourceCanvas.width, sourceCanvas.height);
+    if (manualPageQuad) {
+      pageQuad = manualPageQuad;
+      pageQuadSource = "manual-override";
+    } else {
+      try {
+        pageQuad = findLargestQuad(thresh, sourceCanvas.width * sourceCanvas.height);
+        pageQuad = refineBorderPageQuadWithDownscaledDetection(
+          grayImg,
+          pageQuad,
+          config.thresholdMethod,
+          config.thresholdOffset,
+          sourceCanvas.width,
+          sourceCanvas.height
+        );
+      } catch (error) {
+        const fallbackPageQuad = makeManualPageQuad(config.fallbackPageQuadPoints, sourceCanvas.width, sourceCanvas.height);
+        if (!fallbackPageQuad) throw error;
+        pageQuad = fallbackPageQuad;
+        pageQuadSource = "threshold-preview-fallback";
+      }
+    }
     const ordered = orderCorners(pageQuad.points);
     throwIfAborted(requestId);
 
@@ -460,6 +478,7 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
       alignmentInfo,
       statusText,
       pageQuadPoints: pageQuad.points,
+      pageQuadSource,
       rectifiedDownloadUsesRawSource:
         useNearIdentityRectification &&
         useMarkerlessAlignment &&
@@ -470,6 +489,7 @@ export function runPipeline(sourceCanvas, config, requestId, throwIfAborted) {
       if (error && typeof error === "object") {
         error.partialResult = {
           pageQuadPoints: pageQuad?.points || null,
+          pageQuadSource,
           rectifiedCanvas: pageWarpPreviewCanvas,
         };
       }
@@ -824,6 +844,31 @@ function findLargestQuad(binaryMat, totalArea) {
     hierarchy.delete();
     approx.delete();
   }
+}
+
+/**
+ * Convert user-edited Page Corners points into the same shape returned by page detection.
+ *
+ * @param {{x:number,y:number}[] | null | undefined} points
+ * @param {number} sourceWidth
+ * @param {number} sourceHeight
+ * @returns {{points:{x:number,y:number}[], areaPx:number, quadAreaPx:number, areaPct:number} | null}
+ */
+function makeManualPageQuad(points, sourceWidth, sourceHeight) {
+  if (!Array.isArray(points) || points.length !== 4) return null;
+  const clamped = points.map((point) => ({
+    x: Math.max(0, Math.min(sourceWidth - 1, Number(point?.x))),
+    y: Math.max(0, Math.min(sourceHeight - 1, Number(point?.y))),
+  }));
+  if (!clamped.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y))) return null;
+  const quadAreaPx = getPolygonArea(clamped);
+  if (quadAreaPx <= 1) return null;
+  return {
+    points: clamped,
+    areaPx: quadAreaPx,
+    quadAreaPx,
+    areaPct: quadAreaPx / Math.max(1, sourceWidth * sourceHeight),
+  };
 }
 
 /**

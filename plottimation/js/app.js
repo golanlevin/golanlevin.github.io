@@ -75,6 +75,10 @@ const bUseOpenCvOutputScaling = true;
 const MOBILE_VIEWER_BREAKPOINT_PX = 960;
 const LIVE_THRESHOLD_PREVIEW_MAX_LONG_EDGE_PX = 512;
 const RECTIFIED_FULL_RES_EAGER_LONG_EDGE_PX = 3000;
+const PAGE_CORNER_HIT_RADIUS_CSS_PX = 14;
+const PAGE_CORNER_MAGNIFIER_SIZE_SCALE = 1.4;
+const PAGE_CORNER_MAGNIFIER_SCALE = 4;
+const DEFAULT_PAGE_CORNER_INSET_DIAGONAL_FRACTION = 0.1;
 const FRAME_MATCH_WEIGHT_CACHE = new Map();
 const STABILIZATION_MEASUREMENT_CHUNK_SIZE = 4;
 
@@ -287,7 +291,7 @@ function updateRectifiedSheetHeading() {
 /**
  * Keep all page-boundary warning surfaces synchronized.
  *
- * The lightweight threshold preview and the full pipeline both use this helper so the Raw Photo
+ * The lightweight threshold preview and the full pipeline both use this helper so the Page Corners
  * warning, Page & Grid Detection warning, and orange Status styling cannot drift apart.
  *
  * @param {boolean} [showWarning=false]
@@ -336,6 +340,60 @@ function syncMarkerEditingUi() {
   dom.toggleMarkerBlobViewButton.hidden = true;
   dom.toggleMarkerBlobViewButton.disabled = true;
   dom.toggleMarkerBlobViewButton.classList.remove("is-active");
+}
+
+/**
+ * Keep the Page Corners page-corner override button and cursor state synchronized.
+ *
+ * @returns {void}
+ */
+function syncPageCornerEditingUi() {
+  const hasImage = !!state.source.image && state.source.canvas.width > 0 && state.source.canvas.height > 0;
+  const hasEdits = Array.isArray(state.source.manualPageContour) && state.source.manualPageContour.length === 4;
+  if (dom.thresholdOffset) {
+    dom.thresholdOffset.disabled = hasEdits;
+  }
+  if (dom.thresholdOffsetRow) {
+    dom.thresholdOffsetRow.classList.toggle("control-disabled", hasEdits);
+    dom.thresholdOffsetRow.setAttribute("aria-disabled", String(hasEdits));
+    if (hasEdits) {
+      dom.thresholdOffsetRow.title = t("tooltip.thresholdOffsetLockedByPageEdits");
+    } else if (state.runtime.tooltipsEnabled) {
+      dom.thresholdOffsetRow.title = t("tooltip.thresholdOffset");
+    } else {
+      dom.thresholdOffsetRow.removeAttribute("title");
+    }
+  }
+  if (dom.togglePageCornerEditingButton) {
+    dom.togglePageCornerEditingButton.disabled = !hasImage;
+    dom.togglePageCornerEditingButton.textContent = state.runtime.pageCornerEditingEnabled
+      ? t("alignment.disableOverrides")
+      : t("alignment.enableOverrides");
+    dom.togglePageCornerEditingButton.classList.remove("is-active");
+  }
+  if (dom.clearPageCornerEditsButton) {
+    dom.clearPageCornerEditsButton.hidden = !hasEdits;
+    dom.clearPageCornerEditsButton.disabled = !hasEdits;
+  }
+  document.body.classList.toggle("raw-page-override-active", state.runtime.pageCornerEditingEnabled && hasImage);
+  document.body.classList.toggle("raw-page-corner-dragging", !!state.preview.activePageCornerDrag);
+}
+
+/**
+ * Nudge the Page Corners Clear Edits button when locked controls are touched.
+ *
+ * @returns {void}
+ */
+function triggerPageCornerClearEditsAttention() {
+  const button = dom.clearPageCornerEditsButton;
+  if (!button || button.hidden || button.disabled) return;
+  button.classList.remove("button-ring");
+  void button.offsetWidth;
+  button.classList.add("button-ring");
+  window.clearTimeout(state.preview.pageCornerClearButtonRingTimer || 0);
+  state.preview.pageCornerClearButtonRingTimer = window.setTimeout(() => {
+    button.classList.remove("button-ring");
+  }, 900);
 }
 
 /**
@@ -541,7 +599,7 @@ function updateMobilePreviewAspectRatio() {
 }
 
 /**
- * Keep the mobile Rectified Sheet card's aspect-ratio hint aligned with the displayed sheet.
+ * Keep the mobile Rectified Grid card's aspect-ratio hint aligned with the displayed grid.
  *
  * @param {HTMLCanvasElement | null} rectifiedCanvas
  * @returns {void}
@@ -580,7 +638,7 @@ function syncMobileMarkerGridLayout() {
 }
 
 /**
- * Keep the mobile Raw Photo card's aspect-ratio hint aligned with the loaded source image.
+ * Keep the mobile Page card's aspect-ratio hint aligned with the loaded source image.
  *
  * @returns {void}
  */
@@ -1019,7 +1077,7 @@ function ensureSourceCvCaches() {
 }
 
 /**
- * Recompute just the page boundary and redraw the Raw panel while Page Detection Threshold is dragged.
+ * Recompute just the page boundary and redraw the Page Corners panel while Page Detection Threshold is dragged.
  *
  * This intentionally skips page warp, grid detection, marker alignment, and frame extraction. The
  * fast downscaled preview can produce false negatives near threshold edge cases, so failures are
@@ -1031,7 +1089,17 @@ function previewPageBoundaryForThresholdOffset() {
   if (!state.runtime.cvReady || !state.source.image || state.processing.active) return;
   // The previous full-pipeline status may describe a value the user has already scrubbed past.
   dom.statusText.textContent = "";
-  const config = readConfig();
+    const config = readConfig();
+    const explicitManualContour = getManualPageContourForProcessing();
+    if (explicitManualContour) {
+      state.source.rawPageContour = explicitManualContour.map((point) => ({ x: point.x, y: point.y }));
+      state.source.pageQuadSource = "manual-override-preview";
+      state.source.thresholdPreviewPageContour = null;
+      state.source.thresholdPreviewSignature = "";
+    updatePageGridDetectionHeading(false);
+    renderRawPreview();
+    return;
+  }
   try {
     const cachedSource = ensureSourceCvCaches();
     if (!cachedSource) return;
@@ -1069,16 +1137,25 @@ function previewPageBoundaryForThresholdOffset() {
       ? fastPreview
       : runBoundaryPreview(cachedSource.grayMat, 1);
     const hasPageQuad = Array.isArray(preview.pageQuadPoints) && preview.pageQuadPoints.length === 4;
-    state.source.rawPageContour = hasPageQuad
+    const previewContour = hasPageQuad
       ? preview.pageQuadPoints.map((point) => ({
           x: point.x / preview.sourceScale,
           y: point.y / preview.sourceScale,
         }))
       : null;
+    state.source.rawPageContour = previewContour;
+    state.source.pageQuadSource = previewContour ? "threshold-preview-live" : "";
+    state.source.thresholdPreviewPageContour = previewContour
+      ? previewContour.map((point) => ({ x: point.x, y: point.y }))
+      : null;
+    state.source.thresholdPreviewSignature = hasPageQuad ? getPageBoundaryPreviewSignature(config) : "";
     updatePageGridDetectionHeading(!hasPageQuad);
     renderRawPreview();
   } catch (error) {
     state.source.rawPageContour = null;
+    state.source.pageQuadSource = "";
+    state.source.thresholdPreviewPageContour = null;
+    state.source.thresholdPreviewSignature = "";
     renderRawPreview();
     updatePageGridDetectionHeading(true);
     console.error(error);
@@ -1265,7 +1342,7 @@ function buildStatusWithTiming(baseText) {
 }
 
 /**
- * Use compact Rectified Sheet header labels when both background jobs are reporting progress.
+ * Use compact Rectified Grid header labels when both background jobs are reporting progress.
  *
  * @returns {void}
  */
@@ -1684,7 +1761,14 @@ function clearDerivedPreviews() {
 function clearAllPreviews() {
   releaseSourceCvCaches();
   state.source.rawPageContour = null;
+  state.source.pageQuadSource = "";
+  state.source.manualPageContour = null;
+  state.source.thresholdPreviewPageContour = null;
+  state.source.thresholdPreviewSignature = "";
+  state.runtime.pageCornerEditingEnabled = false;
+  state.preview.activePageCornerDrag = null;
   state.preview.paused = false;
+  syncPageCornerEditingUi();
   updatePreviewPlayPauseButton();
 
   const rawCtx = dom.rawCanvas.getContext("2d");
@@ -1699,7 +1783,7 @@ function clearAllPreviews() {
  * Blank all downstream panels after page-detection failure while keeping the source image and any
  * saved manual marker overrides available for a later successful reprocess.
  *
- * This prevents Rectified Sheet, Frame Alignment Markers, and Preview from showing stale
+ * This prevents Rectified Grid, Frame Alignment Markers, and Preview from showing stale
  * last-known-good results when the current settings no longer produce a valid page boundary.
  *
  * @returns {void}
@@ -1802,9 +1886,18 @@ function init() {
   syncAlignmentMarkerUi();
   syncMp4ExportUi();
   syncResponsiveViewerUi();
+  syncPageCornerEditingUi();
   syncMarkerEditingUi();
   updatePageGridDetectionHeading(false);
   updateRectifiedSheetHeading();
+  dom.togglePageCornerEditingButton?.addEventListener("click", togglePageCornerEditing);
+  dom.clearPageCornerEditsButton?.addEventListener("click", clearPageCornerEdits);
+  dom.thresholdOffsetRow?.addEventListener("pointerdown", () => {
+    if (Array.isArray(state.source.manualPageContour) && state.source.manualPageContour.length === 4) {
+      triggerPageCornerClearEditsAttention();
+    }
+  });
+  attachRawPageCornerEditing();
   dom.rectifiedSheetHeadingText?.addEventListener("click", (event) => {
     if (state.preview.showRectifiedDiagnostic) {
       event.preventDefault();
@@ -2208,6 +2301,7 @@ function cancelInFlightProcessing() {
   state.processing.requestId += 1;
   state.processing.pending = false;
   window.clearTimeout(state.processing.timer);
+  cancelStabilizationMeasurement();
   cancelPreviewFrameWarmup();
   setGeometryProcessingCursor(false);
 }
@@ -2251,7 +2345,7 @@ function scheduleMarkerlessPhasePreviewUpdate() {
 /**
  * Coalesce post-rotation scrub preview updates into one animation-frame redraw.
  *
- * This is intentionally preview-only work: it redraws Rectified Sheet and Panel 3 from the
+ * This is intentionally preview-only work: it redraws Rectified Grid and Panel 3 from the
  * current preview-scale buffers without rerunning the full OpenCV pipeline on every slider tick.
  *
  * @returns {void}
@@ -2482,14 +2576,14 @@ function attachResizeHandler() {
 }
 
 /**
- * Keep the Raw Photo title link synchronized with the currently loaded source image.
+ * Keep the Page Corners title link synchronized with the currently loaded source image.
  *
  * @returns {void}
  */
 function syncRawPhotoHeadingLink() {
   if (!dom.rawPhotoHeadingText) return;
   const translatedTitle = String(t("panels.rawPhoto") || "").trim();
-  dom.rawPhotoHeadingText.textContent = translatedTitle.replace(/^\s*\d+\s*[\.\):\-–—]?\s*/, "") || "Raw Photo";
+  dom.rawPhotoHeadingText.textContent = translatedTitle.replace(/^\s*\d+\s*[\.\):\-–—]?\s*/, "") || "Page Corners";
   const href = state.source.dragUrl ? new URL(state.source.dragUrl, window.location.href).href : "";
   if (href) {
     dom.rawPhotoHeadingText.href = href;
@@ -2500,7 +2594,7 @@ function syncRawPhotoHeadingLink() {
 }
 
 /**
- * Keep the Rectified Sheet title link synchronized with the currently available full-resolution
+ * Keep the Rectified Grid title link synchronized with the currently available full-resolution
  * download strategy.
  *
  * Small rectified sheets can keep a prebuilt object URL on hand. Large ones are generated lazily
@@ -2514,7 +2608,7 @@ function syncRectifiedSheetHeadingLink() {
   const translatedTitle = String(
     state.preview.showRectifiedDiagnostic ? t("panels.convolutionDebugView") : t("panels.rectifiedSheet")
   ).trim();
-  const headingText = translatedTitle.replace(/^\s*\d+\s*[\.\):\-–—]?\s*/, "") || "Rectified Sheet";
+  const headingText = translatedTitle.replace(/^\s*\d+\s*[\.\):\-–—]?\s*/, "") || "Rectified Grid";
   if (dom.rectifiedSheetHeadingText.textContent !== headingText) {
     dom.rectifiedSheetHeadingText.textContent = headingText;
   }
@@ -2575,7 +2669,7 @@ function syncRectifiedSheetHeadingLink() {
 /**
  * Encode the authoritative full-resolution rectified mat into a blob URL.
  *
- * The visible Rectified Sheet panel may be downscaled for large sources, so download generation
+ * The visible Rectified Grid panel may be downscaled for large sources, so download generation
  * must come from the OpenCV mat instead of the preview canvas.
  *
  * @param {cv.Mat} rectifiedMat
@@ -2694,7 +2788,7 @@ function downloadFullResRectifiedSheet() {
 }
 
 /**
- * Show the optional source-credit line in the Raw Photo header.
+ * Show the optional source-credit line associated with the Page Corners panel.
  *
  * Prefer explicit `source_credit` metadata from the settings file. If none is present, fall back
  * to the loaded source filename using the same inline small-text treatment.
@@ -2707,7 +2801,9 @@ function syncRawPhotoCreditDisplay() {
   const fallbackFilename = String(state.source.filename || "").trim();
   const displayText = credit || fallbackFilename;
   dom.rawPhotoCredit.textContent = displayText;
-  dom.rawPhotoCredit.hidden = !displayText;
+  // Disabled while Page Corners header actions need the horizontal space. Keep the text synchronized
+  // so the header credit line can be restored later without rebuilding the metadata path.
+  dom.rawPhotoCredit.hidden = true;
 }
 
 /**
@@ -2786,6 +2882,8 @@ function scheduleProcess(delayMs = 220) {
  *   paperAspect:number,
  *   frameCols:number,
  *   frameRows:number,
+ *   manualPageQuadPoints:{x:number,y:number}[] | null,
+ *   fallbackPageQuadPoints:{x:number,y:number}[] | null,
  *   thresholdMethod:string,
  *   thresholdOffset:number,
  *   paperMarginXPx:number,
@@ -2855,7 +2953,7 @@ function readConfig() {
       )
     )
   );
-  return {
+  const config = {
     paperOrientation,
     paperPreset,
     paperWidthIn: Math.max(1, paperWidth),
@@ -2863,6 +2961,8 @@ function readConfig() {
     paperAspect,
     frameCols,
     frameRows,
+    manualPageQuadPoints: null,
+    fallbackPageQuadPoints: null,
     thresholdMethod: dom.thresholdMethod.value || SETTINGS_DEFAULTS.detection.thresholdMethod,
     thresholdOffset: Math.max(-128, Math.min(128, Math.round(Number(dom.thresholdOffset.value) || SETTINGS_DEFAULTS.detection.thresholdOffset))),
     paperMarginXPx: readSearchInset(dom.paperMarginX, SETTINGS_DEFAULTS.detection.paperMarginXPx),
@@ -2957,6 +3057,11 @@ function readConfig() {
       ),
     },
   };
+  config.manualPageQuadPoints = getManualPageContourForProcessing();
+  // The live threshold preview can rescue a full-pipeline page-detection failure, but it must not
+  // masquerade as a manual override or it can bypass high-resolution detection after slider use.
+  config.fallbackPageQuadPoints = config.manualPageQuadPoints ? null : getMatchingThresholdPreviewPageContour(config);
+  return config;
 }
 
 /**
@@ -3416,6 +3521,44 @@ function toggleMarkerEditing() {
 }
 
 /**
+ * Toggle manual page-corner editing in the Page Corners panel.
+ *
+ * @returns {void}
+ */
+function togglePageCornerEditing() {
+  if (!state.source.image) return;
+  const enabling = !state.runtime.pageCornerEditingEnabled;
+  state.runtime.pageCornerEditingEnabled = enabling;
+  state.preview.activePageCornerDrag = null;
+  if (enabling && shouldSeedDefaultPageContour()) {
+    seedDefaultManualPageContour();
+    cancelPageCornerOverrideDependentWork();
+    revokeGifUrl();
+    updatePageGridDetectionHeading(false);
+    scheduleProcess(0);
+  }
+  syncPageCornerEditingUi();
+  renderRawPreview();
+}
+
+/**
+ * Remove the manual page-corner override and rerun automatic page detection.
+ *
+ * @returns {void}
+ */
+function clearPageCornerEdits() {
+  if (!Array.isArray(state.source.manualPageContour) || state.source.manualPageContour.length !== 4) return;
+  state.source.manualPageContour = null;
+  state.preview.activePageCornerDrag = null;
+  state.runtime.pageCornerEditingEnabled = false;
+  cancelPageCornerOverrideDependentWork();
+  revokeGifUrl();
+  syncPageCornerEditingUi();
+  previewPageBoundaryForThresholdOffset();
+  scheduleProcess(0);
+}
+
+/**
  * Toggle the marker tiles between grayscale ROIs and binarized dot-blob diagnostics.
  *
  * @returns {void}
@@ -3453,7 +3596,7 @@ function toggleMarkerlessPhaseDebug() {
 }
 
 /**
- * Toggle display of the reduced blurred markerless working image in Rectified Sheet.
+ * Toggle display of the reduced blurred markerless working image in Rectified Grid.
  *
  * This temporary debug view shows the reduced, blurred grayscale image used for markerless pitch
  * and phase estimation. Rectified-sheet overlays are skipped while active because the working
@@ -3587,6 +3730,7 @@ function applyLoadedSettingsText(settingsText) {
     syncPaperPresetUi,
     syncAlignmentMarkerUi,
     syncMarkerEditingUi,
+    syncPageCornerEditingUi,
     syncRawPhotoCreditDisplay,
     updateSliderReadouts,
   });
@@ -4053,6 +4197,7 @@ async function processCurrentImage(requestId = state.processing.requestId) {
       state.geometry.pagePreviewGridBounds = result.pagePreviewGridBounds || null;
       state.runtime.appliedPostRotationDeg = config.postRotationDeg;
       state.source.rawPageContour = result.pageQuadPoints;
+      state.source.pageQuadSource = result.pageQuadSource || "pipeline-detection";
       stashOriginalMarkerDetections(state.geometry.alignmentInfo);
       applyManualMarkerOverrides(state.geometry.alignmentInfo);
       primeRectifiedFullResAssetIfSmall();
@@ -4077,6 +4222,8 @@ async function processCurrentImage(requestId = state.processing.requestId) {
     timeProfiled("syncAlignmentUi", () => syncAlignmentMarkerUi());
     timeProfiled("invalidateAppearanceCache", () => invalidateAppearanceCache());
     timeProfiled("updateSliderReadouts", () => updateSliderReadouts());
+    state.source.thresholdPreviewPageContour = null;
+    state.source.thresholdPreviewSignature = "";
     timeProfiled("renderRawPreview", () => renderRawPreview());
     timeProfiled("refreshAppearanceOutputs", () => refreshAppearanceOutputs());
     timeProfiled("renderCrossRoiGrid", () => renderCrossRoiGrid(result.alignmentInfo));
@@ -4099,15 +4246,25 @@ async function processCurrentImage(requestId = state.processing.requestId) {
       endPostRotationScrub();
     }
     if (error?.name !== "ProcessAbortedError") {
+      const config = readConfig();
+      const fallbackPageContour = getMatchingThresholdPreviewPageContour(config);
       if (Array.isArray(error?.partialResult?.pageQuadPoints) && error.partialResult.pageQuadPoints.length === 4) {
         state.source.rawPageContour = error.partialResult.pageQuadPoints;
+        state.source.pageQuadSource = error.partialResult.pageQuadSource || "partial-result";
+        renderRawPreview();
+      } else if (fallbackPageContour) {
+        state.source.rawPageContour = fallbackPageContour;
+        state.source.pageQuadSource = "threshold-preview-display";
         renderRawPreview();
       } else {
         state.source.rawPageContour = null;
+        state.source.pageQuadSource = "";
         renderRawPreview();
       }
       clearDerivedOutputsForDetectionFailure();
-      console.error(error);
+      if (!fallbackPageContour) {
+        console.error(error);
+      }
       updatePageGridDetectionHeading(true);
       updateExportButtonLabel();
       lastBaseStatusText = t("status.pageBoundaryFailure");
@@ -4479,7 +4636,7 @@ function shouldShowFullPageRectifiedPreview() {
 }
 
 /**
- * Return the canvas currently preferred for the Rectified Sheet panel.
+ * Return the canvas currently preferred for the Rectified Grid panel.
  *
  * Both source canvases are intentionally retained: callers can still render either the full page
  * warp or the cropped extraction-space sheet by passing that canvas to `renderRectifiedPreview`.
@@ -4494,7 +4651,7 @@ function getPreferredRectifiedPreviewCanvas() {
 }
 
 /**
- * Keep the Rectified Sheet Pre/Post radio state synchronized with the current display mode.
+ * Keep the Rectified Grid Pre/Post radio state synchronized with the current display mode.
  *
  * @returns {void}
  */
@@ -4649,7 +4806,7 @@ function getCurrentPreviewFrameQuad() {
 }
 
 /**
- * Draw omitted source cells on the Rectified Sheet so users can see which highest-indexed frames
+ * Draw omitted source cells on the Rectified Grid so users can see which highest-indexed frames
  * have been excluded from playback/export by Number of Frames to Export.
  *
  * @param {CanvasRenderingContext2D} ctx
@@ -4689,7 +4846,7 @@ function drawOmittedFrameQuads(ctx, mapRectifiedPointToPreview) {
 }
 
 /**
- * Resolve one currently displayed alignment point for Rectified Sheet overlays.
+ * Resolve one currently displayed alignment point for Rectified Grid overlays.
  *
  * Marker mode reads directly from the live alignment lattice, which already includes in-place
  * override edits. Markerless mode resolves the current displayed corner position after phase,
@@ -4834,7 +4991,7 @@ function getRectifiedConvolutionCanvas(sourceCanvas) {
 
 /**
  * Invalidate all appearance-adjusted frame caches while keeping the base geometry/debug previews
- * intact. The Rectified Sheet no longer depends on Appearance, so it must keep its canvas handle
+ * intact. The Rectified Grid no longer depends on Appearance, so it must keep its canvas handle
  * in order for the animated frame quad to continue updating during preview playback.
  *
  * @returns {void}
@@ -5217,7 +5374,7 @@ function invalidateMarkerlessNudgedFramesForMarker(markerCol, markerRow) {
 /**
  * Refresh the rectified-sheet preview from the unadjusted base page rectification.
  *
- * The Rectified Sheet panel is intended as a geometry/debug view, so Appearance controls should
+ * The Rectified Grid panel is intended as a geometry/debug view, so Appearance controls should
  * not recolor it even when those same controls affect the live animation preview and exports.
  *
  * @returns {void}
@@ -6945,7 +7102,265 @@ function getDisplayAlignmentInfo(alignmentInfo) {
 }
 
 /**
- * Render the raw photo preview and overlay the detected page quad in lime.
+ * @typedef {{
+ *   scale:number,
+ *   drawW:number,
+ *   drawH:number,
+ *   offsetX:number,
+ *   offsetY:number,
+ *   cssScaleX:number,
+ *   cssScaleY:number,
+ *   rect:DOMRect
+ * }} RawImageLayout
+ */
+
+/**
+ * Return a defensive copy of the active manual page-corner override, if any.
+ *
+ * @returns {{x:number,y:number}[] | null}
+ */
+function getManualPageContourForProcessing() {
+  return Array.isArray(state.source.manualPageContour) && state.source.manualPageContour.length === 4
+    ? state.source.manualPageContour.map((point) => ({ x: point.x, y: point.y }))
+    : null;
+}
+
+/**
+ * Identify whether a lightweight threshold preview still matches the current page-detection inputs.
+ *
+ * @param {ReturnType<typeof readConfig>} config
+ * @returns {string}
+ */
+function getPageBoundaryPreviewSignature(config) {
+  return [
+    config.thresholdMethod,
+    config.thresholdOffset,
+    config.alignmentPipeline,
+    config.lightOnDarkDesign ? "dark" : "light",
+    state.source.canvas.width,
+    state.source.canvas.height,
+  ].join("|");
+}
+
+/**
+ * Return the last live threshold-preview quad when it belongs to the current slider/config state.
+ *
+ * @param {ReturnType<typeof readConfig>} config
+ * @returns {{x:number,y:number}[] | null}
+ */
+function getMatchingThresholdPreviewPageContour(config) {
+  if (state.source.thresholdPreviewSignature !== getPageBoundaryPreviewSignature(config)) return null;
+  return Array.isArray(state.source.thresholdPreviewPageContour) && state.source.thresholdPreviewPageContour.length === 4
+    ? state.source.thresholdPreviewPageContour.map((point) => ({ x: point.x, y: point.y }))
+    : null;
+}
+
+/**
+ * Return whether enabling Page Corners overrides should create an editable placeholder page quad.
+ *
+ * @returns {boolean}
+ */
+function shouldSeedDefaultPageContour() {
+  const hasDetectedContour = Array.isArray(state.source.rawPageContour) && state.source.rawPageContour.length === 4;
+  const hasManualContour = Array.isArray(state.source.manualPageContour) && state.source.manualPageContour.length === 4;
+  return !!state.runtime.pageBoundaryWarningVisible && !hasDetectedContour && !hasManualContour;
+}
+
+/**
+ * Create a simple inset rectangle for images where no page boundary can be detected automatically.
+ *
+ * The inset is square in source-image pixels and based on the image diagonal, then clamped so
+ * extreme aspect ratios still leave a usable rectangle.
+ *
+ * @returns {void}
+ */
+function seedDefaultManualPageContour() {
+  const width = Math.max(1, Math.round(state.source.canvas?.width || 1));
+  const height = Math.max(1, Math.round(state.source.canvas?.height || 1));
+  const diagonalInset = Math.round(Math.hypot(width, height) * DEFAULT_PAGE_CORNER_INSET_DIAGONAL_FRACTION);
+  const maxInset = Math.max(0, Math.floor((Math.min(width, height) - 2) * 0.45));
+  const inset = Math.max(0, Math.min(diagonalInset, maxInset));
+  const right = Math.max(inset + 1, width - 1 - inset);
+  const bottom = Math.max(inset + 1, height - 1 - inset);
+  const contour = [
+    { x: inset, y: inset },
+    { x: right, y: inset },
+    { x: right, y: bottom },
+    { x: inset, y: bottom },
+  ];
+  state.source.manualPageContour = contour.map((point) => ({ x: point.x, y: point.y }));
+  state.source.rawPageContour = contour.map((point) => ({ x: point.x, y: point.y }));
+  state.source.pageQuadSource = "manual-override";
+  state.source.thresholdPreviewPageContour = null;
+  state.source.thresholdPreviewSignature = "";
+}
+
+/**
+ * Compute the fitted source-image rectangle inside the Page Corners canvas.
+ *
+ * @returns {RawImageLayout | null}
+ */
+function getRawImageLayout() {
+  const targetCanvas = dom.rawCanvas;
+  const sourceCanvas = state.source.canvas;
+  if (!targetCanvas || !sourceCanvas?.width || !sourceCanvas?.height || !targetCanvas.width || !targetCanvas.height) {
+    return null;
+  }
+  const rect = targetCanvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  const scale = Math.min(targetCanvas.width / sourceCanvas.width, targetCanvas.height / sourceCanvas.height);
+  const drawW = sourceCanvas.width * scale;
+  const drawH = sourceCanvas.height * scale;
+  return {
+    scale,
+    drawW,
+    drawH,
+    offsetX: (targetCanvas.width - drawW) * 0.5,
+    offsetY: (targetCanvas.height - drawH) * 0.5,
+    cssScaleX: rect.width / targetCanvas.width,
+    cssScaleY: rect.height / targetCanvas.height,
+    rect,
+  };
+}
+
+/**
+ * Convert a pointer event in the Page Corners canvas into source-image coordinates.
+ *
+ * @param {PointerEvent} event
+ * @param {RawImageLayout} layout
+ * @returns {{x:number,y:number}}
+ */
+function rawPointerEventToSourcePoint(event, layout) {
+  const canvasX = (event.clientX - layout.rect.left) / layout.cssScaleX;
+  const canvasY = (event.clientY - layout.rect.top) / layout.cssScaleY;
+  const sourceCanvas = state.source.canvas;
+  return {
+    x: Math.max(0, Math.min(sourceCanvas.width - 1, (canvasX - layout.offsetX) / layout.scale)),
+    y: Math.max(0, Math.min(sourceCanvas.height - 1, (canvasY - layout.offsetY) / layout.scale)),
+  };
+}
+
+/**
+ * Find the nearest displayed page corner within the Page Corners hit radius.
+ *
+ * @param {PointerEvent} event
+ * @param {RawImageLayout} layout
+ * @returns {number}
+ */
+function getNearestPageCornerIndex(event, layout) {
+  const contour = state.source.rawPageContour;
+  if (!Array.isArray(contour) || contour.length !== 4) return -1;
+  const pointerXCss = event.clientX - layout.rect.left;
+  const pointerYCss = event.clientY - layout.rect.top;
+  let nearestIndex = -1;
+  let nearestDist = PAGE_CORNER_HIT_RADIUS_CSS_PX;
+  contour.forEach((point, index) => {
+    const cornerXCss = (layout.offsetX + (point.x * layout.scale)) * layout.cssScaleX;
+    const cornerYCss = (layout.offsetY + (point.y * layout.scale)) * layout.cssScaleY;
+    const dist = Math.hypot(pointerXCss - cornerXCss, pointerYCss - cornerYCss);
+    if (dist <= nearestDist) {
+      nearestDist = dist;
+      nearestIndex = index;
+    }
+  });
+  return nearestIndex;
+}
+
+/**
+ * Store an edited page corner as a manual override and mirror it to the rendered contour.
+ *
+ * @param {number} index
+ * @param {{x:number,y:number}} point
+ * @returns {void}
+ */
+function updateManualPageCorner(index, point) {
+  const baseContour = (
+    Array.isArray(state.source.manualPageContour) && state.source.manualPageContour.length === 4
+      ? state.source.manualPageContour
+      : state.source.rawPageContour
+  );
+  if (!Array.isArray(baseContour) || baseContour.length !== 4) return;
+  const nextContour = baseContour.map((corner) => ({ x: corner.x, y: corner.y }));
+  nextContour[index] = point;
+  state.source.manualPageContour = nextContour;
+  state.source.rawPageContour = nextContour.map((corner) => ({ x: corner.x, y: corner.y }));
+  state.source.pageQuadSource = "manual-override";
+}
+
+/**
+ * Stop stale downstream work immediately when the user starts editing the page quad.
+ *
+ * Page-corner overrides change the root rectification geometry, so old alignment, stabilization,
+ * and frame-warmup work must not finish in the background and repopulate caches for the previous
+ * page boundary.
+ *
+ * @returns {void}
+ */
+function cancelPageCornerOverrideDependentWork() {
+  cancelInFlightProcessing();
+  invalidateFrameCaches();
+  state.frames.base = [];
+  state.frames.baseOutputEpoch = [];
+  state.geometry.frameCount = 0;
+  state.geometry.alignmentInfo = null;
+  state.preview.activeEditedMarker = null;
+  state.runtime.markerEditingEnabled = false;
+  syncMarkerEditingUi();
+  updateExportControlsAvailability(true);
+  updatePreviewPlayPauseButton();
+}
+
+/**
+ * Attach Page Corners pointer handlers for editing existing page-corner detections.
+ *
+ * @returns {void}
+ */
+function attachRawPageCornerEditing() {
+  dom.rawCanvas.addEventListener("pointerdown", (event) => {
+    if (!state.runtime.pageCornerEditingEnabled || !state.source.image) return;
+    const layout = getRawImageLayout();
+    if (!layout) return;
+    const cornerIndex = getNearestPageCornerIndex(event, layout);
+    if (cornerIndex < 0) return;
+    event.preventDefault();
+    dom.rawCanvas.setPointerCapture?.(event.pointerId);
+    cancelPageCornerOverrideDependentWork();
+    state.preview.activePageCornerDrag = { pointerId: event.pointerId, cornerIndex };
+    updateManualPageCorner(cornerIndex, rawPointerEventToSourcePoint(event, layout));
+    syncPageCornerEditingUi();
+    renderRawPreview();
+  });
+
+  dom.rawCanvas.addEventListener("pointermove", (event) => {
+    const drag = state.preview.activePageCornerDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const layout = getRawImageLayout();
+    if (!layout) return;
+    event.preventDefault();
+    updateManualPageCorner(drag.cornerIndex, rawPointerEventToSourcePoint(event, layout));
+    renderRawPreview();
+  });
+
+  const finishDrag = (event) => {
+    const drag = state.preview.activePageCornerDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    if (dom.rawCanvas.hasPointerCapture?.(event.pointerId)) {
+      dom.rawCanvas.releasePointerCapture(event.pointerId);
+    }
+    state.preview.activePageCornerDrag = null;
+    syncPageCornerEditingUi();
+    renderRawPreview();
+    revokeGifUrl();
+    scheduleProcess();
+  };
+
+  dom.rawCanvas.addEventListener("pointerup", finishDrag);
+  dom.rawCanvas.addEventListener("pointercancel", finishDrag);
+}
+
+/**
+ * Render the Page Corners preview and overlay the detected page quad in lime.
  *
  * @returns {void}
  */
@@ -6953,27 +7368,125 @@ function renderRawPreview() {
   updateMobileRawAspectRatio();
   renderCanvasFit(state.source.canvas, dom.rawCanvas);
   dom.rawCanvas.parentElement?.classList.remove("is-empty");
+  syncPageCornerEditingUi();
   if (!state.source.rawPageContour || state.source.rawPageContour.length !== 4) return;
   const targetCanvas = dom.rawCanvas;
-  const sourceCanvas = state.source.canvas;
   const ctx = targetCanvas.getContext("2d");
-  const scale = Math.min(targetCanvas.width / sourceCanvas.width, targetCanvas.height / sourceCanvas.height);
-  const drawW = sourceCanvas.width * scale;
-  const drawH = sourceCanvas.height * scale;
-  const offsetX = (targetCanvas.width - drawW) * 0.5;
-  const offsetY = (targetCanvas.height - drawH) * 0.5;
+  const layout = getRawImageLayout();
+  if (!layout) return;
   ctx.save();
   ctx.strokeStyle = "rgba(0, 255, 0, 0.8)";
   ctx.lineWidth = getPanelOverlayStrokeWidth(3);
   ctx.beginPath();
   for (let i = 0; i < state.source.rawPageContour.length; i++) {
     const pt = state.source.rawPageContour[i];
-    const x = offsetX + (pt.x * scale);
-    const y = offsetY + (pt.y * scale);
+    const x = layout.offsetX + (pt.x * layout.scale);
+    const y = layout.offsetY + (pt.y * layout.scale);
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   }
   ctx.closePath();
+  ctx.stroke();
+  if (state.runtime.pageCornerEditingEnabled) {
+    drawRawPageCornerHandles(ctx, layout);
+  }
+  drawRawPageCornerMagnifier(ctx, layout);
+  ctx.restore();
+}
+
+/**
+ * Draw visible corner handles while Page Corners page-corner editing is enabled.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {RawImageLayout} layout
+ * @returns {void}
+ */
+function drawRawPageCornerHandles(ctx, layout) {
+  const radius = Math.max(4, PAGE_CORNER_HIT_RADIUS_CSS_PX / Math.max(layout.cssScaleX, layout.cssScaleY));
+  ctx.save();
+  state.source.rawPageContour.forEach((point, index) => {
+    const x = layout.offsetX + (point.x * layout.scale);
+    const y = layout.offsetY + (point.y * layout.scale);
+    const isActive = state.preview.activePageCornerDrag?.cornerIndex === index;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = isActive ? "rgba(0, 255, 0, 0.35)" : "rgba(0, 255, 0, 0.18)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.lineWidth = Math.max(1, getPanelOverlayStrokeWidth(1.5));
+    ctx.fill();
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+/**
+ * Draw an opposite-quadrant magnified inset while the user drags a Page Corners page corner.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {RawImageLayout} layout
+ * @returns {void}
+ */
+function drawRawPageCornerMagnifier(ctx, layout) {
+  const drag = state.preview.activePageCornerDrag;
+  const point = drag ? state.source.rawPageContour?.[drag.cornerIndex] : null;
+  if (!point) return;
+  const sourceCanvas = state.source.canvas;
+  const baseInsetSize = Math.max(64, Math.min(layout.drawW, layout.drawH) / 3);
+  const insetSize = baseInsetSize * PAGE_CORNER_MAGNIFIER_SIZE_SCALE;
+  const margin = Math.max(8, 12 / Math.max(layout.cssScaleX, layout.cssScaleY));
+  const insetX = point.x < sourceCanvas.width * 0.5
+    ? layout.offsetX + layout.drawW - insetSize - margin
+    : layout.offsetX + margin;
+  const insetY = point.y < sourceCanvas.height * 0.5
+    ? layout.offsetY + layout.drawH - insetSize - margin
+    : layout.offsetY + margin;
+  const sampleSize = Math.max(
+    4,
+    Math.min(sourceCanvas.width, sourceCanvas.height, baseInsetSize / (layout.scale * PAGE_CORNER_MAGNIFIER_SCALE))
+  );
+  const sampleLeft = point.x - (sampleSize * 0.5);
+  const sampleTop = point.y - (sampleSize * 0.5);
+  const visibleLeft = Math.max(0, sampleLeft);
+  const visibleTop = Math.max(0, sampleTop);
+  const visibleRight = Math.min(sourceCanvas.width, sampleLeft + sampleSize);
+  const visibleBottom = Math.min(sourceCanvas.height, sampleTop + sampleSize);
+  const visibleWidth = Math.max(0, visibleRight - visibleLeft);
+  const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+  const magnifierScale = insetSize / sampleSize;
+  const dx = insetX + ((visibleLeft - sampleLeft) * magnifierScale);
+  const dy = insetY + ((visibleTop - sampleTop) * magnifierScale);
+
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 255, 255, 0.88)";
+  ctx.fillRect(insetX - 4, insetY - 4, insetSize + 8, insetSize + 8);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(insetX, insetY, insetSize, insetSize);
+  ctx.clip();
+  ctx.fillStyle = "rgba(32, 33, 36, 0.35)";
+  ctx.fillRect(insetX, insetY, insetSize, insetSize);
+  if (visibleWidth > 0 && visibleHeight > 0) {
+    ctx.drawImage(
+      sourceCanvas,
+      visibleLeft,
+      visibleTop,
+      visibleWidth,
+      visibleHeight,
+      dx,
+      dy,
+      visibleWidth * magnifierScale,
+      visibleHeight * magnifierScale
+    );
+  }
+  ctx.restore();
+  ctx.strokeStyle = "rgba(0, 255, 0, 0.9)";
+  ctx.lineWidth = Math.max(1, getPanelOverlayStrokeWidth(2));
+  ctx.strokeRect(insetX, insetY, insetSize, insetSize);
+  ctx.beginPath();
+  ctx.moveTo(insetX + insetSize * 0.5, insetY);
+  ctx.lineTo(insetX + insetSize * 0.5, insetY + insetSize);
+  ctx.moveTo(insetX, insetY + insetSize * 0.5);
+  ctx.lineTo(insetX + insetSize, insetY + insetSize * 0.5);
   ctx.stroke();
   ctx.restore();
 }
@@ -7133,6 +7646,7 @@ function buildSettingsTsv(config) {
     sourceFilename: state.source.filename,
     sourceCredit: state.source.sourceCredit,
     manualMarkerOverrides: state.geometry.manualMarkerOverrides,
+    manualPageContour: state.source.manualPageContour,
     sanitizeFilenameBase,
   });
 }

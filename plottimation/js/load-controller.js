@@ -174,7 +174,7 @@ export async function loadImageSource({
   setBusyState(dom, state, true);
   setGeometryProcessingCursor?.(true);
   setStatus(t("status.loadingImage"));
-  // On mobile, a new image load should bring the user back to the Raw Photo tab before the
+  // On mobile, a new image load should bring the user back to the Page tab before the
   // previews are cleared and redrawn.
   if (state.runtime.mobileSingleViewerMode) {
     setActiveViewerTab?.("raw");
@@ -182,7 +182,7 @@ export async function loadImageSource({
   collapseAllPanels();
   resetNonLayoutControls();
   revokeGifUrl();
-  // Clear the old filename before syncing the Raw Photo header, otherwise the filename fallback
+  // Clear the old filename before syncing the Page Corners header, otherwise the filename fallback
   // can briefly show the previous image's name while the next image/demo is still loading.
   state.source.filename = "";
   state.source.dragUrl = "";

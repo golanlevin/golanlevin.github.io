@@ -662,19 +662,10 @@ export function attachUi({
   exportZip,
   saveSettingsFile,
 }) {
-  makeCanvasDraggable(dom.rawCanvas, () => {
-    if (state.source.dragUrl && state.source.filename) {
-      return {
-        url: state.source.dragUrl,
-        filename: state.source.filename,
-        mimeType: state.source.mimeType || "image/jpeg",
-      };
-    }
-    return {
-      canvas: state.source.canvas,
-      filename: state.source.filename || "raw-photo.png",
-      mimeType: "image/png",
-    };
+  // Page Corners pointer gestures are reserved for direct page-corner editing.
+  dom.rawCanvas.draggable = false;
+  dom.rawCanvas.addEventListener("dragstart", (event) => {
+    event.preventDefault();
   });
 
   makeCanvasDraggable(dom.rectifiedCanvas, () => {
@@ -967,7 +958,7 @@ export function attachUi({
   });
 
   dom.thresholdOffset.addEventListener("input", () => {
-    // While the slider is dragged, update only the readout plus the lightweight Raw Photo page-quad
+    // While the slider is dragged, update only the readout plus the lightweight Page Corners page-quad
     // preview. The full pipeline still waits for the `change` event on release.
     updateSliderReadouts();
     previewPageBoundaryForThresholdOffset();

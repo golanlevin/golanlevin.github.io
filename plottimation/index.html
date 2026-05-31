@@ -43,7 +43,7 @@
           </p>
           <p id="appLedeMobileNote" class="lede mobile-header-note" data-i18n="app.mobileNote">(Please use desktop version for advanced controls.)</p>
           <p id="appLedeSecondary" class="lede">
-            <span data-app-version>v1.16</span> • <a href="https://github.com/golanlevin/plottimation/tree/main/README.md" target="_blank" rel="noopener noreferrer" data-i18n="app.documentation">Instructions</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer" data-i18n="app.demoVideo">Demo Video</a> • <a href="templates/index.html" target="_blank" rel="noopener noreferrer" data-i18n="app.templates">Templates</a>
+            <span data-app-version>v1.17</span> • <a href="https://github.com/golanlevin/plottimation/tree/main/README.md" target="_blank" rel="noopener noreferrer" data-i18n="app.documentation">Instructions</a> • <a href="https://www.youtube.com/watch?v=MOXB63DgItQ" target="_blank" rel="noopener noreferrer" data-i18n="app.demoVideo">Demo Video</a> • <a href="templates/index.html" target="_blank" rel="noopener noreferrer" data-i18n="app.templates">Templates</a>
           </p>
           <p id="appLedeTertiary" class="lede"><span data-i18n="app.bylinePrefix">By @golanlevin, 2026 •</span> <a href="https://github.com/golanlevin/plottimation" target="_blank" rel="noopener noreferrer">Source</a></p>
         </div>
@@ -158,7 +158,7 @@ by crosses, dots, or empty gutters.</span>
             </select>
           </label>
           <div class="slider-stack">
-            <label>
+            <label id="thresholdOffsetRow">
               <span><span data-i18n="detection.thresholdOffset">Page Detection Threshold</span> <output id="thresholdOffsetValue">-20</output></span>
               <input id="thresholdOffset" type="range" min="-128" max="128" step="1" value="-20" />
             </label>
@@ -441,7 +441,7 @@ by crosses, dots, or empty gutters.</span>
       <main id="workspace" class="workspace">
         <!-- Mobile/single-viewer tab bar. Hidden in the desktop multi-panel layout. -->
         <nav class="viewer-tabs" data-i18n-aria-label="aria.viewerPanels" aria-label="Viewer panels">
-          <button id="viewerTabRaw" class="viewer-tab is-active" type="button" data-view="raw" aria-pressed="true" data-i18n="viewerTabs.raw">Raw</button>
+          <button id="viewerTabRaw" class="viewer-tab is-active" type="button" data-view="raw" aria-pressed="true" data-i18n="viewerTabs.raw">Page</button>
           <button id="viewerTabRectified" class="viewer-tab" type="button" data-view="rectified" aria-pressed="false" data-i18n="viewerTabs.rectified">Rectified</button>
           <button id="viewerTabMarkers" class="viewer-tab" type="button" data-view="markers" aria-pressed="false" data-i18n="viewerTabs.markers">Markers</button>
           <button id="viewerTabPreview" class="viewer-tab" type="button" data-view="preview" aria-pressed="false" data-i18n="viewerTabs.preview">Preview</button>
@@ -452,10 +452,14 @@ by crosses, dots, or empty gutters.</span>
           <header>
             <div class="viewer-header-copy">
               <div class="status-headline">
-                <h2 id="rawPhotoHeading"><span id="rawPhotoHeadingNumber">1.</span> <a id="rawPhotoHeadingText" target="_blank" rel="noopener noreferrer">Raw Photo</a><span id="rawPhotoWarning" class="header-note" hidden> ⚠️</span></h2>
+                <h2 id="rawPhotoHeading"><span id="rawPhotoHeadingNumber">1.</span> <a id="rawPhotoHeadingText" target="_blank" rel="noopener noreferrer">Page Corners</a><span id="rawPhotoWarning" class="header-note" hidden> ⚠️</span></h2>
                 <span id="rawPhotoCredit" class="lede viewer-subnote viewer-inline-subnote" hidden></span>
                 <span id="rawBusy" class="status-busy" hidden aria-hidden="true"></span>
               </div>
+            </div>
+            <div id="rawPhotoHeaderActions" class="header-actions">
+              <button id="togglePageCornerEditingButton" class="header-button" type="button" disabled data-i18n="alignment.enableOverrides">Enable Overrides</button>
+              <button id="clearPageCornerEditsButton" class="header-button" type="button" hidden data-i18n="alignment.clearEdits">Clear Edits</button>
             </div>
           </header>
           <div class="viewer-stage">
@@ -463,17 +467,17 @@ by crosses, dots, or empty gutters.</span>
           </div>
         </section>
 
-        <!-- Panel 2: rectified page preview, with Pre/Post display mode selector. -->
+        <!-- Panel 2: rectified grid preview, with Pre/Post display mode selector. -->
         <section id="rectifiedViewerCard" class="viewer-card" data-view="rectified">
           <header>
             <div class="viewer-header-copy">
               <div class="status-headline">
-                <h2 id="rectifiedSheetHeading"><span id="rectifiedSheetHeadingNumber">2.</span> <a id="rectifiedSheetHeadingText" target="_blank" rel="noopener noreferrer">Rectified Sheet</a></h2>
+                <h2 id="rectifiedSheetHeading"><span id="rectifiedSheetHeadingNumber">2.</span> <a id="rectifiedSheetHeadingText" target="_blank" rel="noopener noreferrer">Rectified Grid</a></h2>
                 <span id="rectifiedSheetProgress" class="lede viewer-subnote viewer-inline-subnote" hidden></span>
                 <span id="rectifiedSheetFrameProgress" class="lede viewer-subnote viewer-inline-subnote" hidden></span>
               </div>
             </div>
-            <fieldset id="rectifiedViewToggle" class="rectified-view-toggle lede viewer-subnote" aria-label="Rectified Sheet view" data-i18n-aria-label="aria.rectifiedViewToggle">
+            <fieldset id="rectifiedViewToggle" class="rectified-view-toggle lede viewer-subnote" aria-label="Rectified Grid view" data-i18n-aria-label="aria.rectifiedViewToggle">
               <label>
                 <input id="rectifiedViewPre" name="rectifiedViewMode" type="radio" value="pre" checked />
                 <span data-i18n="panels.rectifiedViewPre">Pre</span>

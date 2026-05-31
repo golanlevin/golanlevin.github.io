@@ -1,5 +1,5 @@
 source_filename	2_plot_concentric.jpg
-source_credit	Plot by Golan Levin (@golanlevin)
+source_credit	Plot by Golan Levin
 paper_preset	letter
 paper_orientation	landscape
 paper_width	11
@@ -12,7 +12,7 @@ light_on_dark_design	false
 search_inset_margin_x_px	80
 search_inset_margin_y_px	160
 boundary_threshold	8
-boundary_persistence_px	7
+boundary_persistence_px	5
 post_rotation_deg	0
 alignment_pipeline	markers
 stabilization_method	pairwise-cyclic

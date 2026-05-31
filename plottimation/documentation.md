@@ -54,7 +54,7 @@
   Choose `Landscape` or `Portrait`. This changes the effective aspect ratio used by the page warp.
 * `Paper Aspect` –
   Select a preset paper format such as `Letter`, `Tabloid`, `A4`, `Source`, or `Custom`.
-  * `Source (width:height)` – This option uses the raw source image dimensions as an aspect-ratio hint. This is still just an aspect guide; it does not request a rectified sheet or export at that literal pixel size.
+  * `Source (width:height)` – This option uses the raw source image dimensions as an aspect-ratio hint. This is still just an aspect guide; it does not request a rectified grid or export at that literal pixel size.
   * `Custom` –
   If `Paper Aspect` is set to `Custom`, the `Sheet Width` and `Sheet Height` fields appear. These are used only as aspect-ratio hints.
 
@@ -82,11 +82,23 @@
 * `Grid Edge Run Length` –
   Sets how many consecutive pixels must satisfy the grid edge threshold before a grid edge is accepted.
 * `Post-Rotation` –
-  Applies a small rotation to the rectified sheet after page rectification and before frame alignment.
+  Applies a small rotation to the rectified grid after page rectification and before frame alignment.
 
 If the app cannot detect the page correctly, the `Page & Grid Detection` header will display a ⚠️ warning mark, and the `Status` panel will show:
 
 ```Unable to find page boundary. Try adjusting the Page Detection Threshold or other Page & Grid Detection settings.```
+
+If automatic page-corner detection is close but not quite right, or if no page boundary can be detected at all, use the `Page Corners` panel:
+
+* `Enable Overrides` –
+  Turns on manual page-corner editing in the source image. Drag a green corner handle to correct its location.
+  While you drag a corner, an enlarged inset helps with precise placement.
+* no detected page boundary –
+  If the app is in a page-boundary warning state and you click `Enable Overrides`, Plottimation creates a simple inset rectangle as a starting point. Drag its corners to match the actual page.
+* `Clear Edits` –
+  Removes the manual page-corner override and returns to automatic page detection.
+
+While manual page-corner edits are active, `Page Detection Threshold` is disabled. Clear the edits first if you want the app to resume automatic page-corner detection. Manual page-corner edits are saved in exported settings files.
 
 
 ---
@@ -109,8 +121,6 @@ The `Markers` pipeline assumes the frames are separated by crosses or dots. If t
     Uses dot-shaped markers.
 * `Alignment Marker Region Size` –
   Sets the size of the square ROI used to inspect each alignment marker.
-* `Do subpixel alignment using markers` –
-  When enabled (the default), the app uses sub-pixel precision to refine frame extraction.
 * `Detect crosses with convolution` –
   When enabled, each cross-marker ROI is localized using a convolution-based detector instead of the default profile-based method.
 
@@ -184,7 +194,7 @@ In the desktop version, it is still possible in Markerless mode to edit individu
 
 Markerless overrides are post-stabilization nudges, so they do not feed back into the stabilization solve itself.
 
-Technicallly, the grid pitch is estimated by applying an autocorrelation to a reduced blurred grayscale version of the rectified sheet. The phase of the grid is estimated from a gutter-support metric built from a multiplicative combination of lightness, edge energy, and texture variance measurements.
+Technically, the grid pitch is estimated by applying an autocorrelation to a reduced blurred grayscale version of the rectified grid. The phase of the grid is estimated from a gutter-support metric built from a multiplicative combination of lightness, edge energy, and texture variance measurements.
 
 
 ---
@@ -319,6 +329,7 @@ After a GIF has been generated, the `Preview & Export` heading text also becomes
 Typical messages and diagnostic data include:
 
 * image loading
+* loaded source credits, when included in a settings file
 * page analysis
 * frame extraction counts
 * export progress
@@ -335,13 +346,13 @@ The `Enable Tooltips` / `Disable Tooltips` button in the panel header toggles ex
 
 The four main viewer panels are:
 
-1. `Raw Photo` –
-  Shows the source photo, with the detected page outline drawn in green. The small line under this header shows `source_credit` metadata from the settings file when present; if no credit is available, it falls back to the loaded source filename.
-2. `Rectified Sheet` –
-  Shows either the full rectified page warp or the cropped rectified sheet used for frame extraction, along with the current frame quad. Use the header's `Pre` / `Post` buttons to switch between those two views:
+1. `Page Corners` –
+  Shows the source photo, with the detected or manually edited page outline drawn in green. The header buttons let you enable manual page-corner overrides and clear them when needed.
+2. `Rectified Grid` –
+  Shows either the full rectified page warp or the cropped rectified grid used for frame extraction, along with the current frame quad. Use the header's `Pre` / `Post` buttons to switch between those two views:
   - `Pre` shows the full page warp before frame-grid crop/re-rectification. In `Pre`, the blue outline shows the detected frame-grid search result and the magenta outline shows the current `Grid Search Inset X/Y` region.
-  - `Post` shows the cropped extraction-space sheet used for frame extraction.
-  - On very large source images, this panel may display a downscaled preview of the rectified sheet even though extraction still uses the full-resolution rectified image internally. In markerless mode it can also show the blue inset ROI rectangle used for the markerless search.
+  - `Post` shows the cropped extraction-space grid used for frame extraction.
+  - On very large source images, this panel may display a downscaled preview of the rectified grid even though extraction still uses the full-resolution rectified image internally. In markerless mode it can also show the blue inset ROI rectangle used for the markerless search.
   - If `Frames in Export` omits cells, those omitted source cells are shown here as red slashed quads with a translucent gray fill.
 3. `Frame Alignment Markers` or `3. Frame Alignment Centers` –
   In `Markers` mode, this panel shows the marker ROI tiles used for frame alignment. In `Markerless` mode, it shows the extracted corner tiles used for corner nudging.
@@ -354,7 +365,7 @@ The four main viewer panels are:
 On mobile devices: 
 
 * some advanced controls are hidden
-* the interface switches to a single-column layout with tabs for `Raw`, `Rectified`, `Markers` or `Corners`, and `Preview`
+* the interface switches to a single-column layout with tabs for `Page`, `Rectified`, `Markers` or `Centers`, and `Preview`
 * in markerless mode, the third mobile control tab is renamed `Stabilize`
 * the marker panel is read-only
 * the `Status` panel moves to the bottom
@@ -379,6 +390,7 @@ These settings files store the current UI state, including:
 * frame detection and alignment settings
 * appearance settings
 * crop/export settings
+* any manual page-corner overrides
 * any manual marker overrides
 * optional metadata
 

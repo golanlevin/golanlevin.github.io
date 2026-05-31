@@ -68,6 +68,7 @@ export async function loadCompanionSettingsText({
  *   syncPaperPresetUi: () => void,
  *   syncAlignmentMarkerUi: () => void,
  *   syncMarkerEditingUi: () => void,
+ *   syncPageCornerEditingUi?: () => void,
  *   syncRawPhotoCreditDisplay?: () => void,
  *   updateSliderReadouts: () => void,
  * }} deps
@@ -85,11 +86,13 @@ export function applyLoadedSettingsText({
   syncPaperPresetUi,
   syncAlignmentMarkerUi,
   syncMarkerEditingUi,
+  syncPageCornerEditingUi,
   syncRawPhotoCreditDisplay,
   updateSliderReadouts,
 }) {
   if (!settingsText.trim()) return;
   state.geometry.manualMarkerOverrides.clear();
+  state.source.manualPageContour = null;
   const entries = new Map(
     settingsText
       .split(/\r?\n/)
@@ -111,6 +114,7 @@ export function applyLoadedSettingsText({
   };
 
   state.source.sourceCredit = entries.get("source_credit") || "";
+  state.source.manualPageContour = parsePageCornerOverrides(entries);
 
   setIfPresent("paper_preset", dom.paperPreset);
   if (entries.get("paper_orientation") === "portrait") {
@@ -236,6 +240,13 @@ export function applyLoadedSettingsText({
   syncPaperPresetUi();
   syncAlignmentMarkerUi();
   syncMarkerEditingUi();
+  if (state.source.manualPageContour) {
+    state.source.rawPageContour = state.source.manualPageContour.map((point) => ({ x: point.x, y: point.y }));
+    state.source.thresholdPreviewPageContour = null;
+    state.source.thresholdPreviewSignature = "";
+    state.runtime.pageCornerEditingEnabled = false;
+  }
+  syncPageCornerEditingUi?.();
   syncRawPhotoCreditDisplay?.();
   if (dom.frameCountToExport) {
     const cols = Math.max(1, Math.min(20, Math.round(Number(dom.frameCols.value) || settingsDefaults.layout.frameCols)));
@@ -249,6 +260,37 @@ export function applyLoadedSettingsText({
 }
 
 /**
+ * Parse a four-corner manual Page Corners override from settings rows.
+ *
+ * @param {Map<string, string>} entries
+ * @returns {{x:number,y:number}[] | null}
+ */
+function parsePageCornerOverrides(entries) {
+  const cornerKeys = [
+    "page_corner_override_tl",
+    "page_corner_override_tr",
+    "page_corner_override_br",
+    "page_corner_override_bl",
+  ];
+  if (!cornerKeys.every((key) => entries.has(key))) return null;
+  const points = cornerKeys.map((key) => parsePoint(entries.get(key)));
+  return points.every(Boolean) ? points : null;
+}
+
+/**
+ * Parse one comma-separated point.
+ *
+ * @param {string | undefined} value
+ * @returns {{x:number,y:number} | null}
+ */
+function parsePoint(value) {
+  const [xText, yText] = String(value || "").split(",");
+  const x = Number(xText);
+  const y = Number(yText);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+/**
  * Serialize the current app settings into a tab-separated manifest.
  *
  * Each line uses `setting<TAB>value`.
@@ -258,6 +300,7 @@ export function applyLoadedSettingsText({
  *   sourceFilename: string,
  *   sourceCredit?: string,
  *   manualMarkerOverrides: Map<string, {x:number, y:number}>,
+ *   manualPageContour?: {x:number, y:number}[] | null,
  *   sanitizeFilenameBase: (filename:string) => string,
  * }} deps
  * @returns {string}
@@ -267,6 +310,7 @@ export function buildSettingsTsv({
   sourceFilename,
   sourceCredit = "",
   manualMarkerOverrides,
+  manualPageContour = null,
   sanitizeFilenameBase,
 }) {
   const rows = [
@@ -331,5 +375,11 @@ export function buildSettingsTsv({
       const [col, row] = key.split(",");
       return [`marker_override_${col}_${row}`, `${point.x},${point.y}`];
     });
-  return [...rows, ...overrideRows].map(([key, value]) => `${key}\t${value}`).join("\n") + "\n";
+  const pageCornerOverrideRows = Array.isArray(manualPageContour) && manualPageContour.length === 4
+    ? ["tl", "tr", "br", "bl"].map((cornerName, index) => {
+        const point = manualPageContour[index];
+        return [`page_corner_override_${cornerName}`, `${point.x},${point.y}`];
+      })
+    : [];
+  return [...rows, ...pageCornerOverrideRows, ...overrideRows].map(([key, value]) => `${key}\t${value}`).join("\n") + "\n";
 }

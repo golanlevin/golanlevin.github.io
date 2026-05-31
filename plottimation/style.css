@@ -527,6 +527,14 @@ button:disabled {
   opacity: 0.5;
 }
 
+.control-disabled {
+  opacity: 0.5;
+}
+
+.control-disabled input {
+  pointer-events: none;
+}
+
 button:hover:not(:disabled),
 .download-link:hover {
   transform: translateY(-1px);
@@ -710,6 +718,15 @@ button:hover:not(:disabled),
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+body.raw-page-override-active #rawCanvas {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+body.raw-page-corner-dragging #rawCanvas {
+  cursor: grabbing;
 }
 
 .icon-button {
