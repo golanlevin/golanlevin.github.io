@@ -300,6 +300,20 @@ Use `Export Options` to control the size, timing, ordering, and encoding of the 
 
 ---
 
+## Page Corners Panel Header Buttons
+
+*The `Page Corners` panel allows you to manually edit the page corners, if desired.*
+
+<img src="doc/ui_page_corners.png" width="330">
+
+* `Enable Overrides` –
+  Turns on interactive manual editing of the Page Corners. This is useful if the automatic page corner detection is incorrect or has failed. Enabling manual editing disables the Page Detection Threshold slider. 
+* `Clear Edits` –
+  Deletes manually-edited page corners and restores automatically-detected ones, if any. 
+
+
+---
+
 ## Preview Panel Header Buttons
 
 *The `Preview & Export` panel header contains the export actions.*
@@ -347,7 +361,7 @@ The `Enable Tooltips` / `Disable Tooltips` button in the panel header toggles ex
 The four main viewer panels are:
 
 1. `Page Corners` –
-  Shows the source photo, with the detected or manually edited page outline drawn in green. The header buttons let you enable manual page-corner overrides and clear them when needed.
+  Shows the source photo, with the automatically detected or manually edited page outline drawn in green. The header buttons let you enable manual page-corner overrides and clear them when needed.
 2. `Rectified Grid` –
   Shows either the full rectified page warp or the cropped rectified grid used for frame extraction, along with the current frame quad. Use the header's `Pre` / `Post` buttons to switch between those two views:
   - `Pre` shows the full page warp before frame-grid crop/re-rectification. In `Pre`, the blue outline shows the detected frame-grid search result and the magenta outline shows the current `Grid Search Inset X/Y` region.
