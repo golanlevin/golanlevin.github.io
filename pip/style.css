@@ -1,0 +1,101 @@
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  padding: 0;
+}
+
+body {
+  background: #f4f1eb;
+  color: #242424;
+  display: flex;
+  font-family: Georgia, "Times New Roman", serif;
+  justify-content: center;
+  line-height: 1.45;
+}
+
+.page {
+  box-sizing: border-box;
+  max-width: 760px;
+  padding: 32px 24px 40px;
+  width: 100%;
+}
+
+.masthead {
+  margin: 0 auto 20px;
+  max-width: 580px;
+}
+
+.masthead h1 {
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1.1;
+  margin: 0 0 10px;
+}
+
+.masthead p {
+  color: #555;
+  font-size: 16px;
+  margin: 2px 0;
+}
+
+.sketch-holder {
+  background: #303030;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  line-height: 0;
+  margin: 0 auto 24px;
+  position: relative;
+  width: 580px;
+}
+
+canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.notes {
+  font-size: 17px;
+  margin: 0 auto;
+  max-width: 580px;
+}
+
+.notes h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 22px 0 6px;
+}
+
+.notes p {
+  margin: 0 0 14px;
+}
+
+.notes ul {
+  margin: 0 0 18px;
+  padding-left: 22px;
+}
+
+.notes li {
+  margin: 3px 0;
+}
+
+.notes a {
+  color: #154f84;
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 24px 16px 32px;
+  }
+
+  .masthead,
+  .notes,
+  .sketch-holder {
+    max-width: 100%;
+  }
+
+  .sketch-holder {
+    overflow-x: auto;
+    width: 100%;
+  }
+}

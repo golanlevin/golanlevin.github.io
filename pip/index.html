@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Painting with Interactive Pixels</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <main class="page">
+      <header class="masthead">
+        <h1>Painting with Interactive Pixels</h1>
+        <p><a href="https://folk.idi.ntnu.no/dags/pip.html">Originally developed</a> by NTNU Prof. <a href="https://www.ntnu.no/ansatte/dag.svanes">Dag Svanæs</a>, 1998</p>
+        <p><a href="original/">Java</a>-to-p5.js restoration by Golan Levin, 2026 • <a href="sketch.js">p5 Source</a></p>
+      </header>
+
+      <section id="sketch-holder" class="sketch-holder" aria-label="Painting with Interactive Pixels app"></section>
+
+      <section class="notes" aria-labelledby="about-title">
+        <h2 id="about-title">About</h2>
+        <p>
+          Dag Svanæs’s <em>Painting with Interactive Pixels</em> is a small pixel-based drawing environment in which each 
+          color of “ink” has its own interactive behavior. In its <strong>Play</strong> mode, the 
+          painted cells respond like connected pushbuttons, toggles, and one-way switches. I saw Svanæs demo PIP in early 1998 and it had a significant influence on <a href="https://flong.com/archive/texts/publications/thesis/index.html">my creative trajectory</a>. 
+        </p>
+
+        <h2>How To Use</h2>
+        <ul>
+          <li>Select the Pencil tool to enter <strong>Draw</strong> mode.</li>
+          <li>Choose an ink from the palette, then paint on the grid.</li>
+          <li>Select the Arrow tool to enter <strong>Play</strong> mode.</li>
+          <li>Click or press connected interactive pixels to see their behavior propagate.</li>
+        </ul>
+
+        <p>To get started, try this design and enjoy the marquee!<br/>
+        <img src="images/pip_starter.png" width="50%">
+        </p>
+      </section>
+    </main>
+    <script src="p5.js"></script>
+    <script src="sketch.js"></script>
+  </body>
+</html>

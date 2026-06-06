@@ -33,4 +33,6 @@ A website by Golan Levin
 * [Signet Ring Band Generator](ring/index.html)
 * [Super-Ellipse Generator](ellipse/index.html)
 
+### Miscellany
 
+* [p5.js port of Dag Svanæs’s *Painting with Interactive Pixels*](pip/index.html) (1998)
