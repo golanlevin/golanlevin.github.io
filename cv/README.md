@@ -12,7 +12,7 @@ United States
 
 Golan Levin is an artist, engineer, researcher and educator interested in new intersections of machine code, visual culture, and critical making. His work combines equal measures of the whimsical, the provocative, and the sublime in an eclectic variety of online, installation and performance media. Through responsive artifacts, virtual environments, and media provocations, Levin applies creative twists to digital technologies that highlight our relationship with machines, expand the vocabulary of human action, and awaken participants to their own potential as creative actors. 
 
-Levin is [Professor of Computational Art in the School of Art](https://art.cmu.edu/people/golan-levin/) at Carnegie Mellon University, where he also holds courtesy appointments in [Architecture](https://www.architecture.cmu.edu/profiles/golan-levin), [Computer Science](https://www.csd.cs.cmu.edu/people/faculty/golan-levin), and [Design](https://www.design.cmu.edu/profiles/golan-levin). Golan's pedagogy is concerned with reclaiming computation as a medium of personal expression; he teaches “studio art courses in computer science” on themes like interactive new media art, generative form, and machine drawing. With Tega Brain, Levin is co-author of *Code as Creative Medium* (MIT Press, 2021), a guide to creative coding for software arts educators.
+Levin is [Professor of Computational Art in the School of Art](https://art.cmu.edu/people/golan-levin/) at Carnegie Mellon University, where he also holds courtesy appointments in [Architecture](https://www.architecture.cmu.edu/profiles/golan-levin), [Computer Science](https://www.csd.cs.cmu.edu/people/faculty/golan-levin), and [Design](https://www.design.cmu.edu/profiles/golan-levin). Golan's pedagogy is concerned with reclaiming computation as a medium of personal expression; he teaches “studio art courses in computer science” on themes like interactive new media art, generative form, and machine drawing. With Tega Brain, Levin is co-author of [*Code as Creative Medium*](https://mitpress.mit.edu/9780262542043/code-as-creative-medium/) (MIT Press, 2021), a guide to creative coding for software arts educators.
 
 ---
 
@@ -33,7 +33,7 @@ Director, Frank-Ratchye STUDIO for Creative Inquiry at CMU. January 2009-August 
 
 Courtesy Appointments
 
-* At Carnegie Mellon University, I also hold secondary (courtesy) appointments in the School of Design, the School of Architecture, and the Computer Science Department. 
+* At Carnegie Mellon University, I also hold affiliate (courtesy) appointments in the [School of Design](https://design.cmu.edu/profiles/golan-levin), the [School of Architecture](https://www.architecture.cmu.edu/profiles/golan-levin), and the [Computer Science Department](https://www.csd.cs.cmu.edu/people/faculty/golan-levin).
 
 #### Other Teaching Appointments
 
@@ -46,7 +46,7 @@ Courtesy Appointments
 ## Education 
 
 * **Massachusetts Institute of Technology**, MIT Media Laboratory. Master of Science in Media Arts and Sciences, August 2000. Research area: Aesthetics and Computation (Advisor: John Maeda). MS Thesis: *Painterly Interfaces for Audiovisual Performance*. 
-* **Massachusetts Institute of Technology**. Bachelor of Science in Art and Design, June 1994. Minor in Music Theory and Composition. 
+* **Massachusetts Institute of Technology**. Bachelor of Science in Art and Design (Course 4B), June 1994. Minor in Music Theory and Composition. 
 
 ---
 
@@ -58,7 +58,7 @@ Courtesy Appointments
 
 ## Solo and Two-Person Exhibitions
 
-* [*Drawing with Machines: Golan Levin and Students of the CMU Machine Drawing Lab*](https://bantamtools.com/blogs/gallery/cmu-drawing-with-machines-at-the-bantam-tools-machine-arts-gallery). Bantam Machine Arts Gallery, Peekskill, New York, 1/9/2026 – 1/31/2026.
+* [*Golan Levin*](https://bantamtools.com/collections/golan-levin). Bantam Machine Arts Gallery, Peekskill, New York, 5/8/2026 – 6/12/2026.
 * [*Golan Levin: Cytographia*](https://www.artblocks.io/collection/cytographia-by-golan-levin). Artblocks Curated Channel. 1/2024.
 * [*Golan Levin*](https://aksioma.org/fuck/). Aksioma Project Space, Ljubljana, Slovenia. 2014. 
 * *The Gesture in Paint and Software: Helen Levin and Golan Levin*. Staten Island Museum, 2012. 
