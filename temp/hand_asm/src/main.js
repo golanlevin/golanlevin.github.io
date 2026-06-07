@@ -16,7 +16,7 @@
 
 import { ContourAsm, RoiGradient, computeHandRoi, extractContour } from "./contour-asm.js?v=20260607-30";
 import { Frankenmesh2Builder } from "./frankenmesh2-builder.js?v=20260607-28";
-import { HandModelLoader } from "./model-loader.js?v=20260607-28";
+import { HandModelLoader } from "./model-loader.js?v=20260607-31";
 import { MediaPipeHandAdapter } from "./mediapipe-adapter.js?v=20260607-28";
 import { PdmFitter } from "./pdm-fitter.js?v=20260607-28";
 import { RollingMedian } from "./math.js?v=20260607-28";

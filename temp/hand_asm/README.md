@@ -17,7 +17,7 @@ and diagnostic controls unless the user asks for cleanup.
 
 ## Run Locally
 
-From the repository root:
+From the `DEMOLIB` repository root:
 
 ```bash
 python3 -m http.server 8765
@@ -26,8 +26,11 @@ python3 -m http.server 8765
 Open:
 
 ```text
-http://127.0.0.1:8765/hand_pdm_runtime/
+http://127.0.0.1:8765/__HandASM/hand_asm/
 ```
+
+If you instead start the server from inside `__HandASM/`, open
+`http://127.0.0.1:8765/hand_asm/`.
 
 The camera starts automatically. Browser module caching is aggressive, so this
 project uses query-string cachebusters in `index.html` and module imports.
@@ -43,14 +46,18 @@ Whenever you edit CSS, bump the stylesheet query in `index.html`.
 Runtime models are loaded from paths relative to this page:
 
 ```text
-../model_out/runtime/hand_full_mesh_model_11m.json
-../model_out/runtime/hand_full_mesh_model_20m.json
-../model_out/runtime/hand_full_mesh_model_30m.json
-../model_out/runtime/hand_contour_model_11m.json
-../model_out/runtime/hand_contour_model_20m.json
-../model_out/runtime/hand_contour_model_30m.json
-../model_out/mediapipe_correspondence_learned.json
+model_out/runtime/hand_full_mesh_model_11m.json
+model_out/runtime/hand_full_mesh_model_20m.json
+model_out/runtime/hand_full_mesh_model_30m.json
+model_out/runtime/hand_contour_model_11m.json
+model_out/runtime/hand_contour_model_20m.json
+model_out/runtime/hand_contour_model_30m.json
+model_out/mediapipe_correspondence_learned.json
 ```
+
+These are local copies inside `hand_asm/model_out/`. Do not point the browser
+runtime back at the sibling offline `../model_out/` directory unless the user is
+explicitly testing newly exported models.
 
 The UI currently defaults to the quality `30m` model. The model JSONs are
 already in the upright canonical orientation selected offline:

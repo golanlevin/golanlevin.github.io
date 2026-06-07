@@ -1,0 +1,30 @@
+{
+  "created_utc": "2026-06-07T08:12:43.519828+00:00",
+  "training_sample_count": 7522,
+  "mode_counts": [
+    11,
+    20,
+    30
+  ],
+  "default_modes": 20,
+  "variants": {
+    "11": {
+      "full_mesh": "model_out/runtime/hand_full_mesh_model_11m.json",
+      "contour": "model_out/runtime/hand_contour_model_11m.json",
+      "full_retained_variance": 0.9817531747475674,
+      "contour_retained_variance": 0.98046506384226
+    },
+    "20": {
+      "full_mesh": "model_out/runtime/hand_full_mesh_model_20m.json",
+      "contour": "model_out/runtime/hand_contour_model_20m.json",
+      "full_retained_variance": 0.992997021292942,
+      "contour_retained_variance": 0.9928317498690322
+    },
+    "30": {
+      "full_mesh": "model_out/runtime/hand_full_mesh_model_30m.json",
+      "contour": "model_out/runtime/hand_contour_model_30m.json",
+      "full_retained_variance": 0.9974814453268842,
+      "contour_retained_variance": 0.9975450064898258
+    }
+  }
+}

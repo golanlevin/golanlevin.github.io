@@ -9,20 +9,20 @@
 
 const MODEL_PATHS = {
   lightweight: {
-    full: "../model_out/runtime/hand_full_mesh_model_11m.json",
-    contour: "../model_out/runtime/hand_contour_model_11m.json",
+    full: "model_out/runtime/hand_full_mesh_model_11m.json",
+    contour: "model_out/runtime/hand_contour_model_11m.json",
   },
   default: {
-    full: "../model_out/runtime/hand_full_mesh_model_20m.json",
-    contour: "../model_out/runtime/hand_contour_model_20m.json",
+    full: "model_out/runtime/hand_full_mesh_model_20m.json",
+    contour: "model_out/runtime/hand_contour_model_20m.json",
   },
   quality: {
-    full: "../model_out/runtime/hand_full_mesh_model_30m.json",
-    contour: "../model_out/runtime/hand_contour_model_30m.json",
+    full: "model_out/runtime/hand_full_mesh_model_30m.json",
+    contour: "model_out/runtime/hand_contour_model_30m.json",
   },
 };
 
-const CORRESPONDENCE_PATH = "../model_out/mediapipe_correspondence_learned.json";
+const CORRESPONDENCE_PATH = "model_out/mediapipe_correspondence_learned.json";
 
 /**
  * Flatten a JSON `[[x,y], ...]` shape into packed `[x0,y0,x1,y1,...]` storage.
