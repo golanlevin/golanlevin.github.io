@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hand PDM Runtime</title>
+    <link rel="stylesheet" href="./styles.css?v=20260607-7" />
+  </head>
+  <body>
+    <main class="app">
+      <!--
+        The stage contains only the hidden source video, the visible debug canvas,
+        and the hidden work canvas used for ROI pixel reads. The camera starts
+        automatically from main.js.
+      -->
+      <section class="stage">
+        <video id="video" playsinline muted></video>
+        <canvas id="view" width="1280" height="720"></canvas>
+        <canvas id="work" width="1280" height="720"></canvas>
+      </section>
+      <!--
+        This panel is the only scrollable part of the page. Keep debug controls
+        here so mouse-wheel scrolling never moves the camera/overlay stage.
+      -->
+      <aside class="panel">
+        <div class="row">
+          <span id="status">loading models</span>
+        </div>
+
+        <label>
+          Model
+          <select id="modelPreset">
+            <option value="lightweight">lightweight 11m</option>
+            <option value="default">default 20m</option>
+            <option value="quality" selected>quality 30m</option>
+          </select>
+        </label>
+
+        <label>
+          <span class="slider-label">Edge snap amount <output id="edgeSnapAmountValue">1.00</output></span>
+          <input id="edgeSnapAmount" type="range" min="0" max="2" step="0.05" value="1" oninput="document.getElementById('edgeSnapAmountValue').textContent = Number(this.value).toFixed(2)" />
+        </label>
+
+        <label>
+          <span class="slider-label">Search radius <output id="searchRadiusValue">5.0%</output></span>
+          <input id="searchRadius" type="range" min="1" max="8" step="0.25" value="5" oninput="document.getElementById('searchRadiusValue').textContent = Number(this.value).toFixed(1) + '%'" />
+        </label>
+
+        <label>
+          <span class="slider-label">Distance penalty <output id="distancePenaltyValue">0.060</output></span>
+          <input id="distancePenalty" type="range" min="0" max="0.2" step="0.005" value="0.06" oninput="document.getElementById('distancePenaltyValue').textContent = Number(this.value).toFixed(3)" />
+        </label>
+
+        <label>
+          <span class="slider-label">Skin chroma weight <output id="skinWeightValue">0.30</output></span>
+          <input id="skinWeight" type="range" min="0" max="1" step="0.05" value="0.30" oninput="document.getElementById('skinWeightValue').textContent = Number(this.value).toFixed(2)" />
+        </label>
+
+        <label>
+          <span class="slider-label">Offset smoothing <output id="offsetSmoothingValue">0.35</output></span>
+          <input id="offsetSmoothing" type="range" min="0" max="1" step="0.05" value="0.35" oninput="document.getElementById('offsetSmoothingValue').textContent = Number(this.value).toFixed(2)" />
+        </label>
+
+        <label>
+          <span class="slider-label">Curvature preserve <output id="curvatureWeightValue">0.25</output></span>
+          <input id="curvatureWeight" type="range" min="0" max="1" step="0.05" value="0.25" oninput="document.getElementById('curvatureWeightValue').textContent = Number(this.value).toFixed(2)" />
+        </label>
+
+        <label>
+          <span class="slider-label">Temporal weight <output id="temporalWeightValue">0.12</output></span>
+          <input id="temporalWeight" type="range" min="0" max="0.5" step="0.01" value="0.12" oninput="document.getElementById('temporalWeightValue').textContent = Number(this.value).toFixed(2)" />
+        </label>
+
+        <label>
+          <span class="slider-label">Minimum temporal gain <output id="temporalGainValue">0.20</output></span>
+          <input id="temporalGain" type="range" min="0" max="1" step="0.05" value="0.20" oninput="document.getElementById('temporalGainValue').textContent = Number(this.value).toFixed(2)" />
+        </label>
+
+        <label class="check"><input id="mirrorVideo" type="checkbox" checked /> mirror webcam</label>
+
+        <fieldset>
+          <legend>Debug Draw</legend>
+          <!-- These toggles affect drawing only; the underlying pipeline still runs. -->
+          <label class="check"><input id="showLandmarks" type="checkbox" checked /> MediaPipe landmarks</label>
+          <label class="check"><input id="showPdmMesh" type="checkbox" /> PDM mesh</label>
+          <label class="check"><input id="showRawContour" type="checkbox" checked /> raw ASM contour</label>
+          <label class="check"><input id="showHybridContour" type="checkbox" checked /> Final Contour</label>
+          <label class="check"><input id="showFinalMesh" type="checkbox" /> TPS mesh</label>
+          <label class="check"><input id="showFrankenmesh2" type="checkbox" checked /> Frankenmesh2</label>
+        </fieldset>
+
+        <pre id="perf"></pre>
+      </aside>
+    </main>
+    <script type="module" src="./src/main.js?v=20260607-30"></script>
+  </body>
+</html>

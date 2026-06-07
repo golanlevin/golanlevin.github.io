@@ -1,0 +1,161 @@
+:root {
+  /* Dark, dense debug-tool styling rather than a marketing/app shell. */
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #101216;
+  color: #eef2f6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  /* The camera stage must not move when the user scrolls the side controls. */
+  overflow: hidden;
+}
+
+.app {
+  /* Wide desktop layout: camera/debug canvas on left, scrollable controls on right. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  height: 100vh;
+  gap: 0;
+}
+
+.stage {
+  /* Keep the video/canvas pinned to the top of the viewport. */
+  position: relative;
+  height: 100vh;
+  background: #06070a;
+  display: grid;
+  place-items: start center;
+  overflow: hidden;
+}
+
+#video,
+#work {
+  /* Video is drawn into #view; #work is only for ROI image reads. */
+  display: none;
+}
+
+#view {
+  /* Canvas dimensions are set from the webcam frame; CSS only scales it down if needed. */
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: none;
+  background: #0c0f14;
+}
+
+.panel {
+  /* The panel owns scrolling; the page body remains fixed. */
+  border-left: 1px solid #2c3440;
+  background: #151922;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+button,
+select,
+input[type="range"] {
+  width: 100%;
+}
+
+button,
+select {
+  border: 1px solid #3a4454;
+  background: #222936;
+  color: #eef2f6;
+  min-height: 34px;
+  border-radius: 6px;
+}
+
+button {
+  cursor: pointer;
+}
+
+label {
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+  color: #b8c3d1;
+}
+
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+output {
+  color: #eef2f6;
+  font-variant-numeric: tabular-nums;
+}
+
+.check {
+  grid-template-columns: 18px 1fr;
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  color: #d8dee8;
+}
+
+.check input {
+  margin: 0;
+}
+
+fieldset {
+  border: 1px solid #303846;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+legend {
+  padding: 0 6px;
+  color: #b8c3d1;
+}
+
+#status {
+  color: #8dd7a5;
+  font-size: 12px;
+  min-width: 120px;
+}
+
+#perf {
+  margin: 0;
+  padding: 10px;
+  background: #0d1016;
+  border: 1px solid #303846;
+  border-radius: 8px;
+  color: #dce5ef;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  /* Mobile/narrow fallback stacks the panel below the stage. */
+  .app {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    border-left: 0;
+    border-top: 1px solid #2c3440;
+  }
+}
