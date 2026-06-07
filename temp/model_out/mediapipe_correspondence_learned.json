@@ -1,0 +1,353 @@
+{
+  "format_version": 1,
+  "created_utc": "2026-06-07T05:07:17.642055+00:00",
+  "coordinate_convention": "Upright canonical 768x1024 image coordinates; source JPG rotate_90_cw; source PLY rotate_90_cw then x'=2x-768, y'=2y.",
+  "landmark_count": 21,
+  "learning_method": {
+    "primary_target": "real JavaScript MediaPipe Tasks Vision hand landmarks",
+    "geometry_target": "AHS PLY 151-vertex meshes registered to rotated JPG pixel space by x'=2x-768, y'=2y after rotate_90_cw",
+    "candidate_search": "best single vertex plus simplex-constrained 2/3-vertex blends among top 12 single-vertex candidates",
+    "preference": "retain current mapping unless empirical improvement is material; prefer single vertices unless blends materially improve median error"
+  },
+  "landmarks": {
+    "0": {
+      "name": "wrist",
+      "landmark_weight": 1.0,
+      "mesh_points": [
+        {
+          "vertex": 115,
+          "role": "internal_skeleton_control",
+          "weight": 1.0,
+          "confidence": 0.85
+        }
+      ],
+      "source": "hand_authored_retained"
+    },
+    "1": {
+      "name": "thumb_cmc",
+      "landmark_weight": 0.55,
+      "mesh_points": [
+        {
+          "vertex": 126,
+          "role": "internal_skeleton_control",
+          "weight": 0.5,
+          "confidence": 0.85
+        },
+        {
+          "vertex": 116,
+          "role": "palm_thumb_base",
+          "weight": 0.5,
+          "confidence": 0.85
+        }
+      ],
+      "source": "hand_authored_retained"
+    },
+    "2": {
+      "name": "thumb_mcp",
+      "landmark_weight": 0.85,
+      "mesh_points": [
+        {
+          "vertex": 4,
+          "role": "empirical_weighted_joint",
+          "weight": 0.6360598619795834,
+          "confidence": 0.75
+        },
+        {
+          "vertex": 146,
+          "role": "empirical_weighted_joint",
+          "weight": 0.3639401380204165,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    },
+    "3": {
+      "name": "thumb_ip",
+      "landmark_weight": 0.65,
+      "mesh_points": [
+        {
+          "vertex": 10,
+          "role": "empirical_weighted_joint",
+          "weight": 1.0,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    },
+    "4": {
+      "name": "thumb_tip",
+      "landmark_weight": 1.0,
+      "mesh_points": [
+        {
+          "vertex": 16,
+          "role": "empirical_fingertip_or_pad",
+          "weight": 1.0,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    },
+    "5": {
+      "name": "index_mcp",
+      "landmark_weight": 1.0,
+      "mesh_points": [
+        {
+          "vertex": 131,
+          "role": "empirical_internal_joint",
+          "weight": 0.5280224299073326,
+          "confidence": 0.75
+        },
+        {
+          "vertex": 142,
+          "role": "empirical_internal_joint",
+          "weight": 0.4719775700926674,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    },
+    "6": {
+      "name": "index_pip",
+      "landmark_weight": 0.75,
+      "mesh_points": [
+        {
+          "vertex": 91,
+          "role": "internal_skeleton_control",
+          "weight": 1.0,
+          "confidence": 0.85
+        }
+      ],
+      "source": "hand_authored_retained"
+    },
+    "7": {
+      "name": "index_dip",
+      "landmark_weight": 0.75,
+      "mesh_points": [
+        {
+          "vertex": 94,
+          "role": "empirical_weighted_joint",
+          "weight": 0.7129235854430661,
+          "confidence": 0.75
+        },
+        {
+          "vertex": 100,
+          "role": "empirical_weighted_joint",
+          "weight": 0.28707641455693395,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    },
+    "8": {
+      "name": "index_tip",
+      "landmark_weight": 1.0,
+      "mesh_points": [
+        {
+          "vertex": 100,
+          "role": "empirical_fingertip_or_pad",
+          "weight": 1.0,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    },
+    "9": {
+      "name": "middle_mcp",
+      "landmark_weight": 1.0,
+      "mesh_points": [
+        {
+          "vertex": 141,
+          "role": "internal_skeleton_control",
+          "weight": 1.0,
+          "confidence": 0.85
+        }
+      ],
+      "source": "hand_authored_retained"
+    },
+    "10": {
+      "name": "middle_pip",
+      "landmark_weight": 0.75,
+      "mesh_points": [
+        {
+          "vertex": 68,
+          "role": "empirical_internal_joint",
+          "weight": 0.33399237201987314,
+          "confidence": 0.75
+        },
+        {
+          "vertex": 64,
+          "role": "empirical_internal_joint",
+          "weight": 0.2894388684922658,
+          "confidence": 0.75
+        },
+        {
+          "vertex": 72,
+          "role": "empirical_internal_joint",
+          "weight": 0.3765687594878611,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    },
+    "11": {
+      "name": "middle_dip",
+      "landmark_weight": 0.75,
+      "mesh_points": [
+        {
+          "vertex": 75,
+          "role": "empirical_weighted_joint",
+          "weight": 0.38131738935787063,
+          "confidence": 0.75
+        },
+        {
+          "vertex": 79,
+          "role": "empirical_weighted_joint",
+          "weight": 0.25388547152431445,
+          "confidence": 0.75
+        },
+        {
+          "vertex": 71,
+          "role": "empirical_weighted_joint",
+          "weight": 0.3647971391178149,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    },
+    "12": {
+      "name": "middle_tip",
+      "landmark_weight": 1.0,
+      "mesh_points": [
+        {
+          "vertex": 79,
+          "role": "empirical_fingertip_or_pad",
+          "weight": 1.0,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    },
+    "13": {
+      "name": "ring_mcp",
+      "landmark_weight": 1.0,
+      "mesh_points": [
+        {
+          "vertex": 139,
+          "role": "internal_skeleton_control",
+          "weight": 1.0,
+          "confidence": 0.85
+        }
+      ],
+      "source": "hand_authored_retained"
+    },
+    "14": {
+      "name": "ring_pip",
+      "landmark_weight": 0.75,
+      "mesh_points": [
+        {
+          "vertex": 49,
+          "role": "empirical_internal_joint",
+          "weight": 0.6508773123922142,
+          "confidence": 0.75
+        },
+        {
+          "vertex": 43,
+          "role": "empirical_internal_joint",
+          "weight": 0.34912268760778586,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    },
+    "15": {
+      "name": "ring_dip",
+      "landmark_weight": 0.75,
+      "mesh_points": [
+        {
+          "vertex": 52,
+          "role": "empirical_weighted_joint",
+          "weight": 0.7918456513007863,
+          "confidence": 0.75
+        },
+        {
+          "vertex": 58,
+          "role": "empirical_weighted_joint",
+          "weight": 0.20815434869921373,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    },
+    "16": {
+      "name": "ring_tip",
+      "landmark_weight": 1.0,
+      "mesh_points": [
+        {
+          "vertex": 58,
+          "role": "empirical_fingertip_or_pad",
+          "weight": 1.0,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    },
+    "17": {
+      "name": "pinky_mcp",
+      "landmark_weight": 1.0,
+      "mesh_points": [
+        {
+          "vertex": 137,
+          "role": "internal_skeleton_control",
+          "weight": 1.0,
+          "confidence": 0.85
+        }
+      ],
+      "source": "hand_authored_retained"
+    },
+    "18": {
+      "name": "pinky_pip",
+      "landmark_weight": 0.75,
+      "mesh_points": [
+        {
+          "vertex": 28,
+          "role": "internal_skeleton_control",
+          "weight": 1.0,
+          "confidence": 0.85
+        }
+      ],
+      "source": "hand_authored_retained"
+    },
+    "19": {
+      "name": "pinky_dip",
+      "landmark_weight": 0.75,
+      "mesh_points": [
+        {
+          "vertex": 34,
+          "role": "empirical_weighted_joint",
+          "weight": 0.4310784587565807,
+          "confidence": 0.75
+        },
+        {
+          "vertex": 31,
+          "role": "empirical_weighted_joint",
+          "weight": 0.5689215412434193,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    },
+    "20": {
+      "name": "pinky_tip",
+      "landmark_weight": 1.0,
+      "mesh_points": [
+        {
+          "vertex": 37,
+          "role": "empirical_fingertip_or_pad",
+          "weight": 1.0,
+          "confidence": 0.75
+        }
+      ],
+      "source": "real_js_mediapipe_empirical"
+    }
+  }
+}
