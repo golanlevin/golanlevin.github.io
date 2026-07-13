@@ -6,6 +6,7 @@ A website by Golan Levin
 
 ### Projects & Artworks
 
+* [Cytographia](cytographia/index.html) (2024 • [about](https://github.com/golanlevin/Cytographia/blob/main/README.md))
 * [Yellowtail](yellowtail/index.html) (1998, 2021)
 * [Directrix](directrix/index.html) (1998, 2025)
 * [Meshy](meshy/index.html) (1998, 2024)
@@ -23,11 +24,13 @@ A website by Golan Levin
 
 ### Software Tools and Utilities
 
-* [Plottimation](plottimation/index.html)
+* [Plottimation](plottimation/index.html): Make animated GIFs from frame-sheets
 * [p5.plotSvg](https://github.com/golanlevin/p5.plotSvg/blob/main/README.md): Plotter-oriented SVG export for p5.js
 * [p5-single-line-font-resources](https://github.com/golanlevin/p5-single-line-font-resources/blob/main/README.md): Monoline vector fonts for p5.js
+* [EasyLabeler](easylabeler/index.html): Simple media annotation utility
 * [Signet Ring Band Generator](ring/index.html)
 * [Super-Ellipse Generator](ellipse/index.html)
+
 
 ### Reverse Engineering
 
