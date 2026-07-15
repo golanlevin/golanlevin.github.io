@@ -27,8 +27,6 @@ A website by Golan Levin
 * [Plottimation](plottimation/index.html): Make animated GIFs from frame-sheets
 * [p5.plotSvg](https://github.com/golanlevin/p5.plotSvg/blob/main/README.md): Plotter-oriented SVG export for p5.js
 * [p5-single-line-font-resources](https://github.com/golanlevin/p5-single-line-font-resources/blob/main/README.md): Monoline vector fonts for p5.js
-* [EasyLabeler](easylabeler/index.html): Simple media annotation utility
-* [EasyTrack Viewer](easytrack_viewer/p5_easytrack_viewer/index.html): JSON recording viewer
 * [Signet Ring Band Generator](ring/index.html)
 * [Super-Ellipse Generator](ellipse/index.html)
 
@@ -40,3 +38,9 @@ A website by Golan Levin
 * [MS6252B Anemometer](https://github.com/CreativeInquiry/MS6252B_Anemometer), June 2026
 * [p5.js port of Dag Svanæs’s 1998 *Painting with Interactive Pixels*](pip/index.html), June 2026
 * [p5.js port of Masaya Matsuura's *Vib-Ribbon* Fonts](https://github.com/golanlevin/p5-single-line-font-resources/blob/main/README.md#p5js-port-of-masaya-matsuuras-vib-ribbon-fonts), May 2026
+
+<!--
+* [EasyLabeler](easyvision/easylabeler/index.html)
+* [EasyTrack Viewer](easyvision/easytrack_viewer/p5_easytrack_viewer/index.html)
+* [EasyTrain Yolo Viewer](easyvision/easytrain_yolo_viewer/index.html)
+-->
