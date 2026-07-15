@@ -28,6 +28,7 @@ A website by Golan Levin
 * [p5.plotSvg](https://github.com/golanlevin/p5.plotSvg/blob/main/README.md): Plotter-oriented SVG export for p5.js
 * [p5-single-line-font-resources](https://github.com/golanlevin/p5-single-line-font-resources/blob/main/README.md): Monoline vector fonts for p5.js
 * [EasyLabeler](easylabeler/index.html): Simple media annotation utility
+* [EasyTrack Viewer](easytrack_viewer/p5_easytrack_viewer/index.html): JSON recording viewer
 * [Signet Ring Band Generator](ring/index.html)
 * [Super-Ellipse Generator](ellipse/index.html)
 
