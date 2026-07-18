@@ -33,6 +33,7 @@ A website by Golan Levin
 
 ### Reverse Engineering
 
+* [Sensel Morph Liberation](https://github.com/CreativeInquiry/Sensel-Morph-Liberation/), July 2026
 * [GameTrak Liberation](https://github.com/CreativeInquiry/GameTrak-Liberation/), July 2026
 * [TEMPer1 USB Temperature Sensor](https://github.com/CreativeInquiry/TEMP_er1_USB_temperature_sensor), June 2026
 * [MS6252B Anemometer](https://github.com/CreativeInquiry/MS6252B_Anemometer), June 2026
