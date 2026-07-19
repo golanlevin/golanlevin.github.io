@@ -1,6 +1,7 @@
 # golanlevin.github.io
 
-A website by Golan Levin 
+A website by Golan Levin<br/>
+[Curriculum Vitae](cv/README.md) (2026)
 
 ---
 

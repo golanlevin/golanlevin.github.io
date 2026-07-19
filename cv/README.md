@@ -46,7 +46,7 @@ Courtesy Appointments
 ## Education 
 
 * **Massachusetts Institute of Technology**, MIT Media Laboratory. Master of Science in Media Arts and Sciences, August 2000. Research area: Aesthetics and Computation (Advisor: John Maeda). MS Thesis: *Painterly Interfaces for Audiovisual Performance*. 
-* **Massachusetts Institute of Technology**. Bachelor of Science in Art and Design (Course 4B), June 1994. Minor in Music Theory and Composition. 
+* **Massachusetts Institute of Technology**. Bachelor of Science in Art and Design (Course IV-B), June 1994. Minor in Music Theory and Composition. 
 
 ---
 
@@ -83,6 +83,7 @@ https://flong.com/archive/calendar/archive/2007/index.html
 #### 2026
 
 <!-- Whitney Museum CODeDOC/Artport 25th Anniversary -->
+* *CODeDOC*, Whitney Museum of American Art, 11/2026–2/2027.
 * [*Cycles*](https://denison.edu/places/museum/exhibitions), Denison Museum, Denison University, Granville, Ohio. 8/30/2026 – 12/1/2026.
 * [*Drawing with Machines: Golan Levin and Students of the CMU Machine Drawing Lab*](https://bantamtools.com/blogs/gallery/cmu-drawing-with-machines-at-the-bantam-tools-machine-arts-gallery). Bantam Machine Arts Gallery, Peekskill, New York, 1/9/2026 – 1/31/2026.
 
