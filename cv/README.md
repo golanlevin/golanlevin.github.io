@@ -84,7 +84,8 @@ https://flong.com/archive/calendar/archive/2007/index.html
 
 <!-- Whitney Museum CODeDOC/Artport 25th Anniversary -->
 * *CODeDOC*, Whitney Museum of American Art, 11/2026–2/2027.
-* [*Cycles*](https://denison.edu/places/museum/exhibitions), Denison Museum, Denison University, Granville, Ohio. 8/30/2026 – 12/1/2026.
+* [*Cycles*](https://denison.edu/places/museum/exhibitions), Denison Museum, Denison University, Granville, Ohio. 8/30/2026–12/1/2026.
+* [*Aberrant Creativity*](https://pvfa.tamu.edu/institutes/iac/iac-initiatives/aberrant-creativity/), Texas A&M University, College Station, Texas. 8/25/2026–10/17/2026.
 * [*Drawing with Machines: Golan Levin and Students of the CMU Machine Drawing Lab*](https://bantamtools.com/blogs/gallery/cmu-drawing-with-machines-at-the-bantam-tools-machine-arts-gallery). Bantam Machine Arts Gallery, Peekskill, New York, 1/9/2026 – 1/31/2026.
 
 #### 2025
