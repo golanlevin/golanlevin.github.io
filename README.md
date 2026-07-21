@@ -1,6 +1,7 @@
 # golanlevin.github.io
 
-A website by Golan Levin<br/>
+A website by Golan Levin<br />
+[Old web site](https://flong.com) (2000-2017)<br/>
 [Curriculum Vitae](cv/README.md) (2026)
 
 ---
@@ -16,7 +17,7 @@ A website by Golan Levin<br/>
 * [Interpolation in Computer Art: A Pedagogical Sketchbook](https://github.com/golanlevin/interpolation_sketchbook/blob/main/README.md) (2017, 2021)
 
 
-### Courses
+### Teaching
 
 * [Index of courses taught at CMU, 2004-](courses/README.md)
 * [Drawing with Machines](https://github.com/golanlevin/DrawingWithMachines/blob/main/README.md)
@@ -28,6 +29,7 @@ A website by Golan Levin<br/>
 * [Plottimation](plottimation/index.html): Make animated GIFs from frame-sheets
 * [p5.plotSvg](https://github.com/golanlevin/p5.plotSvg/blob/main/README.md): Plotter-oriented SVG export for p5.js
 * [p5-single-line-font-resources](https://github.com/golanlevin/p5-single-line-font-resources/blob/main/README.md): Monoline vector fonts for p5.js
+* [PEmbroider](https://github.com/CreativeInquiry/PEmbroider): Computational embroidery library for Processing
 * [Signet Ring Band Generator](ring/index.html)
 * [Super-Ellipse Generator](ellipse/index.html)
 

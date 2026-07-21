@@ -10,9 +10,12 @@ United States
 
 ## Biography
 
+*([Extended biography here](bio.md))*
+
 Golan Levin is an artist, engineer, researcher and educator interested in new intersections of machine code, visual culture, and critical making. His work combines equal measures of the whimsical, the provocative, and the sublime in an eclectic variety of online, installation and performance media. Through responsive artifacts, virtual environments, and media provocations, Levin applies creative twists to digital technologies that highlight our relationship with machines, expand the vocabulary of human action, and awaken participants to their own potential as creative actors. 
 
 Levin is [Professor of Computational Art in the School of Art](https://art.cmu.edu/people/golan-levin/) at Carnegie Mellon University, where he also holds courtesy appointments in [Architecture](https://www.architecture.cmu.edu/profiles/golan-levin), [Computer Science](https://www.csd.cs.cmu.edu/people/faculty/golan-levin), and [Design](https://www.design.cmu.edu/profiles/golan-levin). Golan's pedagogy is concerned with reclaiming computation as a medium of personal expression; he teaches “studio art courses in computer science” on themes like interactive new media art, generative form, and machine drawing. With Tega Brain, Levin is co-author of [*Code as Creative Medium*](https://mitpress.mit.edu/9780262542043/code-as-creative-medium/) (MIT Press, 2021), a guide to creative coding for software arts educators.
+
 
 ---
 
