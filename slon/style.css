@@ -1,0 +1,109 @@
+html, body {
+  padding: 0;
+  min-height: 100%;
+  background: rgb(57, 71, 72);
+  color: #ffb440;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body.slon-app {
+  margin: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+body.slon-static {
+  font-size: 12px;
+  line-height: 1.25;
+  margin: 8px;
+}
+
+.static-page {
+  text-align: left;
+}
+
+body.slon-static table,
+body.slon-static tr,
+body.slon-static td {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+}
+
+a,
+a:visited,
+a:active {
+  color: #ffb440;
+}
+
+.site-title,
+.page-heading,
+.text-nav {
+  color: #ffb440;
+  font-family: Arial, Helvetica, sans-serif;
+  font-weight: bold;
+  line-height: 1;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.site-title {
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.page-heading {
+  display: inline-block;
+  font-size: 16px;
+}
+
+.text-nav {
+  display: inline-block;
+  font-size: 14px;
+}
+
+a.text-nav:hover {
+  text-decoration: underline;
+}
+
+body.slon-static a {
+  text-decoration: underline;
+}
+
+main {
+  position: relative;
+  width: 1024px;
+  height: 768px;
+}
+
+.app-page-links {
+  position: absolute;
+  left: 12px;
+  top: 706px;
+  z-index: 10;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.app-page-link,
+.app-page-link:visited,
+.app-page-link:active {
+  position: absolute;
+  left: 0;
+  color: #ffb440;
+  text-decoration: underline;
+}
+
+.app-page-link-statement {
+  top: 0;
+}
+
+.app-page-link-index {
+  top: 22px;
+}
+
+canvas {
+  display: block;
+}
