@@ -62,7 +62,7 @@ class HelpDisplayer {
     textFont(this.font6, 12);
 
     push();
-    translate(18 * 9 - 2, PIXELVIEW_H * PIXELVIEW_SCALE + 25);
+    translate(HELP_TEXT_L, HELP_TEXT_T);
     text(this._helpStr, 0, 0.75);
     pop();
   }

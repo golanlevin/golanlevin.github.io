@@ -1,5 +1,5 @@
 // Ported from PixelIndexer.pde
-// Sorts breakups into the 90x222 pixel grid via a 4-pass sort.
+// Sorts breakups into the PIXELVIEW_W x PIXELVIEW_H pixel grid via a 4-pass sort.
 
 class PixelIndexer {
 

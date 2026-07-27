@@ -24,7 +24,6 @@ var _bPixelViewDragActive = false;    // true once mouse has moved >= 20px from 
 var _pixelViewClickOriginX = 0;
 var _pixelViewClickOriginY = 0;
 var _pixelViewClickBupId = DUMPSTER_INVALID;
-var bDrawDraft = true;
 
 //------------------------------------------------------------
 function preload() {
@@ -35,8 +34,8 @@ function preload() {
   _summaryFile   = loadBytes ('data/breakupSummaryLengths.dat');
   _histLines     = loadStrings('data/breakupsPerDay2005.txt');
   pixelFont      = loadFont  ('data/6px2bus.ttf');
-  _histbg        = loadImage ('data/hist_1010x125.jpg');
-  _dumpsterimg   = loadImage ('data/dumpster_1010x675.jpg');
+  _histbg        = loadImage ('data/hist_980x111.jpg');
+  _dumpsterimg   = loadImage ('data/dumpster_980x609.jpg');
 }
 
 //------------------------------------------------------------
@@ -69,10 +68,6 @@ function setup() {
     while (!BM.bups[randomId].VALID);
     const heartId = HM.addSelectedBreakupFromOutsideAndGetNewHeartId(randomId);
     _enactSelection(heartId);
-
-    // Temporary: fixed breakup for debugging histogram flag issue.
-    // const heartId = HM.addSelectedBreakupFromOutsideAndGetNewHeartId(10158);
-    // _enactSelection(heartId);
   });
 }
 
@@ -125,20 +120,18 @@ function draw() {
 
 
 function drawDraft(){
-  if (bDrawDraft){
-    textFont("Helvetica");
-    textStyle(BOLD);
-    textSize(288); 
-    noStroke();
-    fill(255,255,255, 60); 
-    textAlign(CENTER);
-    push(); 
-    translate(width/2, height * 0.6); 
-    rotate(radians(-15));
-    text("DRAFT", 0,0); 
-    pop(); 
-    textAlign(LEFT);
-  }
+  textFont("Helvetica");
+  textStyle(BOLD);
+  textSize(288); 
+  noStroke();
+  fill(255,255,255, 40); 
+  textAlign(CENTER);
+  push(); 
+  translate(width/2, height * 0.6); 
+  rotate(radians(-15));
+  text("DRAFT", 0,0); 
+  pop(); 
+  textAlign(LEFT);
 }
 
 //------------------------------------------------------------
@@ -313,10 +306,6 @@ function mouseMoved() {
 function keyPressed() {
   _lastInteractionTime = millis();
   PV.sendArrowKey(keyCode);
-
-  if (key == 'd'){
-    bDrawDraft = !bDrawDraft;
-  }
 
   if (keyCode === ENTER && PV.bMouseInView) {
     const bupId = KOS.currentMouseoverBreakupIdWithOffset;

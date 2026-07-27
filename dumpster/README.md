@@ -6,11 +6,11 @@ Interactive art installation visualizing a database of ~20,000 breakup stories c
 
 ## Overview
 
-The canvas is **1280×800** pixels (`DUMPSTER_APP_W × DUMPSTER_APP_H`). It is divided into three visual regions:
+The canvas is **1280×720** (16:9) pixels (`DUMPSTER_APP_W × DUMPSTER_APP_H`). It is divided into three visual regions:
 
 | Region | Position | Description |
 |---|---|---|
-| **Pixel View** | Top-left, 90×222 px scaled 3× | Each pixel = one breakup, colored by similarity to current selection |
+| **Pixel View** | Top-left, 100×200 px scaled 3× | Each pixel = one breakup, colored by similarity to current selection |
 | **Heart Wall** | Right of pixel view, full height minus histogram | Physics-based particle system of heart-shaped dots |
 | **Histogram** | Bottom strip | Bar chart of breakups per day of year (2005) |
 
@@ -34,7 +34,7 @@ port_02/
   heart.js                   — Physics heart particle class
   heart_manager.js           — Manages all 720 heart particles; physics sim loop
   heart_balloon_connector.js — Draws bezier lines connecting hearts to balloons
-  pixel_view.js              — 90×222 pixel grid; PixelIndexer (sorting); click/drag/keys
+  pixel_view.js              — 100×200 pixel grid; PixelIndexer (sorting); click/drag/keys
   pixel_indexer.js           — Sorts 20,038 breakups into the pixel grid (4-pass sort)
   paragraph_balloon.js       — Single balloon widget (text + date label)
   paragraph_balloon_manager.js — Ring buffer of up to 14 balloons; stacking logic
@@ -62,12 +62,12 @@ port_02/
 | `breakupsPerDay2005.txt` | One int/line | Count of breakups per calendar day |
 | `all_dumpster_texts.png` | Custom compressed PNG | All breakup story texts (decoded by `loader.js`) |
 | `6px2bus.ttf` | TrueType | Pixel font used for dates and histogram labels |
-| `dumpster_1010x675.jpg` | JPEG | Background image for the heart wall |
-| `hist_1010x125.jpg` | JPEG | Background image for the histogram |
+| `dumpster_980x609.jpg` | JPEG | Background image for the heart wall |
+| `hist_980x111.jpg` | JPEG | Background image for the histogram |
 
 ### Record counts
 - `N_BREAKUP_DATABASE_RECORDS = 20038` — total records including invalid ones
-- `N_BREAKUP_DATABASE_RECORDS_20K = 222 × 90 = 19980` — the pixel grid size (what most code indexes into)
+- `N_BREAKUP_DATABASE_RECORDS_20K = 200 × 100 = 20000` — the pixel grid size (what most code indexes into)
 - `MAX_N_HEARTS = 720`
 - `MAX_N_BALLOONS = 14`
 
@@ -152,7 +152,7 @@ Heart color = `sim^0.9 * 200` for the red channel (dark red → bright red = low
 ## Pixel View (`PixelView` + `PixelIndexer`)
 
 ### Layout
-- 90 columns × 222 rows = 19,980 pixels, displayed at 3× scale (270×666 screen pixels).
+- 100 columns × 200 rows = 20,000 pixels, displayed at 3× scale (300×600 screen pixels).
 - Each pixel maps to one breakup via `PIN.PixelIndexToBupIndex[i]`.
 - Reverse map: `PIN.BupIndexToPixelIndex[bupId]`.
 
@@ -367,12 +367,12 @@ The decoded `Files` dict maps keys like `"0/1/2/01234"` (directory path derived 
 | Constant | Value | Purpose |
 |---|---|---|
 | `DUMPSTER_INVALID` | -1 | Sentinel for "no value" |
-| `DUMPSTER_APP_W/H` | 1280, 800 | Canvas size |
+| `DUMPSTER_APP_W/H` | 1280, 720 | Canvas size |
 | `DUMPSTER_LONELY_TIME` | 5000 | Autoplay idle threshold (ms) |
 | `SHOW_NONGOOD_BREAKUPS` | true | If false, only "good data" records are VALID |
 | `BALLOON_TEXT_SIZE` | 11 | Georgia font size in balloons |
 | `MAX_N_BALLOONS` | 14 | Ring buffer size |
-| `PIXELVIEW_W/H` | 90, 222 | Pixel grid dimensions |
+| `PIXELVIEW_W/H` | 100, 200 | Pixel grid dimensions |
 | `PIXELVIEW_SCALE` | 3 | Display scale factor |
 | `PIXELVIEW_DRAG_THRESHOLD_PX` | 16 | Min drag distance before pixel-drag activates |
 | `DH_STRIPE_ANTIALIAS_PX` | 3.0 | Histogram stripe AA threshold (pixels) |
@@ -405,4 +405,5 @@ The decoded `Files` dict maps keys like `"0/1/2/01234"` (directory path derived 
 * Have mouseDrag outside canvas still affect interior? 
 * Put credit byline in lower left in pixel font
 * Pulsate big yellow circle; animate with noise to stir pot
-* Installation version uses precomputed sentence-level transformer embeddings + cosine distance; online version uses UMAP bigrams. 
+* Installation version uses precomputed sentence-level transformer embeddings + cosine distance; online version uses UMAP bigrams.
+* Used dashed lines in the circles around the balloon'ed heart particles.

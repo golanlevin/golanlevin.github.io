@@ -1,7 +1,7 @@
 
 const   DUMPSTER_INVALID   = -1;
 const   DUMPSTER_APP_W     = 1280;
-const   DUMPSTER_APP_H     = 800;
+const   DUMPSTER_APP_H     = 720;  // 16:9
 
 //----------------------------------
 const   DH_HILITEMODE_NONE = 0;
@@ -21,13 +21,23 @@ const   DH_BLURB           = (1.0- DH_BLURA);
 //----------------------------------
 const   N_BREAKUP_LANGUAGE_DESCRIPTORS = 7;
 const   N_BREAKUP_LANGUAGE_BITFLAGS = 4;
-const   PIXELVIEW_H        = 222; 
-const   PIXELVIEW_W        = 90;  
+const   PIXELVIEW_H        = 200;
+const   PIXELVIEW_W        = 100;
 const   PIXELVIEW_L        = 1;   
 const   PIXELVIEW_T        = 1;
 const   PIXELVIEW_SCALE    = 3;
 const   MALE_BLUE_AMOUNT   = 45;
 const   HISTOGRAM_H        = DUMPSTER_APP_H - PIXELVIEW_H*PIXELVIEW_SCALE;
+const   PIXELVIEW_B        = PIXELVIEW_T + PIXELVIEW_H*PIXELVIEW_SCALE;
+
+//----------------------------------
+// Bottom-left strip: mag loupe + help text, tucked under the pixel view and
+// left of the histogram. This strip is the tightest vertical constraint in the
+// app, so its offsets live here rather than inline.
+const   MAGVIEW_L          = PIXELVIEW_L + 16;
+const   MAGVIEW_T          = PIXELVIEW_B + 7;
+const   HELP_TEXT_L        = 18*9 - 2;
+const   HELP_TEXT_T        = MAGVIEW_T + 8;
 
 //----------------------------------
 const   HEART_WALL_L       = PIXELVIEW_W*PIXELVIEW_SCALE +2;
@@ -69,7 +79,7 @@ const   BALLOON_SHOW_AUTHOR_NAME = true;
 
 //----------------------------------
 const   N_BREAKUP_DATABASE_RECORDS = 20038;
-const   N_BREAKUP_DATABASE_RECORDS_20K = (222*90); 
+const   N_BREAKUP_DATABASE_RECORDS_20K = (PIXELVIEW_H*PIXELVIEW_W);
 const   MAX_N_HEARTS       = 720;
 const   HM_SHUFFLE_SLOP    = 0.135;
 const   HM_SHUFFLE_PROBABILITY  = 0.08; // probability per frame of swapping a heart out

@@ -163,8 +163,8 @@ class PixelView {
     this.magXc = xc;
     this.magYc = yc;
 
-    const xMagStart = this.nmagScale - 1;
-    const yMagStart = PIXELVIEW_H * PIXELVIEW_SCALE + this.nmagScale - 1;
+    const xMagStart = MAGVIEW_L;
+    const yMagStart = MAGVIEW_T;
     const yo = Math.floor(this.nmagY / 2);
     const xo = Math.floor(this.nmagX / 2);
 
@@ -404,8 +404,8 @@ class PixelView {
   checkMagClick(mx, my) {
     if (this.magXc === DUMPSTER_INVALID || this.magYc === DUMPSTER_INVALID) return DUMPSTER_INVALID;
 
-    const xMagStart = this.nmagScale - 1;
-    const yMagStart = PIXELVIEW_H * PIXELVIEW_SCALE + this.nmagScale - 1;
+    const xMagStart = MAGVIEW_L;
+    const yMagStart = MAGVIEW_T;
 
     if (mx < xMagStart || mx >= xMagStart + this.nmagX * this.nmagScale) return DUMPSTER_INVALID;
     if (my < yMagStart || my >= yMagStart + this.nmagY * this.nmagScale) return DUMPSTER_INVALID;
