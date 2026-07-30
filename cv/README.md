@@ -23,6 +23,8 @@ Levin is [Professor of Computational Art in the School of Art](https://art.cmu.e
 
 #### At Carnegie Mellon University
 
+I am a Professor of computational and interactive new media arts. I have taught in the CMU [School of Art](https://art.cmu.edu/people/golan-levin/) since 2004, and hold courtesy (affiliate) appointments in the the CMU [School of Architecture](https://www.architecture.cmu.edu/profiles/golan-levin), [School of Design](https://design.cmu.edu/profiles/golan-levin), and the [Computer Science Department](https://www.csd.cs.cmu.edu/people/faculty/golan-levin). Over the past two decades, much of my work at CMU has focused on building institutional capacity for artistic engagement with emerging technologies and helping cultivate artists who are equally fluent in critical inquiry and technical practice. 
+
 Faculty, School of Art, College of Fine Arts. January 2004–Present:
 
 * Professor of Computational Art, with Tenure. September 2017–Present.  
@@ -32,11 +34,8 @@ Faculty, School of Art, College of Fine Arts. January 2004–Present:
 
 Director, Frank-Ratchye STUDIO for Creative Inquiry at CMU. January 2009-August 2023.
 
-* Served as the Director of the Frank-Ratchye STUDIO for Creative Inquiry, the research laboratory of CMU’s College of Fine Arts. As a flexible site for new modes of arts research and production, the STUDIO is dedicated to atypical, anti-disciplinary, and inter-institutional research at the intersection of arts, science, technology and culture. 
+* From 2009-2023 I also served served as the Director of the [Frank-Ratchye STUDIO for Creative Inquiry](https://studioforcreativeinquiry.org/), the research laboratory of CMU’s College of Fine Arts and a flexible site for atypical, anti-disciplinary, and inter-institutional research at the intersection of arts, science, technology and culture. During this time I worked to expand the STUDIO as a platform for interdisciplinary artistic research: overseeing grants supporting more than 500 projects, hosting over 70 artists-in-residence, organizing hundreds of public events, and raising more than \$2.5 million to support artist-led research initiatives.
 
-Courtesy Appointments
-
-* At Carnegie Mellon University, I also hold affiliate (courtesy) appointments in the [School of Design](https://design.cmu.edu/profiles/golan-levin), the [School of Architecture](https://www.architecture.cmu.edu/profiles/golan-levin), and the [Computer Science Department](https://www.csd.cs.cmu.edu/people/faculty/golan-levin).
 
 #### Other Teaching Appointments
 
@@ -86,7 +85,7 @@ https://flong.com/archive/calendar/archive/2007/index.html
 #### 2026
 
 <!-- Whitney Museum CODeDOC/Artport 25th Anniversary -->
-* *CODeDOC*, Whitney Museum of American Art, 11/2026–2/2027.
+* [*artport: A History of Internet Art*](https://whitney.org/exhibitions/artport-25), Whitney Museum of American Art, 11/2026–2/2027.
 * [*Cycles*](https://denison.edu/places/museum/exhibitions), Denison Museum, Denison University, Granville, Ohio. 8/30/2026–12/1/2026.
 * [*Aberrant Creativity*](https://pvfa.tamu.edu/institutes/iac/iac-initiatives/aberrant-creativity/), Texas A&M University, College Station, Texas. 8/25/2026–10/17/2026.
 * [*Drawing with Machines: Golan Levin and Students of the CMU Machine Drawing Lab*](https://bantamtools.com/blogs/gallery/cmu-drawing-with-machines-at-the-bantam-tools-machine-arts-gallery). Bantam Machine Arts Gallery, Peekskill, New York, 1/9/2026 – 1/31/2026.
