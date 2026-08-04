@@ -10,7 +10,7 @@ United States
 
 ## Biography
 
-*([Extended biography here](bio.md))*
+*([Extended biography linked here](bio.md))*
 
 Golan Levin is an artist, engineer, researcher and educator interested in new intersections of machine code, visual culture, and critical making. His work combines equal measures of the whimsical, the provocative, and the sublime in an eclectic variety of online, installation and performance media. Through responsive artifacts, virtual environments, and media provocations, Levin applies creative twists to digital technologies that highlight our relationship with machines, expand the vocabulary of human action, and awaken participants to their own potential as creative actors. 
 
