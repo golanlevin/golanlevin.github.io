@@ -468,6 +468,7 @@ https://flong.com/archive/calendar/archive/2007/index.html
 
 #### 2026
 
+<!-- TAMU, October 2026 -->
 * "Datasets as Medium: Teaching the Full ML Pipeline from Collection to Synthesis", [2026 Learning To Teach: (Re)Designing Creative Tech Pedagogy for the GenAI Era](https://wp.nyu.edu/ltt2026/), NYU, 1/17/2025.
 
 #### 2025
@@ -518,6 +519,59 @@ https://flong.com/archive/calendar/archive/2007/index.html
 https://nieuweinstituut.nl/en/projects/international-visitors-programme/zach-lieberman-en-golan-levin-usa-oktober-2014
 
 -->
+
+---
+
+## Bibliography (Select Books)
+
+* Antonelli, Paola. *Design and the Elastic Mind*. The Museum of Modern Art (MoMA), New York, 2008. ISBN: 0870707329.
+* Antonelli, Paola. *Talk to Me: Design and the Communication between People and Objects*. MoMA, 2011. ISBN: 0870707965.
+* Austin, Tricia and Richard Doust. [*New Media Design*](https://www.amazon.com/New-Media-Design-Portfolio/dp/1856694313/). Laurence King Publishing, 2007. ISBN: 1856694313.
+* Bay-Cheng, Sarah, et al. *Performance and Media: Taxonomies for a Changing Field*. U. of Michigan, 2015. ISBN: 0472072900.
+* Bard-Schwarz, David. *An Introduction to Electronic Art Through the Teaching of Jacques Lacan*. Routledge, 2014. ISBN: 0415500591.
+* Birks, Kimberlie. *Design for Children: Play, Ride, Learn, Eat, Create, Sit, Sleep*. Phaidon Press, 2018. ISBN: 978-0714875194.
+* Blais, Joline and Ippolito, John. *At the Edge of Art*. Thames and Hudson, 2005. ISBN: 0500238227.
+* Bohnacker, Hartmut et al. *Generative Gestaltung*. Verlag Hermann Schmidt, Mainz, 2009. ISBN: 3874397599.
+* Boisselier, Charlotte. *Synesthésie et Matérialisation du Son en Art à l’Ère du Numérique*. Editions Universitaires Européennes, 2011. ISBN: 6131576149.
+* Bullivant, Lucy. *Responsive Environments: Architecture, Art and Design*. V&A Contemporaries, 2006. ISBN: 185177481X.
+* Cameron, Andy. *IdN Special 04: The Art of Experimental Interaction Design*. IdN, Hong Kong. 2004. ISBN: 988970658X.
+* Cardoso Llach, Daniel, and Theodora Vardouli, eds. *Designing the Computational Image, Imagining Computational Design*. Applied Research & Design / ORO Editions, 2023. ISBN: 978-1954081345.
+* Colson, Richard. *The Fundamentals of Digital Art*. Fairchild Books / AVA Publishing, 2007. ISBN: 2940373582.
+* Fiell, Charlotte and Peter Fiell. *Graphic Design for the 21st Century*. Taschen Books, 2003. ISBN: 3822816051.
+* Gopinath, Sumanth. *The Ringtone Dialectic: Economy and Cultural Form*. MIT Press, 2013. ISBN: 0262019159.
+* Greene, Rachel. *Internet Art*. Thames and Hudson, 2004. ISBN: 0500203768.
+* Havens, Henk et al. *Theater & Technologie*. Theater Instituut Nederland, 2006. ISBN: 9070892820.
+* Hjorth, Larissa, Adriana de Souza e Silva, and Klare Lanson, eds. *The Routledge Companion to Mobile Media Art*. Routledge, 2020. ISBN: 978-0367197162.
+* Hope, Cat and Ryan, John C. *Digital Arts: An Introduction to New Media*, Bloomsbury Academic, 2014. ISBN: 1780933231.
+* Iwasaka, Mika. *Beyond the Display: Phenomenal Art and Design in the 21st Century*. BNN Publishing. 2015. ISBN: 4861009510.
+* Johnston, David Jhave. *Aesthetic Animism: Digital Poetry’s Ontological Implications*. MIT Press, 2016. ISBN: 0262034514.
+* Klanten, Robert, et al. *A Touch of Code: Interactive Installations and Experiences*. Gestalten, 2011. ISBN: 3899553314.
+* Kwastek, Katja. *Aesthetics of Interaction in Digital Art*. MIT Press, 2013. ISBN: 0262019329.
+* Lieser, Wolf. *Digital Art*. H.F. Ullmann Publishing, Germany, 2009. ISBN: 3833153385.
+* Lupton, Ellen. *Beautiful Users*. Princeton Architectural Press, 2014. ISBN: 1616892919.
+* Lupton, Ellen, and Jennifer Cole Phillips. *Graphic Design: The New Basics*. Princeton Architectural Press, 2008. ISBN: 1568987021.
+* Marchessault, Janine (Ed.). *Fluid Screens, Expanded Cinema*. University of Toronto Press, 2007. ISBN: 0802092977.
+* Moulon, Dominique. *Art Contemporain et Nouveaux Médias*. Nouvelles Editions Scala, 2011. ISBN: 2359880386.
+* Murano, Francesco. *Light Works: Experimental Projection Mapping*, Politecnico di Milano Press, 2014. ISBN: 8854871486.
+* Navas, Eduardo. *Remix Theory: The Aesthetics of Sampling*, Springer Vienna Architecture, 2012. ISBN: 3990434993.
+* Paul, Christiane. *Digital Art (World of Art)*. Thames and Hudson, 2003. ISBN: 0500203679.
+* Quaranta, Domenico. *Beyond New Media Art*. Link Editions, 2013. ISBN: 1291376976.
+* Quaranta, Domenico and Geraldine Juárez. *The F.A.T Manual*. Link Editions, 2013. ISBN: 1291577912.
+* Quaranta, Domenico and Yves Bernard. *Holy Fire: Art Of The Digital Age*. Link Editions, 2011. ISBN: 147093874X.
+* Reas, Casey et al. *Form+Code*. Princeton Architectural Press, 2010. ISBN: 1568989377.
+* Ricardo, Francisco J. *The Engagement Aesthetic*. Bloomsbury Academic, 2013. ISBN: 1623560403.
+* Salter, Chris. *Entangled: Technology and the Transformation of Performance*. MIT Press, 2010. ISBN: 0262195887.
+* Schwartzman, Madeline. *See Yourself Sensing: Redefining Human Perception*. Black Dog Publishing, 2011. ISBN: 1907317295.
+* Shanken, Edward. *Art and Electronic Media (Themes and Movements)*. Phaidon, 2009. ISBN: 0714847828.
+* Simanowski, Roberto. *Digitale Medien in der Erlebnisgesellschaft*. Rowohlt Verlag, 2008. ISBN: 3499556960.
+* Stern, Nathaniel. *Interactive Art and Embodiment: The Implicit Body as Performance*. Gylphi Ltd., 2013. ISBN: 1780240090.
+* Tresaco, Boyer. *Best New York Art 2008*, 2008. Theredoom Publishing, 2008. ISBN: 8493511250.
+* Tribe, Mark and Reena Jana. *New Media Art*. Taschen Verlag Basic Art Series, 2006. ISBN: 3822830410.
+* Vesna, Victoria (ed.) *Database Aesthetics: Art in the Age of Information Overflow*. U. Of Minnesota, 2007. ISBN: 0816641196.
+* Wands, Bruce. *Art of the Digital Age*. Thames and Hudson, 2005. ISBN: 0500238170.
+* Warnier, Claire, et al. *Printing Things: Visions and Essentials for 3D Printing*. Gestalten, 2014. ISBN: 3899555163.
+* Wilson, Stephen. *Art + Science Now*. Thames and Hudson, 2010. ISBN: 0500238685.
+* Wünsche, Isabel and Wiebke Gronemeyer, eds. *Practices of Abstract Art: Between Anarchism and Appropriation*. Cambridge Scholars, 2016. ISBN: 1443897345.
 
 ---
 
