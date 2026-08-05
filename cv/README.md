@@ -6,6 +6,20 @@ CMU School of Art<br />
 Pittsburgh, PA 15213<br />
 United States
 
+#### Contents
+
+* Biography
+* Employment & Academic Appointments
+* Education
+* Publications
+* Solo and Two-Person Exhibitions
+* Group Exhibitions
+* Public Lectures and Presentations
+* Workshops
+* Awards and Recognitions
+* Grants
+* Bibliography & Press
+
 ---
 
 ## Biography
@@ -19,7 +33,7 @@ Levin is [Professor of Computational Art in the School of Art](https://art.cmu.e
 
 ---
 
-## Academic Appointments
+## Employment & Academic Appointments
 
 #### At Carnegie Mellon University
 
@@ -52,11 +66,15 @@ Director, Frank-Ratchye STUDIO for Creative Inquiry at CMU. January 2009-August 
 
 ---
 
-## Books 
+## Publications
+
+#### Books 
 
 * Golan Levin and Tega Brain. [*Code as Creative Medium: A Handbook for Computational Art and Design*](https://mitpress.mit.edu/9780262542043/code-as-creative-medium/). The MIT Press, 2021. ISBN: 9780262542043.
 * Golan Levin, Lia, Adrian Ward, and Meta. [*4x4 Generative Design: Beyond Photoshop (with Auto-Illustrator, Java, DBN, Lingo): Life/Oblivion*](https://www.amazon.com/Generative-Design-Auto-Illustrator-Java-Lingo/dp/1903450470). Friends of Ed, 2002. ISBN: 9781903450475.
 
+
+---
 
 ## Solo and Two-Person Exhibitions
 
@@ -74,6 +92,8 @@ Director, Frank-Ratchye STUDIO for Creative Inquiry at CMU. January 2009-August 
 * *Golan Levin / Anne-Katrin Grotepass*. Moving Image Gallery, New York City, 2001.
 
 
+---
+
 ## Group Exhibitions
 
 
@@ -84,9 +104,8 @@ https://flong.com/archive/calendar/archive/2007/index.html
 
 #### 2026
 
-<!-- Whitney Museum CODeDOC/Artport 25th Anniversary -->
+<!-- * [*Cycles*](https://denison.edu/places/museum/exhibitions), Denison Museum, Denison University, Granville, Ohio. 8/30/2026–12/1/2026. -->
 * [*artport: A History of Internet Art*](https://whitney.org/exhibitions/artport-25), Whitney Museum of American Art, 11/2026–2/2027.
-* [*Cycles*](https://denison.edu/places/museum/exhibitions), Denison Museum, Denison University, Granville, Ohio. 8/30/2026–12/1/2026.
 * [*Aberrant Creativity*](https://pvfa.tamu.edu/institutes/iac/iac-initiatives/aberrant-creativity/), Texas A&M University, College Station, Texas. 8/25/2026–10/17/2026.
 * [*Drawing with Machines: Golan Levin and Students of the CMU Machine Drawing Lab*](https://bantamtools.com/blogs/gallery/cmu-drawing-with-machines-at-the-bantam-tools-machine-arts-gallery). Bantam Machine Arts Gallery, Peekskill, New York, 1/9/2026 – 1/31/2026.
 
@@ -522,69 +541,7 @@ https://nieuweinstituut.nl/en/projects/international-visitors-programme/zach-lie
 
 ---
 
-## Bibliography (Select Books)
-
-* Antonelli, Paola. [*Design and the Elastic Mind*](https://books.google.com/books?vid=ISBN0870707329). The Museum of Modern Art (MoMA), New York, 2008. ISBN: 0870707329.
-* Antonelli, Paola. [*Talk to Me: Design and the Communication between People and Objects*](https://books.google.com/books?vid=ISBN0870707965). MoMA, 2011. ISBN: 0870707965.
-* Austin, Tricia and Richard Doust. [*New Media Design*](https://books.google.com/books?vid=ISBN1856694313). Laurence King Publishing, 2007. ISBN: 1856694313.
-* Bay-Cheng, Sarah, et al. [*Performance and Media: Taxonomies for a Changing Field*](https://books.google.com/books?vid=ISBN0472072900). U. of Michigan, 2015. ISBN: 0472072900.
-* Bard-Schwarz, David. [*An Introduction to Electronic Art Through the Teaching of Jacques Lacan*](https://books.google.com/books?vid=ISBN0415500591). Routledge, 2014. ISBN: 0415500591.
-* Birks, Kimberlie. [*Design for Children: Play, Ride, Learn, Eat, Create, Sit, Sleep*](https://books.google.com/books?vid=ISBN9780714875194). Phaidon Press, 2018. ISBN: 978-0714875194.
-* Blais, Joline and Ippolito, John. [*At the Edge of Art*](https://books.google.com/books?vid=ISBN0500238227). Thames and Hudson, 2005. ISBN: 0500238227.
-* Bohnacker, Hartmut et al. [*Generative Gestaltung*](https://books.google.com/books?vid=ISBN3874397599). Verlag Hermann Schmidt, Mainz, 2009. ISBN: 3874397599.
-* Boisselier, Charlotte. [*Synesthésie et Matérialisation du Son en Art à l’Ère du Numérique*](https://books.google.com/books?vid=ISBN6131576149). Editions Universitaires Européennes, 2011. ISBN: 6131576149.
-* Bullivant, Lucy. [*Responsive Environments: Architecture, Art and Design*](https://books.google.com/books?vid=ISBN185177481X). V&A Contemporaries, 2006. ISBN: 185177481X.
-* Cameron, Andy. [*IdN Special 04: The Art of Experimental Interaction Design*](https://books.google.com/books?vid=ISBN988970658X). IdN, Hong Kong. 2004. ISBN: 988970658X.
-* Cardoso Llach, Daniel, and Theodora Vardouli, eds. [*Designing the Computational Image, Imagining Computational Design*](https://books.google.com/books?vid=ISBN9781954081345). Applied Research & Design / ORO Editions, 2023. ISBN: 978-1954081345.
-* Colson, Richard. [*The Fundamentals of Digital Art*](https://books.google.com/books?vid=ISBN2940373582). Fairchild Books / AVA Publishing, 2007. ISBN: 2940373582.
-* Fiell, Charlotte and Peter Fiell. [*Graphic Design for the 21st Century*](https://books.google.com/books?vid=ISBN3822816051). Taschen Books, 2003. ISBN: 3822816051.
-* Gopinath, Sumanth. [*The Ringtone Dialectic: Economy and Cultural Form*](https://books.google.com/books?vid=ISBN0262019159). MIT Press, 2013. ISBN: 0262019159.
-* Greene, Rachel. [*Internet Art*](https://books.google.com/books?vid=ISBN0500203768). Thames and Hudson, 2004. ISBN: 0500203768.
-* Havens, Henk et al. [*Theater & Technologie*](https://books.google.com/books?vid=ISBN9070892820). Theater Instituut Nederland, 2006. ISBN: 9070892820.
-* Hjorth, Larissa, Adriana de Souza e Silva, and Klare Lanson, eds. [*The Routledge Companion to Mobile Media Art*](https://books.google.com/books?vid=ISBN9780367197162). Routledge, 2020. ISBN: 978-0367197162.
-* Hope, Cat and Ryan, John C. [*Digital Arts: An Introduction to New Media*](https://books.google.com/books?vid=ISBN1780933231). Bloomsbury Academic, 2014. ISBN: 1780933231.
-* Iwasaka, Mika. [*Beyond the Display: Phenomenal Art and Design in the 21st Century*](https://books.google.com/books?vid=ISBN4861009510). BNN Publishing. 2015. ISBN: 4861009510.
-* Johnston, David Jhave. [*Aesthetic Animism: Digital Poetry’s Ontological Implications*](https://books.google.com/books?vid=ISBN0262034514). MIT Press, 2016. ISBN: 0262034514.
-* Klanten, Robert, et al. [*A Touch of Code: Interactive Installations and Experiences*](https://books.google.com/books?vid=ISBN3899553314). Gestalten, 2011. ISBN: 3899553314.
-* Kwastek, Katja. [*Aesthetics of Interaction in Digital Art*](https://books.google.com/books?vid=ISBN0262019329). MIT Press, 2013. ISBN: 0262019329.
-* Lieser, Wolf. [*Digital Art*](https://books.google.com/books?vid=ISBN3833153385). H.F. Ullmann Publishing, Germany, 2009. ISBN: 3833153385.
-* Lupton, Ellen. [*Beautiful Users*](https://books.google.com/books?vid=ISBN1616892919). Princeton Architectural Press, 2014. ISBN: 1616892919.
-* Lupton, Ellen, and Jennifer Cole Phillips. [*Graphic Design: The New Basics*](https://books.google.com/books?vid=ISBN1568987021). Princeton Architectural Press, 2008. ISBN: 1568987021.
-* Marchessault, Janine, ed. [*Fluid Screens, Expanded Cinema*](https://books.google.com/books?vid=ISBN0802092977). University of Toronto Press, 2007. ISBN: 0802092977.
-* Moulon, Dominique. [*Art Contemporain et Nouveaux Médias*](https://books.google.com/books?vid=ISBN2359880386). Nouvelles Editions Scala, 2011. ISBN: 2359880386.
-* Murano, Francesco. [*Light Works: Experimental Projection Mapping*](https://books.google.com/books?vid=ISBN8854871486). Politecnico di Milano Press, 2014. ISBN: 8854871486.
-* Navas, Eduardo. [*Remix Theory: The Aesthetics of Sampling*](https://books.google.com/books?vid=ISBN3990434993). Springer Vienna Architecture, 2012. ISBN: 3990434993.
-* Paul, Christiane. [*Digital Art (World of Art)*](https://books.google.com/books?vid=ISBN0500203679). Thames and Hudson, 2003. ISBN: 0500203679.
-* Quaranta, Domenico. [*Beyond New Media Art*](https://books.google.com/books?vid=ISBN1291376976). Link Editions, 2013. ISBN: 1291376976.
-* Quaranta, Domenico and Geraldine Juárez. [*The F.A.T Manual*](https://books.google.com/books?vid=ISBN1291577912). Link Editions, 2013. ISBN: 1291577912.
-* Quaranta, Domenico and Yves Bernard. [*Holy Fire: Art of the Digital Age*](https://books.google.com/books?vid=ISBN147093874X). Link Editions, 2011. ISBN: 147093874X.
-* Reas, Casey et al. [*Form+Code*](https://books.google.com/books?vid=ISBN1568989377). Princeton Architectural Press, 2010. ISBN: 1568989377.
-* Ricardo, Francisco J. [*The Engagement Aesthetic*](https://books.google.com/books?vid=ISBN1623560403). Bloomsbury Academic, 2013. ISBN: 1623560403.
-* Salter, Chris. [*Entangled: Technology and the Transformation of Performance*](https://books.google.com/books?vid=ISBN0262195887). MIT Press, 2010. ISBN: 0262195887.
-* Schwartzman, Madeline. [*See Yourself Sensing: Redefining Human Perception*](https://books.google.com/books?vid=ISBN1907317295). Black Dog Publishing, 2011. ISBN: 1907317295.
-* Shanken, Edward. [*Art and Electronic Media (Themes and Movements)*](https://books.google.com/books?vid=ISBN0714847828). Phaidon, 2009. ISBN: 0714847828.
-* Simanowski, Roberto. [*Digitale Medien in der Erlebnisgesellschaft*](https://books.google.com/books?vid=ISBN3499556960). Rowohlt Verlag, 2008. ISBN: 3499556960.
-* Stern, Nathaniel. [*Interactive Art and Embodiment: The Implicit Body as Performance*](https://books.google.com/books?vid=ISBN1780240090). Gylphi Ltd., 2013. ISBN: 1780240090.
-* Tresaco, Boyer. [*Best New York Art 2008*](https://books.google.com/books?vid=ISBN8493511250). Theredoom Publishing, 2008. ISBN: 8493511250.
-* Tribe, Mark and Reena Jana. [*New Media Art*](https://books.google.com/books?vid=ISBN3822830410). Taschen Verlag Basic Art Series, 2006. ISBN: 3822830410.
-* Vesna, Victoria, ed. [*Database Aesthetics: Art in the Age of Information Overflow*](https://books.google.com/books?vid=ISBN0816641196). University of Minnesota Press, 2007. ISBN: 0816641196.
-* Wands, Bruce. [*Art of the Digital Age*](https://books.google.com/books?vid=ISBN0500238170). Thames and Hudson, 2005. ISBN: 0500238170.
-* Warnier, Claire, et al. [*Printing Things: Visions and Essentials for 3D Printing*](https://books.google.com/books?vid=ISBN3899555163). Gestalten, 2014. ISBN: 3899555163.
-* Wilson, Stephen. [*Art + Science Now*](https://books.google.com/books?vid=ISBN0500238685). Thames and Hudson, 2010. ISBN: 0500238685.
-* Wünsche, Isabel and Wiebke Gronemeyer, eds. [*Practices of Abstract Art: Between Anarchism and Appropriation*](https://books.google.com/books?vid=ISBN1443897345). Cambridge Scholars, 2016. ISBN: 1443897345.
-
-
----
-
-## Press
-
-* Simone Brauner, "[Touching Grass: Golan Levin on Systems Re-Pairing](https://www.art-magazine.ai/artist-directory/feature/golan-levin---touching-grass)" ([PDF](../press/2025/2025_golan_levin_ai_art_magazine.pdf)). *The AI Art Magazine*, 11/2025. 
-* Merve Güven Özkerim, "[Beyond Representation: A Conversation with Golan Levin on Generative Art and Blockchain](https://hyperrhiz.io/hyperrhiz29/3-chaos-order/3-interview.html)" ([PDF](../press/2025/2025_golan_levin_hyperrhiz.pdf)). *Hyperrhiz* 29, 10/2025. 
-
-
----
-
-## Educational Workshops
+## Workshops
 
 * *Guiding Stable Diffusion in ComfyUI with p5.js*, RISD CTC, 10/16/2025.
 * *Computational Thinking with Drinking Games.* Civic Creative Base Tokyo (CCBT), Shibuya, Tokyo. 2/2023.
@@ -667,19 +624,203 @@ https://nieuweinstituut.nl/en/projects/international-visitors-programme/zach-lie
 
 
 
+
+---
+
+## Bibliography & Press
+
+### Select Books
+
+* Antonelli, Paola. [*Design and the Elastic Mind*](https://books.google.com/books?vid=ISBN0870707329). The Museum of Modern Art (MoMA), New York, 2008. ISBN: 0870707329.
+* Antonelli, Paola. [*Talk to Me: Design and the Communication between People and Objects*](https://books.google.com/books?vid=ISBN0870707965). MoMA, 2011. ISBN: 0870707965.
+* Austin, Tricia and Richard Doust. [*New Media Design*](https://books.google.com/books?vid=ISBN1856694313). Laurence King Publishing, 2007. ISBN: 1856694313.
+* Bay-Cheng, Sarah, et al. [*Performance and Media: Taxonomies for a Changing Field*](https://books.google.com/books?vid=ISBN0472072900). U. of Michigan, 2015. ISBN: 0472072900.
+* Bard-Schwarz, David. [*An Introduction to Electronic Art Through the Teaching of Jacques Lacan*](https://books.google.com/books?vid=ISBN0415500591). Routledge, 2014. ISBN: 0415500591.
+* Birks, Kimberlie. [*Design for Children: Play, Ride, Learn, Eat, Create, Sit, Sleep*](https://books.google.com/books?vid=ISBN9780714875194). Phaidon Press, 2018. ISBN: 978-0714875194.
+* Blais, Joline and Ippolito, John. [*At the Edge of Art*](https://books.google.com/books?vid=ISBN0500238227). Thames and Hudson, 2005. ISBN: 0500238227.
+* Bohnacker, Hartmut et al. [*Generative Gestaltung*](https://books.google.com/books?vid=ISBN3874397599). Verlag Hermann Schmidt, Mainz, 2009. ISBN: 3874397599.
+* Boisselier, Charlotte. [*Synesthésie et Matérialisation du Son en Art à l’Ère du Numérique*](https://books.google.com/books?vid=ISBN6131576149). Editions Universitaires Européennes, 2011. ISBN: 6131576149.
+* Bullivant, Lucy. [*Responsive Environments: Architecture, Art and Design*](https://books.google.com/books?vid=ISBN185177481X). V&A Contemporaries, 2006. ISBN: 185177481X.
+* Cameron, Andy. [*IdN Special 04: The Art of Experimental Interaction Design*](https://books.google.com/books?vid=ISBN988970658X). IdN, Hong Kong. 2004. ISBN: 988970658X.
+* Cardoso Llach, Daniel, and Theodora Vardouli, eds. [*Designing the Computational Image, Imagining Computational Design*](https://books.google.com/books?vid=ISBN9781954081345). Applied Research & Design / ORO Editions, 2023. ISBN: 978-1954081345.
+* Colson, Richard. [*The Fundamentals of Digital Art*](https://books.google.com/books?vid=ISBN2940373582). Fairchild Books / AVA Publishing, 2007. ISBN: 2940373582.
+* Fiell, Charlotte and Peter Fiell. [*Graphic Design for the 21st Century*](https://books.google.com/books?vid=ISBN3822816051). Taschen Books, 2003. ISBN: 3822816051.
+* Gopinath, Sumanth. [*The Ringtone Dialectic: Economy and Cultural Form*](https://books.google.com/books?vid=ISBN0262019159). MIT Press, 2013. ISBN: 0262019159.
+* Greene, Rachel. [*Internet Art*](https://books.google.com/books?vid=ISBN0500203768). Thames and Hudson, 2004. ISBN: 0500203768.
+* Havens, Henk et al. [*Theater & Technologie*](https://books.google.com/books?vid=ISBN9070892820). Theater Instituut Nederland, 2006. ISBN: 9070892820.
+* Hjorth, Larissa, Adriana de Souza e Silva, and Klare Lanson, eds. [*The Routledge Companion to Mobile Media Art*](https://books.google.com/books?vid=ISBN9780367197162). Routledge, 2020. ISBN: 978-0367197162.
+* Hope, Cat and Ryan, John C. [*Digital Arts: An Introduction to New Media*](https://books.google.com/books?vid=ISBN1780933231). Bloomsbury Academic, 2014. ISBN: 1780933231.
+* Iwasaka, Mika. [*Beyond the Display: Phenomenal Art and Design in the 21st Century*](https://books.google.com/books?vid=ISBN4861009510). BNN Publishing. 2015. ISBN: 4861009510.
+* Johnston, David Jhave. [*Aesthetic Animism: Digital Poetry’s Ontological Implications*](https://books.google.com/books?vid=ISBN0262034514). MIT Press, 2016. ISBN: 0262034514.
+* Klanten, Robert, et al. [*A Touch of Code: Interactive Installations and Experiences*](https://books.google.com/books?vid=ISBN3899553314). Gestalten, 2011. ISBN: 3899553314.
+* Kwastek, Katja. [*Aesthetics of Interaction in Digital Art*](https://books.google.com/books?vid=ISBN0262019329). MIT Press, 2013. ISBN: 0262019329.
+* Lieser, Wolf. [*Digital Art*](https://books.google.com/books?vid=ISBN3833153385). H.F. Ullmann Publishing, Germany, 2009. ISBN: 3833153385.
+* Lupton, Ellen. [*Beautiful Users*](https://books.google.com/books?vid=ISBN1616892919). Princeton Architectural Press, 2014. ISBN: 1616892919.
+* Lupton, Ellen, and Jennifer Cole Phillips. [*Graphic Design: The New Basics*](https://books.google.com/books?vid=ISBN1568987021). Princeton Architectural Press, 2008. ISBN: 1568987021.
+* Marchessault, Janine, ed. [*Fluid Screens, Expanded Cinema*](https://books.google.com/books?vid=ISBN0802092977). University of Toronto Press, 2007. ISBN: 0802092977.
+* Moulon, Dominique. [*Art Contemporain et Nouveaux Médias*](https://books.google.com/books?vid=ISBN2359880386). Nouvelles Editions Scala, 2011. ISBN: 2359880386.
+* Murano, Francesco. [*Light Works: Experimental Projection Mapping*](https://books.google.com/books?vid=ISBN8854871486). Politecnico di Milano Press, 2014. ISBN: 8854871486.
+* Navas, Eduardo. [*Remix Theory: The Aesthetics of Sampling*](https://books.google.com/books?vid=ISBN3990434993). Springer Vienna Architecture, 2012. ISBN: 3990434993.
+* Paul, Christiane. [*Digital Art (World of Art)*](https://books.google.com/books?vid=ISBN0500203679). Thames and Hudson, 2003. ISBN: 0500203679.
+* Quaranta, Domenico. [*Beyond New Media Art*](https://books.google.com/books?vid=ISBN1291376976). Link Editions, 2013. ISBN: 1291376976.
+* Quaranta, Domenico and Geraldine Juárez. [*The F.A.T Manual*](https://books.google.com/books?vid=ISBN1291577912). Link Editions, 2013. ISBN: 1291577912.
+* Quaranta, Domenico and Yves Bernard. [*Holy Fire: Art of the Digital Age*](https://books.google.com/books?vid=ISBN147093874X). Link Editions, 2011. ISBN: 147093874X.
+* Reas, Casey et al. [*Form+Code*](https://books.google.com/books?vid=ISBN1568989377). Princeton Architectural Press, 2010. ISBN: 1568989377.
+* Ricardo, Francisco J. [*The Engagement Aesthetic*](https://books.google.com/books?vid=ISBN1623560403). Bloomsbury Academic, 2013. ISBN: 1623560403.
+* Salter, Chris. [*Entangled: Technology and the Transformation of Performance*](https://books.google.com/books?vid=ISBN0262195887). MIT Press, 2010. ISBN: 0262195887.
+* Schwartzman, Madeline. [*See Yourself Sensing: Redefining Human Perception*](https://books.google.com/books?vid=ISBN1907317295). Black Dog Publishing, 2011. ISBN: 1907317295.
+* Shanken, Edward. [*Art and Electronic Media (Themes and Movements)*](https://books.google.com/books?vid=ISBN0714847828). Phaidon, 2009. ISBN: 0714847828.
+* Simanowski, Roberto. [*Digitale Medien in der Erlebnisgesellschaft*](https://books.google.com/books?vid=ISBN3499556960). Rowohlt Verlag, 2008. ISBN: 3499556960.
+* Stern, Nathaniel. [*Interactive Art and Embodiment: The Implicit Body as Performance*](https://books.google.com/books?vid=ISBN1780240090). Gylphi Ltd., 2013. ISBN: 1780240090.
+* Tresaco, Boyer. [*Best New York Art 2008*](https://books.google.com/books?vid=ISBN8493511250). Theredoom Publishing, 2008. ISBN: 8493511250.
+* Tribe, Mark and Reena Jana. [*New Media Art*](https://books.google.com/books?vid=ISBN3822830410). Taschen Verlag Basic Art Series, 2006. ISBN: 3822830410.
+* Vesna, Victoria, ed. [*Database Aesthetics: Art in the Age of Information Overflow*](https://books.google.com/books?vid=ISBN0816641196). University of Minnesota Press, 2007. ISBN: 0816641196.
+* Wands, Bruce. [*Art of the Digital Age*](https://books.google.com/books?vid=ISBN0500238170). Thames and Hudson, 2005. ISBN: 0500238170.
+* Warnier, Claire, et al. [*Printing Things: Visions and Essentials for 3D Printing*](https://books.google.com/books?vid=ISBN3899555163). Gestalten, 2014. ISBN: 3899555163.
+* Wilson, Stephen. [*Art + Science Now*](https://books.google.com/books?vid=ISBN0500238685). Thames and Hudson, 2010. ISBN: 0500238685.
+* Wünsche, Isabel and Wiebke Gronemeyer, eds. [*Practices of Abstract Art: Between Anarchism and Appropriation*](https://books.google.com/books?vid=ISBN1443897345). Cambridge Scholars, 2016. ISBN: 1443897345.
+
+
+---
+
+### Press
+
+*Owing to link rot, this section is currently undergoing reconstruction.*
+
+#### 2025
+
+* Simone Brauner, "[Touching Grass: Golan Levin on Systems Re-Pairing](https://www.art-magazine.ai/artist-directory/feature/golan-levin---touching-grass)" ([PDF](../press/2025/2025_golan_levin_ai_art_magazine.pdf)). *The AI Art Magazine*, 11/2025. 
+* Merve Güven Özkerim, "[Beyond Representation: A Conversation with Golan Levin on Generative Art and Blockchain](https://hyperrhiz.io/hyperrhiz29/3-chaos-order/3-interview.html)" ([PDF](../press/2025/2025_golan_levin_hyperrhiz.pdf)). *Hyperrhiz* 29, 10/2025. 
+
+#### 2016
+
+* Anzilotti, Eillie. “[Mapping the Hidden Patterns of Urban Life](http://www.citylab.com/design/2016/06/mapping-the-hidden-patterns-of-urban-life/485924/).” *CityLab*, June 7, 2016.
+* Anzilotti, Eillie. “[Mapeando los patrones ocultos de la vida urbana](http://www.univision.com/noticias/citylab-vida-urbana/mapeando-los-patrones-ocultos-de-la-vida-urbana).” *Univision*, June 16, 2016.
+* Blakemore, Erin. “[This New Satellite Project Helps People Find Patterns in City Spaces](http://www.smithsonianmag.com/smart-news/this-new-satellite-project-helps-people-find-patterns-in-city-spaces-180959336/).” *Smithsonian*, June 9, 2016.
+* Bravo, Eduardo. “[La web que encuentra lugares parecidos entre sí desde el cielo](http://www.yorokobu.es/la-web-encuentra-la-tierra-lugares-parecidos/).” *Yorokobu*, May 27, 2016.
+* Brien, Jörn. “[Satellitenbilder durchsuchen mit Terrapattern: Suchmaschine arbeitet mit Künstlicher Intelligenz](http://t3n.de/news/satellitenbilder-terrapattern-suchmaschine-713392/).” *t3n*, June 6, 2016.
+* Brownlee, John. “[This Neural Network Reveals Your City’s Secret Patterns](https://www.fastcompany.com/3060424/this-neural-network-reveals-your-citys-secret-patterns).” *Fast Company*, June 1, 2016.
+* Chen, Qi. “[Open Source Terrapattern, the Public Use of Artificial Intelligence Nuggets Big Data from Remote Sensing (开源的Terrapattern, 让公众利用人工智能从遥感大数据中挖金)](https://web.archive.org/web/2/http://news.3snews.net/2016/0612/42207.html).” *3sNews*, June 12, 2016.
+* Clarke, Keir. “[Searching for Map Patterns](http://googlemapsmania.blogspot.it/2016/05/searching-for-map-patterns.html).” *Google Maps Mania*, May 26, 2016.
+* Cohen, Tanya. “[НОВЫЙ ЛУЧШИЙ САЙТ: ПОИСКОВИК ПО ИЗОБРАЖЕНИЯМ СО СПУТНИКА](http://knife.media/terrapattern/).” *Knife.Media*, May 28, 2016.
+* Coldewey, Devin. “[Terrapattern Is Reverse Image Search for Maps, Powered by a Neural Network](http://techcrunch.com/2016/05/25/terrapattern-is-a-neural-net-powered-reverse-image-search-for-maps/).” *TechCrunch*, May 25, 2016.
+* “[Cool Tech! Terrapattern, Open-Source Tool for Discovering ‘Patterns of Interest’](http://gisuser.com/2016/05/cool-tech-terrapattern-open-source-tool-for-discovering-patterns-of-interest/).” *GISUser*, May 31, 2016.
+* Dempsey, Caitlin. “[Terrapattern: Search Engine for Satellite Imagery](https://www.gislounge.com/terrapattern-search-engine-satellite-imagery/).” *GIS Lounge*, May 28, 2016.
+* Freist, Roland. “[Geo-Suchmaschine vergleicht Satellitenbilder](https://www.mittelstandswiki.de/2016/06/open-data-geo-suchmaschine-vergleicht-satellitenbilder/).” *MittelstandsWiki*, June 13, 2016.
+* Hagler, Jürgen. “Animation, Art and Technology: Tracking Developments on the Fringe.” In *Im Wandel: Metamorphosen der Animation*. Springer, 2016. In German.
+* Heller, Piotr. “[Suchmaschine für Satellitenbilder: Wir wissen, wo euer Flugzeug steht](http://www.spiegel.de/netzwelt/apps/terrapattern-luftaufklaerung-fuer-alle-a-1095342.html).” *Spiegel Online*, June 3, 2016.
+* Hlács, Ferenc. “[Az égbe költözik a gazdasági analitika](http://www.hwsw.hu/hirek/55732/analitika-muhold-orbital-insight.html).” *HWSW*, June 13, 2016.
+* “[How to Tame a Robot with High Performance Software](https://www.rdworldonline.com/how-to-tame-a-robot-with-high-performance-software/).” *Scientific Computing*, March 2, 2016.
+* Ibáñez, Álvaro. “[Terrapattern, el buscador de imágenes de satélite similares](http://www.microsiervos.com/archivo/internet/terrapattern-buscador-imagenes-satelite.html).” *Microsiervos*, May 28, 2016.
+* “[Il motore di ricerca dei paesaggi](http://www.ilpost.it/2016/06/09/terrapattern/).” *Il Post*, June 9, 2016.
+* “[In Addition to Image Recognition, Artificial Intelligence Can Accurately Locate GPS Coordinates (除了图片识别 人工智能还能准确定位GPS坐标)](https://web.archive.org/web/2/http://mo.techweb.com.cn/smarthardware/2016-06-12/2345141.shtml).” *TechWeb*, June 12, 2016.
+* Kohlstedt, Kurt. “[Terrapattern: Satellite Image Search Engine Matches Similar Places](https://weburbanist.com/2016/05/30/terrapattern-satellite-image-search-engine-matches-similar-places/).” *WebUrbanist*, May 30, 2016.
+* Kottke, Jason. “[Satellite Imagery Search Engine](http://kottke.org/16/05/satellite-imagery-search-engine).” *Kottke.org*, May 25, 2016.
+* Manaugh, Geoff. “[Subverting Our New Space Overlords](http://www.theatlantic.com/technology/archive/2016/06/duping-the-satellite-and-other-adventures-in-landscape-recognition/485921/).” *The Atlantic*, June 9, 2016.
+* Mandelbaum, Ryan F. “[This Website Lets You Find the Hidden Similarities in Big Cities](http://www.popsci.com/you-can-now-search-google-maps-by-matching-similar-landscapes).” *Popular Science*, May 25, 2016.
+* Meyer, Robinson. “[The Thrill of Terrapattern, a New Way to Search Satellite Imagery](http://www.theatlantic.com/technology/archive/2016/05/the-promise-of-terrapattern-the-visual-search-engine-for-satellite-imagery/484610/).” *The Atlantic*, May 27, 2016.
+* “[Neuronales Netz: Mit Terrapattern die Welt erkunden](https://www.derstandard.at/story/2000038224414/maechtiger-als-google-maps-mit-terrapattern-die-welt-erkunden).” *Der Standard*, June 4, 2016.
+* Ouellette, Jennifer. “[Aspiring Artists Can Make Like a Dutch Master with the LUCY Drawing Tool](http://gizmodo.com/aspiring-artists-can-make-like-a-dutch-master-with-the-1769247628).” *Gizmodo*, April 5, 2016.
+* Parlangeli, Diletta. “[Le città nascoste su Terrapattern, il motore di ricerca di immagini satellitari](http://www.wired.it/internet/web/2016/06/23/citta-nascoste-terrapattern/).” *Wired Italia*, June 23, 2016.
+* Pluta, Werner. “[Terrapattern erkennt Strukturen auf Satellitenbildern](http://www.golem.de/news/bildersuche-terrapattern-erkennt-strukturen-auf-satellitenbildern-1606-121317.html).” *Golem.de*, June 6, 2016.
+* Reese, Hope. “[Google Maps Meets AI: Carnegie Mellon’s Terrapattern Can Find and Map Every Pool in New York City](http://www.techrepublic.com/article/google-maps-meets-ai-carnegie-mellons-terrapattern-can-find-and-map-every-pool-in-new-york-city/).” *TechRepublic*, June 8, 2016.
+* Schieb, Jörg. “[TerraPattern: Neue Such-Maschine für Satelliten-Aufnahmen](http://www.schieb.de/748910/terrapattern-neue-suchmaschine-fuer-satellitenaufnahmen).” *Schieb.de*, June 8, 2016.
+* Scholz, Trebor. [*Uberworked and Underpaid: How Workers Are Disrupting the Digital Economy*](https://books.google.com/books?vid=ISBN9780745653570). Polity, 2016. ISBN: 978-0-7456-5357-0.
+* Singleton, Micah. “[Terrapattern Is the First Open-Access Visual Search Engine for Satellite Maps](https://www.theverge.com/2016/5/27/11796786/terrapattern-visual-search-engine-satellite-maps).” *The Verge*, May 27, 2016.
+* Stinson, Liz. “[Terrapattern Is Like a Search Engine for Satellite Imagery](http://www.wired.com/2016/05/terrapattern-like-search-engine-satellite-imagery/).” *Wired*, May 27, 2016.
+* “[Terrapattern Berlin](https://web.archive.org/web/2/http://www.nerdcore.de/2016/06/05/terrapattern-berlin/).” *Nerdcore*, June 5, 2016.
+* “[Terrapattern, il motore di ricerca intelligente per foto satellitari](https://web.archive.org/web/2/http://mobile.hdblog.it/2016/06/09/terrapattern-ricerca-immagini-satellitari/).” *HDblog.it*, June 9, 2016.
+* “[Terrapattern uydu haritasında görsel arama yapıyor](https://www.techinside.com/terrapattern-gorsel-arama-yapiyor/).” *TechInside*, May 30, 2016.
+* “[Terrapattern: Webdienst durchsucht Satellitenbilder](http://futurezone.at/science/terrapattern-webdienst-durchsucht-satellitenbilder/202.663.045).” *Futurezone*, June 4, 2016.
+* Toobin, Adam. “[Kill Some Time with Terrapattern, Which Turns Satellite Images into Art](https://www.inverse.com/article/16252-kill-some-time-with-terrapattern-which-turns-satellite-images-into-art).” *Inverse*, May 27, 2016.
+* Twilley, Nicola. “[Meet Terrapattern, Google Earth’s Missing Search Engine](https://www.newyorker.com/tech/annals-of-technology/meet-terrapattern-google-earths-missing-search-engine).” *The New Yorker*, May 25, 2016.
+* Visnjic, Filip. “[Terrapattern: Neural Network Visual Search Tool for Satellite Imagery](https://www.creativeapplications.net/project/terrapattern-neural-network-visual-search-tool-for-satellite-imagery/).” *Creative Applications Network*, May 25, 2016.
+* “[Visual Search Map Advent of Neural Network Reverse Image Search (视觉搜索地图问世, 神经网络实现逆向图像搜索)](https://web.archive.org/web/2/http://www.leiphone.com/news/201605/uZhQO2dXj6a8Zaxa.html).” *Lei Feng Network*, May 26, 2016.
+* Voon, Claire. “[A Visual Search Engine for the Aerial Patterns of Cities](https://hyperallergic.com/a-visual-search-engine-for-the-aerial-patterns-of-cities/).” *Hyperallergic*, July 6, 2016.
+* Voon, Claire. “[Immersive Art Installations Light Up Houston’s Day for Night Festival](https://hyperallergic.com/immersive-art-installations-light-up-houstons-day-for-night-festival/).” *Hyperallergic*, December 2, 2016.
+* Voon, Claire. “[At Day for Night Festival, a Surreal World of Light Provides Respite from the Music](https://hyperallergic.com/at-day-for-night-festival-a-surreal-world-of-light-provides-respite-from-the-music/).” *Hyperallergic*, December 20, 2016.
+* “[When Google Maps Experiences AI: Terrapattern AI Finds and Locates Swimming Pools in New York City (当谷歌地图遇到人工智能: Terrapattern AI能找到并定位纽约市的游泳池)](https://web.archive.org/web/2/http://www.cnbeta.com/articles/509687.htm).” *cnBeta*, June 12, 2016.
+* Whitehead, Timothy. “[Terrapattern, the search engine for imagery](http://www.gearthblog.com/blog/archives/2016/05/terrapattern-search-engine-imagery.html).” *Google Earth Blog*, May 27, 2016.
+* Worms, Anne-Cécile. “[Terrapattern, le nouveau moteur de recherche des images satellite](http://www.makery.info/2016/05/31/terrapattern-le-nouveau-moteur-de-recherche-des-images-satellite/).” *Makery*, May 31, 2016.
+* Wünsche, Isabel, and Wiebke Gronemeyer, eds. [*Practices of Abstract Art: Between Anarchism and Appropriation*](https://books.google.com/books?vid=ISBN9781443897341). Cambridge Scholars Publishing, 2016. ISBN: 978-1-4438-9734-1.
+* Yau, Nathan. “[Visual Search Tool for Satellite Imagery](http://flowingdata.com/2016/06/01/visual-search-tool-for-satellite-imagery/).” *FlowingData*, June 1, 2016.
+
+
+
+#### 2015
+
+* *Alfa.lt*. “[Košmariškos, bet visai nebaisios: plaštakos su 6, 4 ar net 25 pirštais](https://web.archive.org/web/2/http://www.alfa.lt/straipsnis/49847838/kosmariskos-bet-visai-nebaisios-plastakos-su-6-4-ar-net-25-pirstais).” May 9, 2015.
+* Behrends, Jakob. [*Interreaction: Interaktive Medien und Kommunikation im Raum. Eine Einführung für Gestalter*](https://www.avedition.de/interreaction/978-3-89986-212-6). AV Edition, April 2015. ISBN: 978-3-89986-212-6. In German.
+* Brack, Jeb. “[9,000 Sketches to Be Immortalized on the Moon](https://web.archive.org/web/2/http://www.psfk.com/2015/06/moon-artists-moon-drawings-project-cmu-robotics-institute-moon-arts-ark.html).” *PSFK*, June 22, 2015.
+* Bromwich, Jonah. “[Will Our Future Computer Overlords Appreciate Art?](https://www.vice.com/en/article/will-our-future-computer-overlords-appreciate-art-417/).” *Vice*, April 20, 2015.
+* Cutler, Kim-Mai. “[An Interview with a Drone Painter Who Made a Poop Portrait of Eric Schmidt](https://techcrunch.com/2015/05/21/fat-lab/).” *TechCrunch*, May 21, 2015.
+* Demirtaş, Kamil. “[Ellerinizi 4 Parmaklı Olarak Gösteren Arttırılmış Gerçeklik Kutusu](https://web.archive.org/web/2/http://www.webtekno.com/sektorel/ellerinizi-3-parmakli-olarak-gosteren-arttirilmis-gerceklik-kutusu-h7260.html).” *WebTekno*, May 2015.
+* Freidel, Morten. “[Was den Menschen zur Maschine macht](https://www.faz.net/aktuell/rhein-main/node-festilval-in-frankfurt-mensch-und-maschine-13567049.html).” *Frankfurter Allgemeine Zeitung*, May 1, 2015.
+* Glentzer, Molly. “[‘Shadow Monsters’ Creator Keeps It Simple, Fun](https://www.houstonchronicle.com/entertainment/theater/article/Shadow-Monsters-creator-keeps-it-simple-fun-6295157.php).” *Houston Chronicle*, May 29, 2015.
+* Grba, Dejan. “[Get Lucky: Cognitive Aspects of Generative Art](https://www.researchgate.net/publication/344874353_Get_Lucky_Cognitive_Aspects_of_Generative_Art).” In *Proceedings of the XVIII Generative Art Conference*, 200–213. Venice, December 2015.
+* Heater, Brian. “[‘Augmented Hand Series,’ a Box That Creates Trippy Visual Manipulations of a User’s Hand in Real Time](https://laughingsquid.com/augmented-hand-series-a-box-that-creates-trippy-visual-manipulations-of-a-users-hand-in-real-time/).” *Laughing Squid*, January 8, 2015.
+* Iwasaka, Mika. [*Beyond the Display: Phenomenal Art and Design in the 21st Century*](https://books.google.com/books?vid=ISBN4861009510). BNN Publishing, May 2015. Bilingual Japanese and English edition. ISBN: 978-4-86100-951-8.
+* Joho, Jess. “[This Augmented Reality Installation Will Melt Your Brain and Your Hand](https://www.killscreen.com/weeks-edition-dude-i-think-im-way-too-high-augmented-hand-series/).” *Kill Screen*, January 7, 2015.
+* Keats, Jonathon. “[MoMA Envisions a Future in Which Designers Become Political Philosophers](https://www.forbes.com/sites/jonathonkeats/2015/03/23/moma-envisions-a-future-in-which-designers-become-political-philosophers/).” *Forbes*, March 23, 2015.
+* Keats, Jonathon. “[The ‘This Is for Everyone’ Exhibition Reveals Future of Philosophy](https://www.newscientist.com/article/dn28708-the-this-is-for-everyone-exhibition-reveals-future-of-philosophy/).” *New Scientist*, December 27, 2015.
+* Kelliher, Aisling. “[Machines Learning Culture](https://web.archive.org/web/2/http://online.qmags.com/MM0415?sessionID=32A3F350BEFABC6B11344118E&cid=3256989&eid=19304#pg21&mode2).” *IEEE MultiMedia*, April–June 2015, 19.
+* Kottke, Jason. “[Augmented Hands](https://kottke.org/15/05/augmented-hands).” *Kottke.org*, May 6, 2015.
+* Krawczyk, Natalie. “[Gross! These Augmented Hands Will Give You Nightmares for Days](https://web.archive.org/web/2/http://www.pixable.com/article/augmented-hands-video-17084/).” *Pixable*, May 7, 2015.
+* “[Konkurs na rysunki, które zostaną narysowane na Księżycu](https://web.archive.org/web/2/http://nauka.money.pl/artykul/konkurs-na-rysunki-ktore-zostana-narysowane,240,0,1780976.html).” *Money.pl*, April 30, 2015.
+* Madrigal, Alexis C. “[Insert Hand into Box, Watch It Become a Surreal Digital Object](https://web.archive.org/web/2/http://fusion.net/story/36919/insert-hand-into-box-watch-it-become-a-surreal-digital-object/).” *Fusion*, January 6, 2015.
+* Manilève, Vincent. “[Attention, dernier jour pour envoyer votre dessin sur la Lune](https://www.slate.fr/story/101333/envoyer-dessin-lune).” *Slate.fr*, May 7, 2015.
+* Mersmann, Birgit. [*Schriftikonik: Bildphänomene der Schrift in kultur- und medienkomparativer Perspektive*](https://books.google.com/books?vid=ISBN9783770559121). Wilhelm Fink Verlag, 2015. ISBN: 978-3-7705-5912-1.
+* Mills, Chris. “[These Augmented Reality Hands Are Giving Me Nightmares](https://gizmodo.com/these-augmented-reality-hands-are-giving-me-nightmares-1702738606).” *Gizmodo*, May 6, 2015.
+* Montañez, Amanda. “[Art Can Highlight Climate Change, but Where Is the Data?](https://www.scientificamerican.com/blog/sa-visual/art-can-highlight-climate-change-but-where-is-the-data/).” *Scientific American*, November 27, 2015.
+* Peterson, Ivars. “Shaping Sounds.” *Muse*, May 2015, 10.
+* Popeson, Pamela. “[This Is for Everyone: Free Play](https://www.moma.org/explore/inside_out/2015/03/27/this-is-for-everyone-free-play/).” *Inside/Out*, Museum of Modern Art, March 27, 2015.
+* Quito, Anne. “[Today Is the Last Chance to Send Your Drawing to the Moon](https://qz.com/399690/today-is-the-last-chance-to-send-your-drawing-to-the-moon).” *Quartz*, May 7, 2015.
+* *República*. “[La historia se repite: vamos a mandar un pene a la Luna por segunda vez](https://web.archive.org/web/2/http://www.republica.com/republica-insolita/2015/05/11/pene-lunar/).” May 11, 2015.
+* Richardson, Andrew. [*Data-Driven Graphic Design: Creative Coding for Visual Communication*](https://books.google.com/books?vid=ISBN9781472578303). Fairchild Books/Bloomsbury, November 2015. ISBN: 978-1-4725-7830-3.
+* Rinck, Jonathan. “[Democratizing Design](https://sculpture.org/blogpost/1860259/349465/Democratizing-Design).” *Sculpture*, October 7, 2015.
+* Schmidt, Christian. “Data Culture.” [*ARCADE* 33, no. 1](https://www.usmodernist.org/ARC/ARC-2015-spring.pdf), April 2015. p.33,41.
+* Scholz, Alexander. “[Short Cuts: CentrePasquArt Maps 50 Years of Invention and Influence in Art and Design](https://www.creativeapplications.net/project/short-cuts-at-centrepasquart/).” *Creative Applications Network*, June 1, 2015.
+* Shirky, Clay, and Anne VanderMey. “[China’s Version of the ‘Maker Movement’ Puts the U.S. to Shame](https://fortune.com/2015/10/21/chinas-version-of-the-maker-movment-puts-the-u-s-to-shame/).” *Fortune*, October 21, 2015.
+* Stinson, Liz. “[Inspiring Objects Designed for Everyone, from Arduino to a Soy Sauce Bottle](https://www.wired.com/2015/02/inspiring-objects-designed-everyone-arduino-soy-sauce-bottle).” *Wired*, February 19, 2015.
+* Stinson, Liz. “[We Sent a Dick Pic to the Moon—and We’re Doing It Again](https://www.wired.com/2015/05/we-sent-a-dick-pic-to-the-moon).” *Wired*, May 7, 2015.
+* Stinson, Liz. “[Watch an Experiment That Turns People’s Hands into Creepy Visuals](https://www.wired.com/2015/01/watch-code-warp-peoples-hands-trippy-visuals/).” *Wired*, January 6, 2015.
+* Subyen, Pattarawut. “[Mapping, Meaning, and Motion: An Artistic Framework for Visualizing Movement Quality](https://summit.sfu.ca/_flysystem/fedora/sfu_migrate/14744/etd8827_PSubyen.pdf).” Doctoral thesis, School of Interactive Arts and Technology, Simon Fraser University, 2015. 
+* Tickle, Glen. “[New Grotesque Real-Time Visual Manipulations of Augmented Hands](https://laughingsquid.com/new-grotesque-real-time-visual-manipulations-of-augmented-hands/).” *Laughing Squid*, May 6, 2015.
+* Visnjic, Filip. “[How to Create Interactive Loops Using Lenticular Animation and GifPop](https://www.creativeapplications.net/project/how-to-create-interactive-loops-using-lenticular-animation-and-gifpop/).” *Creative Applications Network*, April 9, 2015.
+* Visnjic, Filip. “[The Augmented Hand Series: Playful, Dreamlike and Uncanny](https://www.creativeapplications.net/project/the-augmented-hand-series/).” *Creative Applications Network*, January 6, 2015.
+* Walasek, Dobromila. “[Malen Sie den Mann in den Mond](https://blog.zeit.de/teilchen/2015/05/06/malen-sie-den-mann-in-den-mond/).” *Zeit Online*, May 6, 2015.
+* Weller, Chris. “[Augmented Hands Project Visualizes Extra Fingers, Missing Knuckles in Real Time](https://www.medicaldaily.com/pulse/augmented-hands-project-visualizes-extra-fingers-missing-knuckles-real-time-332504).” *Medical Daily*, May 8, 2015.
+* Bay-Cheng, Sarah, Jennifer Parker-Starbuck, and David Z. Saltz. [*Performance and Media: Taxonomies for a Changing Field*](https://books.google.com/books?vid=ISBN9780472052905). University of Michigan Press, October 2015. ISBN: 978-0-472-05290-5.
+
+#### 2014
+
+* Bard-Schwarz, David. [*An Introduction to Electronic Art Through the Teaching of Jacques Lacan: Strangest Thing*](https://www.routledge.com/An-Introduction-to-Electronic-Art-Through-the-Teaching-of-Jacques-Lacan-Strangest-Thing-Strangest-Thing/Bard-Schwarz/p/book/9780415500593). Routledge, February 2014. ISBN: 978-0-415-50059-3.
+* Bosco, Roberta. “[Évora despliega la historia del arte interactivo](https://elpais.com/cultura/2014/01/03/actualidad/1388743796_094757.html).” *El País*, January 6, 2014.
+* Boulton, Jim. [*100 Ideas That Changed the Web*](https://books.google.com/books?vid=ISBN9781780673707). Laurence King Publishing, August 2014. ISBN: 978-1-78067-370-7.
+* Core77 Design Awards. “[Core77 Design Awards 2014: The Best DIY Designs of the Year](https://www.core77.com/posts/27402/core77-design-awards-2014-the-best-diy-designs-of-the-year-27402).” *Core77*, July 30, 2014.
+* Demers, Louis-Philippe. [*Machine Performers: Agents in a Multiple Ontological State*](https://doi.org/10.24382/4620). Doctoral thesis, Plymouth University, 2014.
+* Downes, Larry, and Paul Nunes. “[How Art Historians’ Kickstarter Project Redefined Business Strategy](https://web.archive.org/web/20160101000000/http://upstart.bizjournals.com/resources/author/2014/01/09/big-bang-business-disruption-on-loose.html?page=all).” *Upstart Business Journal*, January 9, 2014.
+* *Faster by Sprint*. “[200 Words: Golan Levin](https://web.archive.org/web/20160101000000/http://faster.sprint.com/2014/01/17/200-words-golan-levin/).” January 20, 2014.
+* Gonzalez, Leah. “[Chrome Plug-In Offers a Visual Map of Your Internet Activity](https://web.archive.org/web/20160101000000/http://www.psfk.com/2014/03/personal-internet-history-visualized.html).” *PSFK*, March 21, 2014.
+* Gunn, Ali. “[FutureEverything 2014: Tools for the Unknown Future](https://www.theskinny.co.uk/art/interviews/futureeverything-2014-tools-for-the-unknown-future).” *The Skinny*, April 9, 2014.
+* Hope, Cat, and John Charles Ryan. [*Digital Arts: An Introduction to New Media*](https://books.google.com/books?vid=ISBN9781780933238). Berg New Media Series. Bloomsbury Academic, June 2014. ISBN: 978-1-78093-323-8.
+* Karlovits, Bob. “[Sounds of Nature Get a ‘Remix’ for Phipps Project](https://web.archive.org/web/20160101000000/http://triblive.com/aande/music/6196763-74/says-sounds-aresty).” *Pittsburgh Tribune-Review*, June 21, 2014.
+* Koster, Rick. “[Connecticut College Holds Arts & Science Symposium](https://web.archive.org/web/20160101000000/http://www.theday.com/article/20140227/ENT02/302279537).” *The Day*, February 27, 2014.
+* Krassenstein, Brian. “[Free 3D Printable Adapters Allow Kids to Connect LEGOs, K’Nex, Tinkertoys, and Seven Other Construction Sets](https://3dprint.com/9147/3d-print-adapter-lego-knex/).” *3DPrint.com*, July 14, 2014.
+* Lange, Alexandra. “[The New Cooper Hewitt](https://www.newyorker.com/culture/culture-desk/new-cooper-hewitt).” *The New Yorker*, December 12, 2014.
+* McKeand, Kirk. “[Twist and Shout: The Making of Blek](https://www.pocketgamer.biz/twist-and-shout-the-making-of-blek/).” *PocketGamer.biz*, June 25, 2014.
+* Murano, Francesco. [*Light Works: Experimental Projection Mapping*](https://re.public.polimi.it/handle/11311/958763). Aracne Editrice, 2014. ISBN: 978-88-548-7148-9.
+* Panzeri, Chiara. “[Artware](https://web.archive.org/web/20160101000000/http://ricerca.repubblica.it/repubblica/archivio/repubblica/2014/07/27/artware36.html).” *la Repubblica*, July 27, 2014. In Italian.
+* *RTV Slovenija*. “[Golan Levin – F.U.C.K. & QR kode za digitalne nomade](https://web.archive.org/web/20160101000000/http://prireditve.rtvslo.si/prireditev/golan-levin-f-u-c-k-qr-kode-za-digitalne-nomade/91953/).” April 17, 2014.
+* “[Top 10 Most-Funded Chicago Design & Tech Kickstarter Campaigns of 2013](https://web.archive.org/web/20160101000000/http://bluesky.chicagotribune.com/originals/chi-top-10-mostfunded-chicago-kickstarter-2013-bsi,0,0.htmlstory).” *Chicago Tribune*, January 13, 2014.
+* Vanhemert, Kyle. “[Blek: An iPad Game with Brilliant, Unique Mechanics](https://www.wired.com/2014/01/blek-brilliant-ipad-game-cant-help-touch/).” *Wired*, January 10, 2014.
+* Warnier, Claire, Dries Verbruggen, Sven Ehmann, and Robert Klanten, eds. [*Printing Things: Visions and Essentials for 3D Printing*](https://unfold.be/pages/printing-things.html). Gestalten, April 2014. ISBN: 978-3-89955-516-5.
+
+
+
+
 <!--
 
-**Contents:**
-
-* Books
-* Solo and Two-Person Exhibitions
-* Group Exhibitions
-* Public Lectures and Presentations
-* Awards and Recognitions
-* Educational Workshops
-* Press
-* Awards and Recognitions
-* Grants
 
 San Francisco Exploratorium Osher Fellow residency
 Bantam Artist/Educator's Residency, July 2025
