@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script>
+      window.Module = {
+        locateFile(path) {
+          return path === "opencv_js.wasm"
+            ? "vendor/opencv_js.wasm"
+            : `vendor/${path}`;
+        },
+      };
+    </script>
+    <script src="p5.js"></script>
+    <script src="vendor/opencv-gelsight.js"></script>
+    <script src="wasm/gelsight_mlp.js?v=nancheck1"></script>
+    <script src="gelsight-core.js?v=app1034"></script>
+    <script src="export-utils.js?v=highresjpg1"></script>
+    <link rel="stylesheet" type="text/css" href="style.css?v=app1034" />
+  </head>
+  <body>
+    <header class="app-header">
+      GelSight-Mini View/Export Tool
+      <span id="app-version" class="app-version"></span>
+    </header>
+    <main id="app"></main>
+    <script src="sketch.js?v=app1034"></script>
+  </body>
+</html>

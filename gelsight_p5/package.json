@@ -1,0 +1,7 @@
+{
+  "name": "gelsight-p5",
+  "private": true,
+  "dependencies": {
+    "onnxruntime-web": "^1.23.2"
+  }
+}
