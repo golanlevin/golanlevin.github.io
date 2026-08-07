@@ -31,6 +31,7 @@ A website by Golan Levin<br />
 * [p5.plotSvg](https://github.com/golanlevin/p5.plotSvg/blob/main/README.md): Plotter-oriented SVG export for p5.js
 * [p5-single-line-font-resources](https://github.com/golanlevin/p5-single-line-font-resources/blob/main/README.md): Monoline vector fonts for p5.js
 * [PEmbroider](https://github.com/CreativeInquiry/PEmbroider): Computational embroidery library for Processing
+* [GelSight Mini View/Export Tool](gelsight_p5/index.html): Tactile sensor utility
 * [Signet Ring Band Generator](ring/index.html)
 * [Super-Ellipse Generator](ellipse/index.html)
 
