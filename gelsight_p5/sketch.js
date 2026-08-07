@@ -1,5 +1,5 @@
 const Core = GelSightCore;
-const APP_VERSION = "1.034";
+const APP_VERSION = "1.035";
 const PREFERRED_CAMERA_FRAME_RATE = 30;
 const CAMERA_RESOLUTION_OPTIONS = [
   { label: "640×480", width: 640, height: 480 },
@@ -381,7 +381,15 @@ function createToolbar() {
 function updateAppVersionLabel() {
   const label = document.getElementById("app-version");
   if (label) {
-    label.textContent = `v. ${APP_VERSION} • by Golan Levin, 2026 • <a href="https://github.com/CreativeInquiry/gelsight-mini-browser-tool">Source</a>`;
+    const sourceLink = document.createElement("a");
+    sourceLink.href = "https://github.com/CreativeInquiry/gelsight-mini-browser-tool";
+    sourceLink.textContent = "Source";
+    sourceLink.target = "_blank";
+    sourceLink.rel = "noopener noreferrer";
+    label.replaceChildren(
+      document.createTextNode(`v. ${APP_VERSION} • by Golan Levin, 2026 • `),
+      sourceLink,
+    );
   }
 }
 

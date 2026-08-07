@@ -55,6 +55,16 @@ label {
   vertical-align: baseline;
 }
 
+.app-version a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.app-version a:hover {
+  color: #c8d0d5;
+}
+
 .toolbar {
   position: fixed;
   z-index: 5;
