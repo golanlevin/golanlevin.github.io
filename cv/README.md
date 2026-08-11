@@ -46,9 +46,9 @@ Faculty, School of Art, College of Fine Arts. January 2004–Present:
 * Associate Professor of Computational Art. September 2007–August 2010.
 * Assistant Professor of Computational Art, January 2004–August 2007.
 
-Director, Frank-Ratchye STUDIO for Creative Inquiry at CMU. January 2009-August 2023.
+Director, Frank-Ratchye STUDIO for Creative Inquiry at CMU. January 2009-September 2022.
 
-* From 2009-2023 I also served served as the Director of the [Frank-Ratchye STUDIO for Creative Inquiry](https://studioforcreativeinquiry.org/), the research laboratory of CMU’s College of Fine Arts and a flexible site for atypical, anti-disciplinary, and inter-institutional research at the intersection of arts, science, technology and culture. During this time I worked to expand the STUDIO as a platform for interdisciplinary artistic research: overseeing grants supporting more than 500 projects, hosting over 70 artists-in-residence, organizing hundreds of public events, and raising more than \$2.5 million to support artist-led research initiatives.
+* From 2009-2022 I also served served as the Director of the [Frank-Ratchye STUDIO for Creative Inquiry](https://studioforcreativeinquiry.org/), the research laboratory of CMU’s College of Fine Arts and a flexible site for atypical, anti-disciplinary, and inter-institutional research at the intersection of arts, science, technology and culture. During this time I worked to expand the STUDIO as a platform for interdisciplinary artistic research: overseeing grants supporting more than 500 projects, hosting over 70 artists-in-residence, organizing hundreds of public events, and raising more than \$2.5 million to support artist-led research initiatives.
 
 
 #### Other Teaching Appointments
