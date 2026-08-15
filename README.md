@@ -9,7 +9,8 @@ A website by Golan Levin<br />
 ### Projects & Artworks
 
 * [Cytographia](cytographia/index.html) (2024 • [about](https://github.com/golanlevin/Cytographia/blob/main/README.md))
-* [The Secret Lives of Numbers](slon/index.html) (2002, 2026)
+* [The Secret Lives of Numbers](slon/index.html) (2002, 2026 • [about](https://flong.com/archive/projects/slon/index.html))
+* [The Dumpster](dumpster/index.html) (2006, 2026 • [about](https://flong.com/archive/projects/dumpster/index.html))
 * [Yellowtail](yellowtail/index.html) (1998, 2021)
 * [Directrix](directrix/index.html) (1998, 2025)
 * [Meshy](meshy/index.html) (1998, 2024)
