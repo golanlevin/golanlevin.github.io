@@ -23,7 +23,7 @@ const ST0=0,ST1=1,ST2=2,ST3=3,ST4=4,ST5=5,ST6=6,ST7=7,ST8=8,ST9=9,ST10=10,ST11=1
 const STR_NO=-1;const STR_BK=0;const STR_WH=1;const FIL_NO=-1;const FIL_BK=0;const FIL_WH=1;const PARTY_STYLE=-1;
 
 // NEW FOR GALLERY VERSION: SWITCH EVERY 30 SECONDS
-let galleryRefreshPeriod = 90000;
+let galleryRefreshPeriod = 60000;
 let bGalleryMode = true; 
 // Added updateGallery() function, line 331
 // Added updateGallery(); call to draw(), line 304
@@ -57,7 +57,7 @@ let maskR=.4;
 let designBgCol='AntiqueWhite';
 let meanPaperColor=255;let avgPapCol=255;
 let zScale=1;let debugAskTime=0;
-let bZoom=F;let bShoDbg=F;
+let bZoom=F;let bShoDbg=T;
 const autoPlayMs=120000;
 let theBB={L:PINF,T:PINF,R:NINF,B:NINF};
 
@@ -189,17 +189,17 @@ t+=("\nzScale: "+nf(zScale,1,3));
 t+=("\nFPS: "+nf(FPS,1,2)+"\n");print(t);}
 
 function printKeys(){let t=("\n");
-t+=("[ ]\n[i]\n[h]\n[r]\n[P]\n[S]\n[↑↓]\n\n\n[o]\n[0-9]\n");
+t+=("[ ]\n[↵]\n[i]\n[h]\n[r]\n[P]\n[S]\n[↑↓]\n\n\n[o]\n[0-9]\n");
 t+=("[g]\n[.]\n\n\n[z]\n[x]\n[c]\n[v]\n[b]\n[L]");return(t)}
 
 function printHelp(){let t=("\n");
-t+=("Pause one minute\nPrint info in console\nDisplay help\n");
+t+=("Pause one minute\nMake new cell\nPrint info in console\nDisplay help\n");
 t+=("Reset cell\nExport PNG\nExport SVG\n");
 t+=("   Zoom\n\n\nBlank\n    Features\n");
 t+=("Grow\nParticles\n\n\nPaper\nBorders\n");
 t+=("Particles\nCells\nBlobs\nLines");return(t)}
 
-function printTitles(){let t=("CYTOGRAPHIA Key Commands\n\n\n\n\n\n\n\n\n");
+function printTitles(){let t=("CYTOGRAPHIA Key Commands\n\n\n\n\n\n\n\n\n\n");
 t+=("Sandbox\n\n\n\n\n\nToggles\n\n\n\n\n\n\n\n");
 t+=("FPS: "+nf(FPS,1,2) + "\n");
 t+=("AutoMS: " +   round(myMillis)  );
