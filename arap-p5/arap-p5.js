@@ -1788,7 +1788,7 @@ var ArapP5 = (() => {
       throw new Error("ArapP5 could not find wasm_bindgen. Make sure arap-p5.js is loaded before sketch.js.");
     }
     const wasmUrl = configuredWasmUrl || defaultWasmUrl();
-    wasmReadyPromise = Promise.resolve(loader(wasmUrl)).then(() => loader);
+    wasmReadyPromise = Promise.resolve(loader({ module_or_path: wasmUrl })).then(() => loader);
     try {
       return await wasmReadyPromise;
     } catch (error) {
