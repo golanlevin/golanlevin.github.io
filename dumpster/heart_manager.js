@@ -467,6 +467,40 @@ class HeartManager {
   }
 
   //====================================================================
+  // Give every on-screen heart a preferred distance from the selection, ranked
+  // by similarity. Rank rather than raw similarity, because similarity bunches
+  // near its mean and would put almost every heart at the same radius.
+  _assignHaloRadii(spr) {
+    const ranked = [];
+    for (let i = 0; i < MAX_N_HEARTS; i++) {
+      const h = this.hearts[i];
+      if (h.existState === STATE_HEART_GONE || i === this.mouseSelectedHeartID) continue;
+      ranked.push(i);
+    }
+    const H = this.hearts;
+    ranked.sort(function(a, b) { return H[b].similarityToSelected - H[a].similarityToSelected; });
+
+    const n = ranked.length;
+    const span = HEART_HALO_EDGE_R - HEART_HALO_CORE_R;
+    const bound = Math.max(0.0001, Math.min(1, HALO_BOUND_FRACTION_LIVE));
+    for (let r = 0; r < n; r++) {
+      const p = (n > 1) ? (r / (n - 1)) : 0;
+      H[ranked[r]].haloTargetR = spr + HEART_HALO_CORE_R +
+                                 span * Math.pow(p, HEART_HALO_SHAPE);
+      // Grip is full inside the bound fraction, then ramps to zero.
+      let grip = 1.0;
+      if (p > bound) {
+        grip = 1.0 - (p - bound) / (1.0 - bound);
+        if (grip < 0) grip = 0;
+        if (HEART_HALO_RELEASE_SHAPE !== 1.0) grip = Math.pow(grip, HEART_HALO_RELEASE_SHAPE);
+      }
+      H[ranked[r]].haloGrip = grip;
+    }
+    if (this.mouseSelectedHeartID !== DUMPSTER_INVALID) {
+      H[this.mouseSelectedHeartID].haloGrip = 1.0;   // the anchor holds it
+    }
+  }
+
   updateHearts() {
     this.hearts[0].setMouseInformation(this.bCurrentlyDraggingSelectedHeart, this.myMouseX, this.myMouseY);
 
@@ -477,12 +511,35 @@ class HeartManager {
       const selH = this.hearts[this.mouseSelectedHeartID];
       spx = selH.px; spy = selH.py; spr = selH.rad;
     }
+    const bHalo  = (HEART_PHYSICS_MODE === HEART_PHYSICS_HALO)  && hasSelected;
+    const bFlock = (HEART_PHYSICS_MODE === HEART_PHYSICS_FLOCK) && hasSelected;
+    if (bHalo) this._assignHaloRadii(spr);
     for (let i = 0; i < MAX_N_HEARTS; i++) {
-      this.hearts[i].accumulateGravityForce();
-      this.hearts[i].accumulateCentralizingForce();
+      if (bHalo) {
+        // Blend between halo physics (bound) and the original 2005 physics
+        // (released), so a heart can fall out of orbit and rejoin the heap.
+        const grip = this.hearts[i].haloGrip;
+        const free = 1.0 - grip;
+        this.hearts[i].accumulateGravityForce(HALO_GRAVITY_SCALE_LIVE * grip + free);
+        this.hearts[i].accumulateCentralizingForce(HEART_HALO_HEAPING_SCALE * grip + free);
+      } else if (bFlock) {
+        // Weight is inversely proportional to similarity: the best match is
+        // weightless, the worst falls at full 2005 gravity.
+        const sgn = this.hearts[i].flockSignedInfluence();
+        this.hearts[i].accumulateGravityForce(FLOCK.gravity * (1.0 - sgn) * 0.5);
+        this.hearts[i].accumulateCentralizingForce(FLOCK.heaping);
+      } else {
+        this.hearts[i].accumulateGravityForce();
+        this.hearts[i].accumulateCentralizingForce();
+      }
       if (hasSelected) {
         if (i !== this.mouseSelectedHeartID) {
-          this.hearts[i].accumulateAttractionForceToSelected(spx, spy, spr);
+          if      (bHalo)  this.hearts[i].accumulateRadialSimilarityForce(spx, spy, spr);
+          else if (bFlock) this.hearts[i].accumulateFlockingForce(spx, spy, spr);
+          else             this.hearts[i].accumulateAttractionForceToSelected(spx, spy, spr);
+        } else if ((bHalo || bFlock) && !this.bMousePressed) {
+          this.hearts[i].accumulateAnchorForce(HEART_HALO_ANCHOR_X, HEART_HALO_ANCHOR_Y,
+                                               HEART_HALO_ANCHOR_K);
         } else if (this.bMousePressed) {
           this.hearts[this.mouseSelectedHeartID].px = this.myMouseX;
           this.hearts[this.mouseSelectedHeartID].py = this.myMouseY;

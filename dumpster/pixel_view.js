@@ -34,6 +34,17 @@ class PixelView {
 
     this.bHasMagSelection = false; // true after a mag click, cleared when mouse enters pixel view
 
+    // Loupe panning. While dragging, the loupe stops tracking the mouseover and
+    // becomes a viewport onto the grid at magCenterXf/Yf (float pixel coords).
+    this.magDragging     = false;
+    this.magCenterXf     = 0;
+    this.magCenterYf     = 0;
+    this._magMouseX0     = 0;
+    this._magMouseY0     = 0;
+    this._magCenterX0    = 0;
+    this._magCenterY0    = 0;
+    this._magMovedEnough = false;
+
     this.L = PIXELVIEW_L;
     this.T = PIXELVIEW_T;
     this.R = PIXELVIEW_L + PIXELVIEW_W;
@@ -54,6 +65,10 @@ class PixelView {
     this.nmagY = MAGVIEW_NY;
     this.nmagScale = MAGVIEW_SCALE;
 
+    // When non-null, the pixel grid is coloured from this array instead of
+    // BM.SIMILARITIES (balloon-hover preview). Set before the first recalculate.
+    this._previewSims = null;
+
     this._constructLUTs();
 
     // One PixelIndexer per entry in PIXELVIEW_LAYOUTS, built lazily and cached
@@ -61,7 +76,17 @@ class PixelView {
     this._layoutBytesList = layoutBytesList || [];
     this._pinCache  = [];
     this.layoutIndex = DUMPSTER_INVALID;
-    this.setLayoutIndex(PIXELVIEW_LAYOUT_DEFAULT);
+    this.setLayoutIndex(PixelView.defaultLayoutIndex());
+  }
+
+  //=======================================================================
+  // bDoGlobalPixelArrangement overrides the configured default.
+  static defaultLayoutIndex() {
+    if (typeof bDoGlobalPixelArrangement !== 'undefined' && bDoGlobalPixelArrangement) {
+      const gi = PIXELVIEW_LAYOUTS.findIndex(function(L) { return L.label === 'GLOBAL'; });
+      if (gi !== -1) return gi;
+    }
+    return PIXELVIEW_LAYOUT_DEFAULT;
   }
 
   //=======================================================================
@@ -118,6 +143,46 @@ class PixelView {
   }
 
   //=======================================================================
+  // Aim the blue mouseover cursor at an arbitrary breakup — used when the mouse
+  // is over a text balloon rather than over the grid. The loupe follows for
+  // free: _renderMagnificationView() centres on hiliteMoXf/Yf whenever a
+  // mouseover is live, and takes its border colour from HelpDisplayer, which
+  // goes blue as soon as KOS reports a mouseover distinct from the selection.
+  //
+  // Writes pixelIndexOfMouseoverBupId directly rather than routing through
+  // _updateMouseoverInfo(), which early-returns when KOS matches its cached id
+  // and would otherwise fail to re-arm when the same balloon is re-entered.
+  setExternalMouseover(bupId) {
+    if (bupId === DUMPSTER_INVALID) {
+      this.KOS.currentMouseoverBreakupId           = DUMPSTER_INVALID;
+      this.KOS.currentMouseoverBreakupIdWithOffset = DUMPSTER_INVALID;
+      this.currentMouseoverBreakupId               = DUMPSTER_INVALID;
+      return;
+    }
+    this.KOS.currentMouseoverBreakupId           = bupId;
+    this.KOS.currentMouseoverBreakupIdWithOffset = bupId;
+
+    const pindex = this.PIN.BupIndexToPixelIndex[bupId];
+    if (pindex === DUMPSTER_INVALID || pindex < 0 || pindex >= this.nPixels) return;
+
+    this.currentMouseoverBreakupId  = bupId;
+    this.pixelIndexOfMouseoverBupId = pindex;
+    if (this.hiliteMoXf === DUMPSTER_INVALID) {   // otherwise let it glide over
+      this.hiliteMoXf = (pindex % PIXELVIEW_W) * PIXELVIEW_SCALE;
+      this.hiliteMoYf = Math.floor(pindex / PIXELVIEW_W) * PIXELVIEW_SCALE;
+    }
+  }
+
+  //=======================================================================
+  // Pass an array to colour the grid by similarity to something other than the
+  // current selection, or null to go back to it.
+  setPreviewSimilarities(arr) {
+    if (this._previewSims === arr) return;
+    this._previewSims = arr || null;
+    this.recalculate();
+  }
+
+  //=======================================================================
   updateImage() {
     this.recalculate();
   }
@@ -138,7 +203,7 @@ class PixelView {
       }
     } else {
       const MALES       = this.BM.MALES;
-      const SIMILARITIES = this.BM.SIMILARITIES;
+      const SIMILARITIES = this._previewSims || this.BM.SIMILARITIES;
       const pixToBup    = this.PIN.PixelIndexToBupIndex;
       const rLUT = this.rLUT, gLUT = this.gLUT, bLUT = this.bLUT;
 
@@ -202,6 +267,17 @@ class PixelView {
       xc = pid % PIXELVIEW_W;
       yc = Math.floor(pid / PIXELVIEW_W);
     }
+
+    // While panning, the loupe is a viewport at magCenterXf/Yf instead of a
+    // readout of the mouseover. cxF/cyF are float pixel coords; the fractional
+    // part is what makes the image slide under the window.
+    let cxF = xc, cyF = yc;
+    if (this.magDragging && this._magMovedEnough) {
+      cxF = Math.floor(this.magCenterXf) + this._magSnapEase(this.magCenterXf % 1);
+      cyF = Math.floor(this.magCenterYf) + this._magSnapEase(this.magCenterYf % 1);
+      xc  = Math.round(this.magCenterXf);
+      yc  = Math.round(this.magCenterYf);
+    }
     this.magXc = xc;
     this.magYc = yc;
 
@@ -210,20 +286,29 @@ class PixelView {
     const yo = Math.floor(this.nmagY / 2);
     const xo = Math.floor(this.nmagX / 2);
 
+    // Sample one extra ring of pixels so the window stays covered at any
+    // sub-pixel offset, and clip to the loupe rect so the surplus is hidden.
+    const dc = drawingContext;
+    dc.save();
+    dc.beginPath();
+    dc.rect(xMagStart, yMagStart, MAGVIEW_W, MAGVIEW_H);
+    dc.clip();
+
     noStroke();
-    for (let y = 0; y < this.nmagY; y++) {
-      const yp = yc + y - yo;
+    const p0x = Math.round(cxF) - xo - 1, p1x = Math.round(cxF) + xo + 1;
+    const p0y = Math.round(cyF) - yo - 1, p1y = Math.round(cyF) + yo + 1;
+    for (let yp = p0y; yp <= p1y; yp++) {
       if (yp < 0 || yp >= PIXELVIEW_H) continue;
-      for (let x = 0; x < this.nmagX; x++) {
-        const xp = xc + x - xo;
+      const sy = yMagStart + (yp - cyF + yo) * this.nmagScale;
+      for (let xp = p0x; xp <= p1x; xp++) {
         if (xp < 0 || xp >= PIXELVIEW_W) continue;
-        const pindex = yp * PIXELVIEW_W + xp;
-        const idx = pindex * 4;
+        const idx = (yp * PIXELVIEW_W + xp) * 4;
         fill(this._pixData[idx], this._pixData[idx+1], this._pixData[idx+2]);
-        rect(xMagStart + this.nmagScale * x, yMagStart + this.nmagScale * y,
+        rect(xMagStart + (xp - cxF + xo) * this.nmagScale, sy,
              this.nmagScale, this.nmagScale);
       }
     }
+    dc.restore();
 
     // Colorful border using HelpDisplayer's current text color
     let rectR = 200, rectG = 200, rectB = 200;
@@ -249,6 +334,7 @@ class PixelView {
     if (this.hiliteMoXf === DUMPSTER_INVALID) return;
     if (this.pixelIndexOfMouseoverBupId >= this.nPixels) return;
 
+    const fix = 0.5; // pixel alignment for crisp lines
     if (this.pixelIndexOfMouseoverBupId > DUMPSTER_INVALID) {
       const xi = PIXELVIEW_SCALE * ((this.pixelIndexOfMouseoverBupId + this.keyOffsetX) % PIXELVIEW_W);
       const yi = PIXELVIEW_SCALE * (Math.floor((this.pixelIndexOfMouseoverBupId + this.keyOffsetY * PIXELVIEW_W) / PIXELVIEW_W));
@@ -260,24 +346,25 @@ class PixelView {
         this.hiliteMoXf = xi; this.hiliteMoYf = yi;
       }
 
+      // blue cursor
       this.moAlph = 1.0;
       fill(0, 0, 255, this.moAlph * 48);
       stroke(0, 0, 255);
-      rect(this.hiliteMoXf - 3, this.hiliteMoYf - 3, 10, 10);
+      rect(this.hiliteMoXf - 3 +fix, this.hiliteMoYf - 3 +fix, 10, 10);
       noFill();
-      rect(this.hiliteMoXf - 4, this.hiliteMoYf - 4, 12, 12);
+      rect(this.hiliteMoXf - 4 +fix, this.hiliteMoYf - 4 +fix, 12, 12);
       stroke(0, 0, 255, this.moAlph * 50);
-      rect(this.hiliteMoXf - 5, this.hiliteMoYf - 5, 14, 14);
+      rect(this.hiliteMoXf - 5 +fix, this.hiliteMoYf - 5 +fix, 14, 14);
     } else {
       this.moAlph *= HEART_BLUR_CA;
       if (this.moAlph > 0.035) {
         fill(0, 0, 255, this.moAlph * 48);
         stroke(0, 0, 255, this.moAlph * 255);
-        rect(this.hiliteMoXf - 3, this.hiliteMoYf - 3, 10, 10);
+        rect(this.hiliteMoXf - 3 +fix, this.hiliteMoYf - 3 +fix, 10, 10);
         noFill();
-        rect(this.hiliteMoXf - 4, this.hiliteMoYf - 4, 12, 12);
+        rect(this.hiliteMoXf - 4 +fix, this.hiliteMoYf - 4 +fix, 12, 12);
         stroke(0, 0, 255, this.moAlph * 50);
-        rect(this.hiliteMoXf - 5, this.hiliteMoYf - 5, 14, 14);
+        rect(this.hiliteMoXf - 5 +fix, this.hiliteMoYf - 5 +fix, 14, 14);
       }
     }
   }
@@ -299,18 +386,19 @@ class PixelView {
 
     noFill();
     stroke(255, 255, 0);
-    rect(this.hiliteXf - 3, this.hiliteYf - 3, 10, 10);
-    rect(this.hiliteXf - 4, this.hiliteYf - 4, 12, 12);
-    rect(this.hiliteXf - 5, this.hiliteYf - 5, 14, 14);
+    const fix = 0.5; // pixel alignment for crisp lines
+    rect(this.hiliteXf - 3 +fix, this.hiliteYf - 3 +fix, 10, 10);
+    rect(this.hiliteXf - 4 +fix, this.hiliteYf - 4 +fix, 12, 12);
+    rect(this.hiliteXf - 5 +fix, this.hiliteYf - 5 +fix, 14, 14);
     stroke(255, 100, 0);
-    rect(this.hiliteXf - 6, this.hiliteYf - 6, 16, 16);
+    rect(this.hiliteXf - 6 +fix, this.hiliteYf - 6 +fix, 16, 16);
     stroke(255, 100, 0, 100);
-    rect(this.hiliteXf - 7, this.hiliteYf - 7, 18, 18);
+    rect(this.hiliteXf - 7 +fix, this.hiliteYf - 7 +fix, 18, 18);
     stroke(255, 100, 0, 50);
-    line(this.hiliteXf - 8,  this.hiliteYf - 6,  this.hiliteXf - 8,  this.hiliteYf + 11);
-    line(this.hiliteXf + 12, this.hiliteYf - 6,  this.hiliteXf + 12, this.hiliteYf + 11);
-    line(this.hiliteXf - 6,  this.hiliteYf - 8,  this.hiliteXf + 11, this.hiliteYf - 8);
-    line(this.hiliteXf - 6,  this.hiliteYf + 12, this.hiliteXf + 11, this.hiliteYf + 12);
+    line(this.hiliteXf - 8 +fix,  this.hiliteYf - 6 +fix,  this.hiliteXf - 8  +fix, this.hiliteYf + 11 +fix);
+    line(this.hiliteXf + 12+fix,  this.hiliteYf - 6 +fix,  this.hiliteXf + 12 +fix, this.hiliteYf + 11 +fix);
+    line(this.hiliteXf - 6 +fix,  this.hiliteYf - 8 +fix,  this.hiliteXf + 11 +fix, this.hiliteYf - 8  +fix);
+    line(this.hiliteXf - 6 +fix,  this.hiliteYf + 12+fix,  this.hiliteXf + 11 +fix, this.hiliteYf + 12 +fix);
   }
 
   //=======================================================================
@@ -439,6 +527,102 @@ class PixelView {
     this.keyOffsetX = 0;
     this.keyOffsetY = 0;
     this.bHasMagSelection = true;
+  }
+
+  //=======================================================================
+  // One-pixel step from the *selected* pixel, for arrow keys used while the
+  // cursor is over the loupe. The pixel-view arrow path cannot serve here: it
+  // nudges keyOffset relative to pixelIndexOfMouseoverBupId, which is
+  // DUMPSTER_INVALID once the mouse leaves the grid, and -1 % PIXELVIEW_W then
+  // makes the clamps nonsense. Returns the new bupId, or DUMPSTER_INVALID.
+  arrowStepFromSelection(k) {
+    const pindex = this.pixelIndexOfSelectedBupId;
+    if (pindex === DUMPSTER_INVALID || pindex < 0 || pindex >= this.nPixels) {
+      return DUMPSTER_INVALID;
+    }
+    let x = pindex % PIXELVIEW_W;
+    let y = Math.floor(pindex / PIXELVIEW_W);
+    if      (k === LEFT_ARROW)  x -= 1;
+    else if (k === RIGHT_ARROW) x += 1;
+    else if (k === UP_ARROW)    y -= 1;
+    else if (k === DOWN_ARROW)  y += 1;
+    else return DUMPSTER_INVALID;
+
+    if (x < 0 || x >= PIXELVIEW_W || y < 0 || y >= PIXELVIEW_H) return DUMPSTER_INVALID;
+    const np = y * PIXELVIEW_W + x;
+    const bupId = this.PIN.PixelIndexToBupIndex[np];
+    if (bupId === DUMPSTER_INVALID || bupId < 0 ||
+        bupId >= N_BREAKUP_DATABASE_RECORDS) return DUMPSTER_INVALID;
+    if (!this.BM.bups[bupId].VALID) return DUMPSTER_INVALID;
+    return bupId;
+  }
+
+  //=======================================================================
+  isInMagView(mx, my) {
+    return mx >= MAGVIEW_L && mx < MAGVIEW_L + MAGVIEW_W &&
+           my >= MAGVIEW_T && my < MAGVIEW_T + MAGVIEW_H;
+  }
+
+  // Begin panning. Starts from wherever the loupe is already centred, so the
+  // image does not jump under the cursor on press.
+  beginMagDrag(mx, my) {
+    if (!this.isInMagView(mx, my)) return false;
+    if (this.magXc === DUMPSTER_INVALID || this.magYc === DUMPSTER_INVALID) return false;
+    this.magDragging     = true;
+    this._magMovedEnough = false;
+    this._magMouseX0  = mx;
+    this._magMouseY0  = my;
+    this.magCenterXf  = this._magCenterX0 = this.magXc;
+    this.magCenterYf  = this._magCenterY0 = this.magYc;
+    return true;
+  }
+
+  // Advance the pan. Returns the bupId under the loupe centre, or
+  // DUMPSTER_INVALID if the drag has not yet passed the movement threshold.
+  updateMagDrag(mx, my) {
+    if (!this.magDragging) return DUMPSTER_INVALID;
+
+    const dxm = mx - this._magMouseX0;
+    const dym = my - this._magMouseY0;
+    if (!this._magMovedEnough) {
+      if (dxm * dxm + dym * dym < MAGVIEW_DRAG_THRESHOLD_PX * MAGVIEW_DRAG_THRESHOLD_PX) {
+        return DUMPSTER_INVALID;
+      }
+      this._magMovedEnough = true;
+    }
+
+    // Direct manipulation: the image follows the cursor, so the viewport moves
+    // the other way.
+    let cx = this._magCenterX0 - dxm / this.nmagScale;
+    let cy = this._magCenterY0 - dym / this.nmagScale;
+    cx = Math.max(0, Math.min(PIXELVIEW_W - 1, cx));
+    cy = Math.max(0, Math.min(PIXELVIEW_H - 1, cy));
+    this.magCenterXf = cx;
+    this.magCenterYf = cy;
+
+    const pindex = Math.round(cy) * PIXELVIEW_W + Math.round(cx);
+    if (pindex < 0 || pindex >= this.nPixels) return DUMPSTER_INVALID;
+    const bupId = this.PIN.PixelIndexToBupIndex[pindex];
+    if (bupId === DUMPSTER_INVALID || bupId < 0 ||
+        bupId >= N_BREAKUP_DATABASE_RECORDS) return DUMPSTER_INVALID;
+    if (!this.BM.bups[bupId].VALID) return DUMPSTER_INVALID;
+    return bupId;
+  }
+
+  endMagDrag() {
+    const wasPan = this.magDragging && this._magMovedEnough;
+    this.magDragging     = false;
+    this._magMovedEnough = false;
+    return wasPan;   // false means it was a click, not a pan
+  }
+
+  // [0,1] -> [0,1], steep through the middle: the image glides between whole
+  // pixels quickly and lingers on them.
+  _magSnapEase(f) {
+    const k = MAGVIEW_SNAP_SHARPNESS;
+    if (k <= 0) return f;
+    const d = Math.tanh(k * 0.5);
+    return 0.5 + 0.5 * Math.tanh(k * (f - 0.5)) / d;
   }
 
   //=======================================================================

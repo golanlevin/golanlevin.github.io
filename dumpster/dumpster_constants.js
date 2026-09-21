@@ -113,13 +113,65 @@ const   PIXELVIEW_LAYOUTS = [
   { key: '7', label: 'SORT-2005', asset: null },
   { key: '8', label: 'LAP-A/S/I', asset: 'data/pixel_layout_lap_asi.bin' },
   { key: '9', label: 'LAP-A/S',   asset: 'data/pixel_layout_lap_as.bin'  },
+  { key: '6', label: 'GLOBAL',    asset: 'data/pixel_layout_global.bin'  },
 ];
 const   PIXELVIEW_LAYOUT_DEFAULT = 2;   // LAP-A/S: most semantically coherent (-12.7% vs random)
+
+// Experiment: throw away the age/sex scaffolding and arrange all ~20K clips
+// across the whole pixel region purely by content, to see what the territories
+// of the data look like. Built by `make_pixel_layout.py --global-arrange`, which
+// uses Kyle McDonald's shufflesnap — a dense 20000x20000 LAP cost matrix would
+// be 1.6 GB, so lapjv is not an option at this scale; shufflesnap never builds
+// one and solved this in 0.26 s.
+// When true this overrides PIXELVIEW_LAYOUT_DEFAULT. The grouped layouts above
+// are untouched and still reachable.
+const   bDoGlobalPixelArrangement = true;
+
+// Layout toggle button, drawn in the black strip under the pixel view.
+// 'A' = the age/sex-grouped layout, 'B' = the global shufflesnap arrangement.
+// Sits right of the help text (which ends near x=240) and left of the histogram
+// (which starts at x=302), so it collides with nothing.
+const   LAYOUT_TOGGLE_X       = 279;
+const   LAYOUT_TOGGLE_Y       = 610;
+const   LAYOUT_TOGGLE_SIZE    = 16;
+const   LAYOUT_TOGGLE_BG      = [45, 25, 27];
+const   LAYOUT_TOGGLE_FG      = [160, 160, 160];
+const   LAYOUT_TOGGLE_TEXTSIZE = 12;
+const   LAYOUT_TOGGLE_HOVER_BRIGHTEN = 18;   // added to each channel on hover
+const   LAYOUT_TOGGLE_A_LABEL = 'LAP-A/S';   // must match a PIXELVIEW_LAYOUTS label
+const   LAYOUT_TOGGLE_B_LABEL = 'GLOBAL';
+
+// Autoplay: how the next featured breakup is chosen once the viewer goes idle.
+// The 2005 code drew uniformly at random from all 20,000, so consecutive
+// stories felt unrelated. Instead draw from the top slice of the *current*
+// selection's similarity ranking, so the piece drifts through the corpus.
+const   AUTOPLAY_SIMILARITY_PERCENTILE = 0.03;   // top 3% (~600 candidates)
+
+// Drawing only from the top slice lets the walk orbit one cluster indefinitely,
+// since every hop stays inside the previous pick's neighbourhood. This fraction
+// of hops ignore similarity entirely and jump anywhere, to break out.
+const   AUTOPLAY_WANDER_PROB = 0.12;
+
+// Gap between autoplay hops, drawn uniformly from this range each time. The
+// 2005 code used a per-frame probability, which is memoryless: the wait could
+// be one frame or several hundred. A bounded random interval keeps the rhythm
+// irregular without ever feeling either frantic or stalled.
+const   AUTOPLAY_MIN_INTERVAL_MS = 3000;
+const   AUTOPLAY_MAX_INTERVAL_MS = 6000;
 
 // Development key bindings: 1-4 switch the similarity regime, 7-9 the PixelView
 // layout. Off for exhibition so a visitor cannot change the piece's behaviour.
 // The ?regime= and ?layout= URL parameters still work either way.
 const   ENABLE_DEBUG_KEYS = false;
+
+// The small "4 NOMIC-256 ... LAP-A/S" readout under the pixel view.
+const   SHOW_DEBUG_STATUS_LABEL = false;
+
+// Hovering a text balloon temporarily recolours the pixel view to show the
+// corpus's similarity to *that* breakup; leaving it restores the similarity to
+// the yellow selection. Costs one similarity pass per change of hover, not
+// per frame.
+const   BALLOON_HOVER_PREVIEWS_PIXELVIEW = true;
 
 // Arrow-key auto-repeat for the pixel-view cursor, in ms: how long to hold
 // before repeating starts, then the interval between steps. Repeats are capped
@@ -147,6 +199,15 @@ const   MAGVIEW_H          = MAGVIEW_NY * MAGVIEW_SCALE;
 // 12.5 app px == 25 device px at pixelDensity(2), so cell edges land on exact
 // device pixels. The +1 nudges the cell grid inward far enough for the loupe's
 // outer border ring (drawn at -1) to sit exactly on the margin.
+// Dragging inside the loupe pans the magnified image beneath it. The pan
+// position eases toward whole pixels through a sharp sigmoid rather than
+// jumping, so the image visibly slides and then locks. Higher = snappier;
+// 0 would give linear (no snap feel).
+const   MAGVIEW_SNAP_SHARPNESS = 12.0;
+// How far the mouse must move before a press in the loupe becomes a pan rather
+// than a click on a single cell.
+const   MAGVIEW_DRAG_THRESHOLD_PX = 2;
+
 const   MAGVIEW_MARGIN     = 12.5;
 const   MAGVIEW_L          = MAGVIEW_MARGIN + 1;
 const   MAGVIEW_T          = PIXELVIEW_B + MAGVIEW_MARGIN + 1;
@@ -215,7 +276,127 @@ const   HEART_DAMPING      = 0.99;
 const   HEART_COLLISION_DAMPING = 0.925;
 const   HEART_HEAPING_K    = 0.03;
 const   HEART_COLLISION_K  = -0.04;
-const   HEART_MOUSE_K      = -0.35;
+const   HEART_MOUSE_K      = -0.09; //-0.35;
+
+//----------------------------------
+// EXPERIMENTAL: "similarity halo" heart physics. The 2005 model applied a
+// one-way attraction, f = 0.15*(sim-0.33)/(d+1), which at large distance is a
+// constant acceleration of 0.15*(sim-0.33) — weaker than gravity (0.030) plus
+// the heap pull (0.030) for anything below sim ~0.7. And nothing ever pushed a
+// dissimilar heart away, while the heap force dragged everything, including the
+// selected heart, into the bottom-left floor.
+//
+// Three models are implemented; HEART_PHYSICS_MODE picks one and the other two
+// stay intact.
+//
+//   2005  the original one-way attraction, accumulateAttractionForceToSelected()
+//   HALO  every heart gets a preferred *distance* from the selection, held by a
+//         two-sided spring. Legible, but the worst match still has a reserved
+//         parking space at the rim, so nothing ever really leaves.
+//   FLOCK signed influence: similar hearts are attracted, dissimilar ones are
+//         repelled with no ceiling, so they genuinely clear out. Gravity is
+//         inversely proportional to similarity, so the closest matches float and
+//         the strangers fall.
+const   HEART_PHYSICS_2005  = 0;
+const   HEART_PHYSICS_HALO  = 1;
+const   HEART_PHYSICS_FLOCK = 2;
+const   HEART_PHYSICS_MODE  = HEART_PHYSICS_FLOCK;
+
+const   HEART_HALO_CORE_R   = 26;    // preferred gap for sim = 1, beyond the selected heart's radius
+const   HEART_HALO_EDGE_R   = 240;   // preferred radius for sim = 0
+// Radius is driven by each heart's *rank* among the hearts on screen, not by
+// its raw similarity. Absolute similarity clusters near 0.45, so nearly every
+// heart wanted the same radius and the halo smeared into a uniform field.
+// Rank guarantees the closest matches occupy the core whatever the spread.
+// The exponent shapes the packing: 0.5 is area-uniform, lower crowds the core,
+// higher hollows it out and pushes the bulk toward the rim.
+const   HEART_HALO_SHAPE    = 1.2;
+const   HEART_HALO_K        = 0.03;  // spring stiffness
+const   HEART_HALO_MAX_ACC  = 0.35;  // clamp, so distant hearts do not slingshot
+
+const   HEART_HALO_SWIRL    = 0.006; // slow tangential drift; 0 for none
+
+// While the halo is active, gravity and the heap pull would flatten it against
+// the floor, so they are scaled down but not removed — a little weight keeps
+// the motion from looking inert.
+const   HEART_HALO_GRAVITY_SCALE = 0.22;
+const   HEART_HALO_HEAPING_SCALE = 0.0;
+
+// How much of the on-screen population stays captured by the halo, by
+// similarity rank. Past this fraction the spring's grip ramps to zero and the
+// heart reverts to the original physics — full gravity and the 2005 heap pull —
+// so poor matches fall out of orbit and pile up in the corner. The result is a
+// core that orbits the selection and a heap of strangers beneath it.
+//
+// Gravity alone could never do this: the radial spring resists gravity's radial
+// component (sag is only g/K) and collisions absorb the tangential component,
+// so raising HEART_HALO_GRAVITY_SCALE 18x moved the hearts just 9 px. Releasing
+// the spring is the only thing that lets weight matter.
+const   HEART_HALO_BOUND_FRACTION = 0.05;
+const   HEART_HALO_RELEASE_SHAPE  = 1.0;   // >1 releases more abruptly
+
+// Live-tunable copies, read by heart.js and heart_manager.js. They default to
+// the constants; the temporary mouse-tuning block in sketch.js overwrites them
+// each frame while enabled.
+var     HALO_K_LIVE             = HEART_HALO_K;
+var     HALO_GRAVITY_SCALE_LIVE = HEART_HALO_GRAVITY_SCALE;
+var     HALO_BOUND_FRACTION_LIVE = HEART_HALO_BOUND_FRACTION;
+
+// The selected heart is held here (unless dragged) so the halo has room. Placed
+// in the middle of the heart area left of the balloon column, giving ~300 px of
+// clearance in every direction — comfortably more than HEART_HALO_EDGE_R.
+const   HEART_HALO_ANCHOR_X = HEART_WALL_L + (BALLOON_X - HEART_WALL_L) / 2.0;
+const   HEART_HALO_ANCHOR_Y = HEART_WALL_T + HEART_AREA_H / 2.0;
+const   HEART_HALO_ANCHOR_K = 0.020;
+
+//----------------------------------
+// FLOCK mode. Similarity is mapped to a signed influence in [-1, +1]:
+//   +1 attract (most similar)   0 neutral   -1 repel (least similar)
+//
+// The map is against *fixed* clip points rather than the on-screen rank, so it
+// stays honest: a selection with no good matches really does send everyone
+// away, instead of promoting the best of a bad lot. LO/HI straddle the corpus
+// median similarity (~0.45), so a typical pairing sits near neutral.
+const   HEART_FLOCK_SIM_LO  = 0.20;   // at or below this: full repulsion
+const   HEART_FLOCK_SIM_HI  = 0.70;   // at or above this: full attraction
+const   HEART_FLOCK_GAMMA   = 2.50;   // >1 flattens the middle, <1 sharpens it
+
+const   HEART_FLOCK_ATTRACT_K = 0.070;
+const   HEART_FLOCK_REPEL_K   = 0.150;
+
+// Attraction fades to nothing inside the core, so the centre cannot build into
+// a high-pressure jam that squirts hearts back out. Repulsion has no falloff —
+// that is what lets the irrelevant ones keep going until they hit the glass.
+const   HEART_FLOCK_CORE_R  = 70;     // beyond the selected heart's own radius
+const   HEART_FLOCK_TAPER   = 40;     // ramp width above the core
+
+// Coherent tangential drift, strongest for mid-similarity hearts, to keep the
+// transition zone from jamming. Same sign for everyone, so it reads as a slow
+// vortex rather than agitation.
+const   HEART_FLOCK_SWIRL   = 0.025;
+
+// Gravity is scaled by (1 - signed)/2: the best match is weightless, the worst
+// falls at 1.4x the 2005 rate. A fifth of the old heap pull is kept, so the
+// strangers drift toward the original corner as well as outward, rather than
+// smearing evenly along the walls.
+const   HEART_FLOCK_GRAVITY_MAX   = 1.40;
+const   HEART_FLOCK_HEAPING_SCALE = 0.20;
+
+// Live, slider-tunable copies of the FLOCK parameters. The physics reads these
+// rather than the constants above, so the temporary slider panel in sketch.js
+// can drive them. Delete the panel and these keep the constant defaults.
+var     FLOCK = {
+  simLo:    HEART_FLOCK_SIM_LO,
+  simHi:    HEART_FLOCK_SIM_HI,
+  gamma:    HEART_FLOCK_GAMMA,
+  attractK: HEART_FLOCK_ATTRACT_K,
+  repelK:   HEART_FLOCK_REPEL_K,
+  coreR:    HEART_FLOCK_CORE_R,
+  taper:    HEART_FLOCK_TAPER,
+  swirl:    HEART_FLOCK_SWIRL,
+  gravity:  HEART_FLOCK_GRAVITY_MAX,
+  heaping:  HEART_FLOCK_HEAPING_SCALE
+};
 
 const   HEART_MAX_VEL      = 6.0;
 const   HEART_MAX_VELd2    = HEART_MAX_VEL /2.0;

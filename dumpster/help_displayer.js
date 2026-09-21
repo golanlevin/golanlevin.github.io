@@ -63,7 +63,7 @@ class HelpDisplayer {
 
     push();
     translate(HELP_TEXT_L, HELP_TEXT_T);
-    text(this._helpStr, 0, 0.75);
+    text(this._helpStr, 0, 0.5); // 0.75?
     pop();
   }
 

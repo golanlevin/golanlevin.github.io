@@ -216,6 +216,22 @@ class BreakupManager {
   }
 
   //=====================================================================================
+  // Similarity of the whole corpus to an arbitrary breakup, written into `out`
+  // instead of SIMILARITIES, leaving the live selection untouched. Used for the
+  // balloon-hover preview. The channel arrays are scratch and get clobbered,
+  // which is fine because they are rebuilt on every pass anyway.
+  computeSimilaritiesInto(bupId, out) {
+    const savedArr = this.SIMILARITIES;
+    const savedSel = this.currentlySelectedBreakupId;
+    this.SIMILARITIES = out;
+    this.currentlySelectedBreakupId =
+      (bupId >= 0 && bupId < N_BREAKUP_DATABASE_RECORDS) ? bupId : DUMPSTER_INVALID;
+    this.computeSimilarityOfAllBupsToCurrBup();
+    this.SIMILARITIES = savedArr;
+    this.currentlySelectedBreakupId = savedSel;
+  }
+
+  //=====================================================================================
   computeSimilarityOfAllBupsToCurrBup() {
     const tStart = performance.now();
     const N    = N_BREAKUP_DATABASE_RECORDS;

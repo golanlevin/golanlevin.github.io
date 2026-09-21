@@ -45,6 +45,9 @@ class Heart {
     this.vh = 0;
 
     this.similarityToSelected = random(1);
+    this.haloTargetR = HEART_HALO_EDGE_R;   // set each frame by HeartManager
+    this.haloGrip    = 1.0;                 // 1 = held by the halo, 0 = released
+    this.flockSigned = 0.0;                 // FLOCK mode: +1 attract .. -1 repel
     const simCol = Math.pow(this.similarityToSelected, 0.9);
 
     this.colr  = this.colrb = this.colrt = simCol * 200.0;
@@ -140,8 +143,8 @@ class Heart {
     this.vy += fy / this.mass;
   }
 
-  accumulateGravityForce() {
-    this.vy += HEART_GRAVITY;
+  accumulateGravityForce(scale) {
+    this.vy += HEART_GRAVITY * (scale === undefined ? 1.0 : scale);
   }
 
   accumulateAttractionForceToSelected(spx, spy, spr) {
@@ -157,13 +160,106 @@ class Heart {
     this.vy += f * dy;
   }
 
-  accumulateCentralizingForce() {
+  // FLOCK mode. Signed influence in [-1,+1] from similarity, against fixed clip
+  // points. Cached so the manager can reuse it for the gravity scale.
+  flockSignedInfluence() {
+    const lo = FLOCK.simLo, hi = FLOCK.simHi;
+    let t = (hi > lo) ? (this.similarityToSelected - lo) / (hi - lo) : 0.5;
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    let s = 2.0 * t - 1.0;
+    if (FLOCK.gamma !== 1.0) {
+      s = (s < 0 ? -1 : 1) * Math.pow(Math.abs(s), FLOCK.gamma);
+    }
+    this.flockSigned = s;
+    return s;
+  }
+
+  // FLOCK mode. Attraction toward the selection for similar hearts, unbounded
+  // repulsion away from it for dissimilar ones, plus a mid-range vortex.
+  accumulateFlockingForce(spx, spy, spr) {
+    if (this.existState === STATE_HEART_GONE) return;
+    const s = this.flockSigned;
+
+    let dx = this.px - spx;
+    let dy = this.py - spy;
+    let d  = Math.sqrt(dx * dx + dy * dy);
+    if (d < 0.001) {
+      const a = random(TWO_PI);
+      dx = Math.cos(a); dy = Math.sin(a); d = 1.0;
+    }
+    const ux = dx / d, uy = dy / d;
+
+    if (s >= 0) {
+      // Taper the pull to zero inside the core so the centre cannot jam.
+      let taper = (d - spr - FLOCK.coreR) / Math.max(1, FLOCK.taper);
+      if (taper < 0) taper = 0; else if (taper > 1) taper = 1;
+      const f = FLOCK.attractK * s * taper;
+      this.vx -= f * ux;
+      this.vy -= f * uy;
+    } else {
+      const f = FLOCK.repelK * (-s);          // no falloff: keep going
+      this.vx += f * ux;
+      this.vy += f * uy;
+    }
+
+    // Vortex, peaking at mid similarity where the jamming happens.
+    // Tangent is (uy, -ux); negate FLOCK.swirl to spin the other way.
+    const w = FLOCK.swirl * (1.0 - Math.abs(s));
+    this.vx +=  uy * w;
+    this.vy += -ux * w;
+  }
+
+  // HALO mode. Preferred distance from the selected
+  // heart, set by similarity, enforced by a two-sided spring: negative when the
+  // heart is too far (pull in), positive when too close (push out). That second
+  // half is what makes dissimilar hearts actually vacate the core.
+  accumulateRadialSimilarityForce(spx, spy, spr) {
+    if (this.existState === STATE_HEART_GONE) return;
+
+    const grip = this.haloGrip;
+    if (grip <= 0) return;              // released: gravity and the heap own it
+    const rTarget = this.haloTargetR;
+
+    let dx = this.px - spx;
+    let dy = this.py - spy;
+    let d  = Math.sqrt(dx * dx + dy * dy);
+    if (d < 0.001) {                    // exactly coincident: pick any direction
+      const a = random(TWO_PI);
+      dx = Math.cos(a); dy = Math.sin(a); d = 1.0;
+    }
+    const ux = dx / d, uy = dy / d;
+
+    let acc = HALO_K_LIVE * grip * (rTarget - d);
+    if (acc >  HEART_HALO_MAX_ACC) acc =  HEART_HALO_MAX_ACC;
+    if (acc < -HEART_HALO_MAX_ACC) acc = -HEART_HALO_MAX_ACC;
+    this.vx += acc * ux;
+    this.vy += acc * uy;
+
+    // Slow tangential drift, so hearts spread around the ring rather than
+    // stacking along whichever ray they happened to arrive on.
+    this.vx +=  uy * HEART_HALO_SWIRL * grip;
+    this.vy += -ux * HEART_HALO_SWIRL * grip;
+  }
+
+  // Hold the selected heart near a fixed point so the halo is not squashed into
+  // a corner. Skipped while the viewer is dragging it.
+  accumulateAnchorForce(ax, ay, k) {
+    if (this.existState === STATE_HEART_GONE) return;
+    if (this.bCurrentlyDraggingSelectedHeart &&
+        (this.mouseState === STATE_MOUSE_DRAG || this.mouseState === STATE_MOUSE_SELECT)) return;
+    this.vx += (ax - this.px) * k;
+    this.vy += (ay - this.py) * k;
+  }
+
+  accumulateCentralizingForce(scale) {
+    const k = HEART_HEAPING_K * (scale === undefined ? 1.0 : scale);
+    if (k === 0) return;
     if (this.existState !== STATE_HEART_GONE) {
       const dx = HEART_HEAP_CENTERX - this.px;
       const dy = HEART_HEAP_CENTERY - this.py;
       const dh = dx * dx + dy * dy;
       if (dh > HEART_NEIGHBORHOOD_SQ) {
-        const dhInv = HEART_HEAPING_K / Math.sqrt(dh);
+        const dhInv = k / Math.sqrt(dh);
         this.vx += dx * dhInv;
         this.vy += dy * dhInv / this.mass;
       }
