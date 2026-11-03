@@ -487,8 +487,8 @@ https://flong.com/archive/calendar/archive/2007/index.html
 
 #### 2026
 
-<!-- TAMU, October 2026 -->
-* "Datasets as Medium: Teaching the Full ML Pipeline from Collection to Synthesis", [2026 Learning To Teach: (Re)Designing Creative Tech Pedagogy for the GenAI Era](https://wp.nyu.edu/ltt2026/), NYU, 1/17/2025.
+* "The Right to Resurrect: AI-Assisted Liberation of Obsolete, Closed-Source Hardware", [2026 Open Source Arts Contributors Conference (OSACC)](https://opensourceart.cc/), Ohio State University, Columbus, OH, 10/23/2026.
+* "Datasets as Medium: Teaching the Full ML Pipeline from Collection to Synthesis", [2026 Learning To Teach: (Re)Designing Creative Tech Pedagogy for the GenAI Era](https://wp.nyu.edu/ltt2026/), NYU, 1/16/2026.
 
 #### 2025
 
@@ -686,6 +686,11 @@ https://nieuweinstituut.nl/en/projects/international-visitors-programme/zach-lie
 ### Press
 
 *Owing to link rot, this section is currently undergoing reconstruction.*
+
+#### 2026
+
+<!--
+* Machine Arts. -->
 
 #### 2025
 
