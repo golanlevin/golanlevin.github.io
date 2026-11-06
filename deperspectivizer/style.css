@@ -1,0 +1,42 @@
+:root{color-scheme:dark;--bg:#111820;--panel:#0e1116;--fg:#e8edf2;--muted:#96a7b8;--line:#2c3946;--accent:#82ddbc;--error:#ffb8a6;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}
+body{margin:0;padding:0 16px;background:var(--bg);color:var(--fg)}
+main{width:100%;max-width:1280px;height:100dvh;max-height:800px;min-height:480px;margin:auto;padding:18px 0 12px;display:flex;flex-direction:column}
+header{margin-bottom:16px;flex:none}
+h1{font-weight:600;font-size:27px;line-height:1.2;letter-spacing:-1px;margin:0}
+.credit{margin:6px 0 0;font-size:11px;line-height:1.5;color:var(--muted)}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;flex:none}
+button,select{font:inherit;font-size:12px;color:var(--fg);background:#1b2733;border:1px solid #3d4f60;border-radius:5px;min-height:35px;padding:7px 10px}
+button{cursor:pointer;white-space:nowrap}
+button.primary{background:var(--accent);color:#10271f;border-color:var(--accent);font-weight:650}
+button:hover:not(:disabled),select:hover:not(:disabled){filter:brightness(1.14)}
+button:disabled,select:disabled{opacity:.45;cursor:default}
+button[aria-pressed=true]{border-color:var(--accent);color:var(--accent)}
+label{display:flex;flex-direction:column;gap:5px;font-size:10px;font-weight:500;color:var(--muted)}
+#camera{max-width:240px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.fov-controls{display:flex;gap:16px;align-items:center;margin-top:12px;flex:none}
+.fov-label{display:block;flex:1;min-width:150px;font-size:11px}
+#fov-value{float:right;color:var(--fg);font-variant-numeric:tabular-nums}
+input[type=range]{display:block;width:100%;height:18px;accent-color:var(--accent);margin:6px 0 0}
+.fov-scale{position:relative;display:block;height:17px;margin:0 8px}
+.fov-marker{position:absolute;left:41.6705882%;transform:translateX(-50%);font-size:9px;line-height:14px;color:var(--muted)}
+.fov-marker::before{content:"";position:absolute;left:50%;top:-4px;height:4px;border-left:1px solid var(--muted)}
+.diagnostics{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:1.5em 1.5em;gap:2px;margin-top:10px;font-size:11px;line-height:1.5;flex:none}
+#status,#performance{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#status{color:var(--accent)}#status.error{color:var(--error)}
+#performance{color:var(--muted);font-variant-numeric:tabular-nums}
+.views{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));flex:1;min-height:150px;margin-top:10px}
+.view-panel{display:flex;flex-direction:column;min-width:0;min-height:0}
+.panel-label{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 9px;padding:0 10px;min-height:16px;flex:none}
+h2{font-size:11px;font-weight:600;letter-spacing:1.1px;text-transform:uppercase;margin:0;color:#c5d1dc}
+.frame{flex:1;min-height:0;background:var(--panel);border:1px solid var(--line);overflow:hidden;position:relative}
+.view-panel:first-child .frame{border-radius:6px 0 0 6px}
+.view-panel:last-child .frame{border-radius:0 6px 6px 0}
+canvas{display:block;width:100%!important;height:100%!important}
+#loading{position:absolute;inset:0;display:grid;place-items:center;padding:20px;text-align:center;color:var(--muted);font-size:13px}
+.inline{flex-direction:row;align-items:center;font-size:11px;gap:6px;cursor:pointer}
+.inline input{accent-color:var(--accent);margin:0}
+footer{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:10px;line-height:1.6;margin-top:12px;flex:none}
+a{color:var(--muted)}
+@media(max-width:760px){body{padding:0 12px}main{height:auto;min-height:100dvh;max-height:none}h1{font-size:24px}.toolbar{gap:8px}.toolbar label{flex:1;min-width:120px}.toolbar button{flex:1}#camera{max-width:100%;width:100%}.diagnostics{grid-template-rows:auto auto}#status,#performance{white-space:normal;overflow:visible}.views{grid-template-columns:1fr;gap:18px;flex:none}.frame{height:45dvh;min-height:200px;flex:none}.view-panel:first-child .frame,.view-panel:last-child .frame{border:1px solid var(--line);border-radius:6px}}

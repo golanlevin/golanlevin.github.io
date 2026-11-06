@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "id": "logitech-c920-vu0060-1080p",
+      "manufacturer": "Logitech",
+      "model": "C920 HD Pro Webcam",
+      "modelNumber": "V-U0060",
+      "possibleRetailVariant": "C920x",
+      "captureMode": {
+        "width": 1920,
+        "height": 1080,
+        "maxFps": 30,
+        "aspectRatio": "16:9"
+      },
+      "fovDegrees": {
+        "horizontal": 70.42,
+        "vertical": 43.3,
+        "diagonal": 78.0
+      },
+      "fovProvenance": {
+        "horizontal": "manufacturer specification",
+        "vertical": "manufacturer specification",
+        "diagonal": "manufacturer specification"
+      },
+      "fovScope": "Manufacturer camera specifications; exact Chrome 1920x1080 capture crop not independently verified",
+      "confidence": "medium",
+      "assumptions": [
+        "Manufacturer FOV applies to the delivered 1920x1080 video image",
+        "Centered rectilinear pinhole approximation",
+        "Square pixels",
+        "No digital zoom, additional crop, or dynamic reframing"
+      ],
+      "intrinsics": {
+        "fx": 1360.38,
+        "fy": 1360.41,
+        "cx": 960.0,
+        "cy": 540.0,
+        "referenceWidth": 1920,
+        "referenceHeight": 1080,
+        "provenance": "calculated estimate from manufacturer FOV, not measured calibration"
+      },
+      "distortion": null,
+      "chromeDeviceLabelHints": [
+        "HD Pro Webcam C920",
+        "Logitech HD Pro Webcam C920"
+      ],
+      "sourceUrls": [
+        "https://support.logi.com/hc/en-150/articles/360023307294-C920-Technical-Specifications"
+      ]
+    }
+  ]
+}
