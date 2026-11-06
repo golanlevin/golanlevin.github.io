@@ -1,6 +1,6 @@
 # De-Perspectivizer
 
-Automatic realtime webcam perspective correction. By Golan Levin (2026), based on [*ofxCorrectPerspective* by Haris Usmani](https://harisusmani.com/ofxcp/) (2014) and [*Shape from Angle Regularity*](assets/zaheer.pdf) by Zaheer et al (2012). 
+Automatic realtime webcam perspective correction. By Golan Levin (2026), based on [*ofxCorrectPerspective* by Haris Usmani](https://harisusmani.com/ofxcp/) (2014) and [*Shape from Angle Regularity*](https://www.semanticscholar.org/paper/Shape-from-Angle-Regularity-Zaheer-Rashid/601c37cc3ee946a8f20983df872a62158f70f2e9) by Zaheer et al (2012). 
 
 ---
 
