@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111820">
+  <meta name="description" content="Automatic webcam perspective correction, with local line detection and WebGL rendering.">
+  <title>De-Perspectivizer</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>De-Perspectivizer</h1>
+      <p class="credit">Automatic realtime webcam perspective correction.<br/>By Golan Levin (2026), based on <a href="https://harisusmani.com/ofxcp/">ofxCorrectPerspective</a> by Haris Usmani (2014)<br/>and <a href="https://www.semanticscholar.org/paper/Shape-from-Angle-Regularity-Zaheer-Rashid/601c37cc3ee946a8f20983df872a62158f70f2e9">Shape from Angle Regularity</a> by Zaheer et al (2012).</p>
+
+    </header>
+    <div class="toolbar" aria-label="Camera and image controls">
+      <button id="start" class="primary" disabled>Start camera</button>
+      <button id="stop" disabled>Stop camera</button>
+      <label>Camera<select id="camera" disabled><option value="">Default camera</option></select></label>
+      <label>Capture<select id="resolution" disabled><option value="1920">1080p · 30 fps</option><option value="1280">720p · 30 fps</option></select></label>
+      <label>Input<select id="sample" disabled><option value="">Live camera</option><option value="building">Building facade</option></select></label>
+      <button id="hold" aria-pressed="false" disabled>Hold correction</button>
+      <button id="reacquire" disabled>Reacquire plane</button>
+    </div>
+    <div class="fov-controls">
+      <label class="fov-label">Horizontal field of view <output id="fov-value" for="fov">100.00°</output>
+        <input type="range" id="fov" min="35" max="120" step="0.01" value="100" list="fov-marks">
+        <datalist id="fov-marks"><option value="70.42" label="C920"></option></datalist>
+        <span class="fov-scale" aria-hidden="true"><span class="fov-marker">C920</span></span>
+      </label>
+      <button id="reset-fov">Reset FOV</button>
+    </div>
+    <div class="views">
+    <section class="view-panel" aria-labelledby="corrected-label">
+      <div class="panel-label"><h2 id="corrected-label">Corrected</h2><label class="inline"><input type="checkbox" id="align-axes" checked> Align axes</label></div>
+      <div id="corrected-frame" class="frame"><div id="loading">The corrected view will appear here.</div></div>
+    </section>
+    <section class="view-panel" aria-labelledby="original-label">
+      <div class="panel-label"><h2 id="original-label">Original</h2><label class="inline"><input type="checkbox" id="show-lines"> Show detected lines</label></div>
+      <div class="frame"><canvas id="original" width="640" height="360" aria-label="Uncorrected camera or sample image"></canvas></div>
+    </section>
+    </div>
+    <div class="diagnostics"><span id="status" role="status" aria-live="polite">Loading p5.js and the line detector…</span><span id="performance"></span></div>
+    <footer><span>Video stays on the device</span><span aria-hidden="true">•</span><a href="README.md">About &amp; source</a></footer>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/p5@2.3.4/lib/p5.js"
+    onerror="document.getElementById('status').textContent='Could not load p5.js 2.3.4. Check that src/p5.js is present and reload.'"></script>
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
