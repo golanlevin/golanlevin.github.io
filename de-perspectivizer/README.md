@@ -9,10 +9,12 @@ Automatic realtime webcam perspective correction. By Golan Levin (2026), based o
 From the repository root:
 
 ```bash
-python3 -m http.server 8080 --bind 127.0.0.1 --directory web
+python3 -m http.server 8080 --bind 127.0.0.1 --directory de-perspectivizer
 ```
 
 Open **http://127.0.0.1:8080/** in Chrome. The app immediately requests the browser's default camera. Allow Chrome's camera prompt if shown. If the camera cannot be opened, the app shows the building facade instead. Stop the server with Ctrl-C.
+
+For GitHub Pages, publish this entire folder at `/de-perspectivizer/`, including **`assets/lsd.wasm`**. `src/lsd.js` is the loader, not the detector binary. It resolves the WASM URL relative to its own module, so the deployment subdirectory is preserved. The binary is in `assets/` to avoid GitHub Pages/Jekyll exclusions for `vendor/` directories. After deployment, `https://golanlevin.github.io/de-perspectivizer/assets/lsd.wasm` must return the binary successfully.
 
 The only third-party JavaScript library is p5.js 2.3.4, included locally:
 
@@ -64,28 +66,28 @@ The native canvas receives its WebGL1 context before being passed to p5's public
 | `src/shaders.js` | Inverse homography warp in panel pixel coordinates. |
 | `src/geometry.js` | Camera matrices, pairing, robust plane estimation, maximum panel fit. |
 | `src/worker.js` | Grayscale conversion, detection, estimation, overlay data. |
-| `src/lsd.js`, `vendor/lsd.wasm` | Minimal WASM interface. |
-| `vendor/lsd/` | Original LSD C/header source and license. |
+| `src/lsd.js`, `assets/lsd.wasm` | Minimal WASM interface and prebuilt detector binary. |
+| `libraries/lsd/` | Original LSD C/header source and license. |
 | `tools/lsd-runtime.c`, `tools/wasm-include/` | Small allocation/runtime shim and built-in Math imports. |
 
 The WASM module needs no Emscripten runtime, WASI, threads, shared memory, or special cross-origin isolation headers. Its imports are JavaScript's built-in Math functions and an error callback. Its allocation arena resets before each frame; returned detections are copied before reuse. Memory starts at 32 MB and is limited to 128 MB.
 
-The floor image in the original OF example and the C920 research profile remain as reference/test assets. Neither is a selectable input or runtime dependency.
+The C920 research profile remains as a reference asset. It is not a runtime dependency.
 
 ## Developer checks
 
 Use **Node 20+** for developer checks. Running the browser app itself needs no Node.
 
-From `web/`:
+From `de-perspectivizer/`:
 
 ```bash
 node --test test/*.test.mjs
 node tools/verify-images.mjs
 ```
 
-The thirteen tests cover safe invertible camera geometry, centered maximum panel fitting with rotation across different aspect ratios, synthetic plane recovery, axis alignment with competing orientations, rotation continuity across 45°, empty/fronto-parallel evidence, actual WASM detection and arena reuse, rasterized perspective-grid recovery, the actual worker protocol with transferred RGBA data and axis estimates, and retained camera frames through unavailable frames, failed copies, resolution changes, and cancellation.
+The fifteen tests cover safe invertible camera geometry, centered maximum panel fitting with rotation across different aspect ratios, synthetic plane recovery, axis alignment with competing orientations, rotation continuity across 45°, empty/fronto-parallel evidence, actual WASM detection and arena reuse, rasterized perspective-grid recovery, the actual worker protocol with transferred RGBA data and axis estimates, retained camera frames through unavailable frames, failed copies, resolution changes, and cancellation, and publication of the WASM binary with a working relative loader URL.
 
-The macOS image check uses the built-in `sips` decoder and the original OF example's image-specific focal-length values. It writes [quantitative results](test-output/image-results.json) and CPU-rendered geometry previews: [floor](test-output/floor-corrected.png), [building](test-output/building-corrected.png), [floor with aligned axes](test-output/floor-aligned.png), [building with aligned axes](test-output/building-aligned.png). These reference checks are separate from the app's generic FOV guess.
+The macOS image check uses the built-in `sips` decoder and the original OF example's building-specific focal-length value. It writes [quantitative results](test-output/image-results.json) and CPU-rendered geometry previews: [building](test-output/building-corrected.png), [building with aligned axes](test-output/building-aligned.png). These reference checks are separate from the app's generic FOV guess.
 
 To rebuild the distributed WASM binary:
 
@@ -105,9 +107,9 @@ This uses Chrome's fake camera to verify automatic startup, building fallback wh
 
 ## References and licenses
 
-The browser implementation and runtime shim are distributed under **GNU AGPL v3 or later**; see [LICENSE](LICENSE). LSD's original notices and corresponding source are retained in `vendor/lsd/`, alongside all build/runtime code needed to reproduce the binary.
+The browser implementation and runtime shim are distributed under **GNU AGPL v3 or later**; see [LICENSE](LICENSE). LSD's original notices and corresponding source are retained in `libraries/lsd/`, alongside all build/runtime code needed to reproduce the binary.
 
-The approach follows Zaheer, Rashid, and Khan, *Shape from Angle Regularity*, ECCV 2012 (`references_and_libraries/Zaheer.pdf`), and the original `ofxCorrectPerspective` addon by M. Haris Usmani. The browser solver is a new implementation. The reference photographs and expected-result image retain the original [MIT notice](vendor/ofxCorrectPerspective-MIT.txt).
+The approach follows Zaheer, Rashid, and Khan, *Shape from Angle Regularity*, ECCV 2012 (`references_and_libraries/Zaheer.pdf`), and the original `ofxCorrectPerspective` addon by M. Haris Usmani. The browser solver is a new implementation. The reference photographs and expected-result image retain the original [MIT notice](libraries/ofxCorrectPerspective-MIT.txt).
 
 - LSD: Rafael Grompone von Gioi et al., [LSD: a Line Segment Detector](https://www.ipol.im/pub/art/2012/gjmr-lsd/), AGPL v3 or later.
 - p5.js: [release 2.3.4](https://github.com/processing/p5.js/releases/tag/v2.3.4), LGPL 2.1.

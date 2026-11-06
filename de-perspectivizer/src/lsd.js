@@ -8,8 +8,9 @@ export async function createLSD(bytes) {
     throw new Error(new TextDecoder().decode(view.subarray(pointer, end)));
   } } };
   if (!bytes) {
-    const response = await fetch(new URL('../vendor/lsd.wasm', import.meta.url));
-    if (!response.ok) throw new Error(`Could not load LSD (${response.status})`);
+    const wasmURL = new URL('../assets/lsd.wasm', import.meta.url);
+    const response = await fetch(wasmURL);
+    if (!response.ok) throw new Error(`Could not load LSD (${response.status}): ${wasmURL.href}`);
     bytes = await response.arrayBuffer();
   }
   const instance = await WebAssembly.instantiate(bytes, imports);
