@@ -106,6 +106,7 @@ https://flong.com/archive/calendar/archive/2007/index.html
 
 <!-- * [*Cycles*](https://denison.edu/places/museum/exhibitions), Denison Museum, Denison University, Granville, Ohio. 8/30/2026–12/1/2026. -->
 * [*artport: A History of Internet Art*](https://whitney.org/exhibitions/artport-25), Whitney Museum of American Art, 11/2026–2/2027.
+* [SMALL BATCH: A Dataset Farmers Market (Fall Harvest Edition)](https://smallbatchdata.market/), LARPA, Brooklyn, 11/15/2026.
 * [*Aberrant Creativity*](https://pvfa.tamu.edu/institutes/iac/iac-initiatives/aberrant-creativity/), Texas A&M University, College Station, Texas. 8/25/2026–10/17/2026.
 * [*Drawing with Machines: Golan Levin and Students of the CMU Machine Drawing Lab*](https://bantamtools.com/blogs/gallery/cmu-drawing-with-machines-at-the-bantam-tools-machine-arts-gallery). Bantam Machine Arts Gallery, Peekskill, New York, 1/9/2026 – 1/31/2026.
 
@@ -685,12 +686,11 @@ https://nieuweinstituut.nl/en/projects/international-visitors-programme/zach-lie
 
 ### Press
 
-*Owing to link rot, this section is currently undergoing reconstruction.*
+*This section is currently undergoing reconstruction.*
 
 #### 2026
 
-<!--
-* Machine Arts. -->
+* "So you want to go to plotter school", [*Machine Arts Magazine #4*](https://bantamtools.com/products/machine-arts-magazine-4) (Summer 2026), Bantam Tools press. 
 
 #### 2025
 
