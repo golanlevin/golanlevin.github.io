@@ -3,3 +3,17 @@ cv/.DS_Store
 ellipse/.DS_Store
 meshy/.DS_Store
 ring/.DS_Store
+
+# Python virtual environments and bytecode
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Dependencies and development caches
+node_modules/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
