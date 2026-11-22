@@ -20,6 +20,7 @@ http://www.flong.com/
 15 August 2002.
 
 Ported to p5.js v.1.11.11, January 2026.
+Updated to p5.js v.2.3.4, November 2026.
 
 -------------------------
 "An Axis can't have more than three countries," explained Iraqi President
@@ -65,6 +66,9 @@ const AXI_W = Math.floor(APP_W * 2 / 3);
 // Image and pixel data
 let srcImg;
 let srcArray;  // Stores country IDs from the indexed image
+let mapImg;    // 1x offscreen image holding the recolored map
+let mapPix32;  // 32-bit view onto mapImg.pixels (one write per pixel)
+let pal32;     // Current palette, packed as 32-bit RGBA
 
 // Palette arrays (current colors for each country ID)
 let palr, palg, palb;
@@ -98,13 +102,21 @@ let colb, col1, col2, colu;
 // Decoded property data (boolean arrays)
 let countryProps = [];
 
-function preload() {
-  srcImg = loadImage("world.png");
-}
-
-function setup() {
+// p5.js v2: preload() no longer exists; assets are loaded with async/await.
+async function setup() {
   createCanvas(APP_W, APP_H);
-  pixelDensity(1); 
+  // Render text and lines at full display resolution (crisp on Retina).
+  // The map itself is computed at 1x in mapImg, then scaled up with
+  // nearest-neighbor sampling, so pixel work doesn't grow with density.
+  pixelDensity(displayDensity());
+  noSmooth(); // after pixelDensity(), which resets the canvas context
+  srcImg = await loadImage("world.png");
+
+  mapImg = createImage(IW, IH);
+  mapImg.loadPixels();
+  // Browsers are little-endian, so a Uint32 is laid out as 0xAABBGGRR.
+  mapPix32 = new Uint32Array(mapImg.pixels.buffer);
+  pal32 = new Uint32Array(NCOL);
 
   // Set up colors
   colb = color(102, 102, 102);
@@ -166,11 +178,11 @@ function setup() {
 }
 
 function draw() {
-  compute();
-  render();
+  updateAxis();
+  renderAxis();
 }
 
-function compute() {
+function updateAxis() {
   highlightCountryAtCursor(mouseX, mouseY);
 
   // Update the current palette based on highlight values
@@ -287,33 +299,25 @@ function compute() {
   by = Math.round(byf);
 }
 
-function render() {
+function renderAxis() {
   // Draw the header area
   noStroke();
   fill(colb);
   rect(0, 0, APP_W, IY);
 
   // Draw the world map with animated palette
-  loadPixels();
-  for (let y = 0; y < IH; y++) {
-    for (let x = 0; x < IW; x++) {
-      let srcIndex = y * IW + x;
-      let dstIndex = ((y + IY) * width + x) * 4;
-      let ctryID = srcArray[srcIndex];
-      if (ctryID < NCOL) {
-        pixels[dstIndex] = curr[ctryID];
-        pixels[dstIndex + 1] = curg[ctryID];
-        pixels[dstIndex + 2] = curb[ctryID];
-        pixels[dstIndex + 3] = 255;
-      } else {
-        pixels[dstIndex] = 0;
-        pixels[dstIndex + 1] = 0;
-        pixels[dstIndex + 2] = 0;
-        pixels[dstIndex + 3] = 255;
-      }
-    }
+  // Pack the current palette into 32-bit opaque colors (0xAABBGGRR).
+  for (let i = 0; i < NCOL; i++) {
+    pal32[i] = (0xFF000000 | (curb[i] << 16) | (curg[i] << 8) | curr[i]) >>> 0;
   }
-  updatePixels();
+  // Recolor the 1x map: one 32-bit write per pixel. Country IDs are
+  // 0..255 (255 = no country, which stays black in the palette).
+  const n = IW * IH;
+  for (let i = 0; i < n; i++) {
+    mapPix32[i] = pal32[srcArray[i]];
+  }
+  mapImg.updatePixels();
+  image(mapImg, 0, IY); // scaled to display density without smoothing
 
   // Draw border around the map
   stroke(0);
@@ -362,6 +366,10 @@ function mousePressed() {
 }
 
 function selectCountryAtCursor(x, y) {
+  if (!srcArray) return; // setup() may still be awaiting the image
+  // p5 v2 mouse coordinates may be fractional; use integer pixel indices
+  x = Math.floor(x);
+  y = Math.floor(y);
   if (x >= 0 && x < APP_W && y >= IY && y < APP_H) {
     let csrIndex = (y - IY) * IW + x;
     if (csrIndex < IW * IH && csrIndex >= 0) {
@@ -387,6 +395,8 @@ function selectCountryAtCursor(x, y) {
 
 function highlightCountryAtCursor(x, y) {
   doText = true;
+  x = Math.floor(x);
+  y = Math.floor(y);
   if (x >= 0 && x < APP_W && y >= IY && y < APP_H) {
     let csrIndex = (y - IY) * IW + x;
     if (csrIndex < IW * IH && csrIndex >= 0) {
