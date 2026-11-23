@@ -1,0 +1,10 @@
+{
+  "name": "lineus-web",
+  "version": "0.1.0",
+  "description": "DISABLED reference version. Minimal local web controller for the Line-us pen plotter: plot SVGs, calibrate, set up Wi-Fi.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "scripts": { "start": "LINEUS_ENABLE_SERVER=1 node server.js" }
+}

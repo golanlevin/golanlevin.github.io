@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Line-us Control</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 13 L7 4 L10 10 L14 3' fill='none' stroke='%23111' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="layout">
+    <section class="stage">
+      <canvas id="view" aria-label="Plotter drawing area preview"></canvas>
+      <div class="hint" id="hint">Open or drop an SVG or G-code file to begin. Drag it to move it; scroll over it to resize.</div>
+    </section>
+
+    <aside class="panel">
+      <header class="brand">
+        <h1>Line-us Control</h1>
+        <span id="conn-badge" class="badge off">Not connected</span>
+      </header>
+
+      <section class="card">
+        <h2>Plotter</h2>
+        <div class="seg" role="radiogroup" aria-label="Which plotter">
+          <label><input type="radio" name="target" value="real" checked> Real Line-us</label>
+          <label><input type="radio" name="target" value="sim"> Virtual plotter</label>
+        </div>
+        <form id="connect-form" class="row">
+          <input id="host" type="text" value="line-us.local" spellcheck="false" aria-label="Plotter address">
+          <button id="connect-btn" type="submit">Connect</button>
+        </form>
+        <p class="small muted" id="hello"></p>
+        <div id="sim-controls" class="sim" hidden>
+          <div class="grid2">
+            <label>Speed
+              <select id="sim-speed">
+                <option value="1">Real time (guess)</option>
+                <option value="4" selected>4× faster</option>
+                <option value="16">16× faster</option>
+                <option value="Infinity">Instant</option>
+              </select>
+            </label>
+            <label>Firmware
+              <select id="sim-fw">
+                <option value="3.1.1" selected>3.1.1 (buffers)</option>
+                <option value="2.0.1">2.0.1 (one at a time)</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <button type="button" id="sim-clear">Clear simulated ink (blue)</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Drawing</h2>
+        <div class="row files">
+          <label class="file">
+            <input id="file" type="file" accept=".svg,image/svg+xml">
+            <span>Open SVG…</span>
+          </label>
+          <label class="file">
+            <input id="gcode-file" type="file" accept=".gcode,.gco,.gc,.nc,.ngc,.tap,.txt">
+            <span>Open G-code…</span>
+          </label>
+          <button type="button" id="test-grid" title="Load a 1 cm test grid that fits the plotter's reach, with a vertex on the home point">Load test grid</button>
+        </div>
+        <p class="small" id="file-name"></p>
+        <div id="place-controls" class="grid2" hidden>
+          <label>Scale %<input id="scale" type="number" min="1" step="1"></label>
+          <label>Size<output id="size"></output></label>
+          <label>Center X<input id="cx" type="number" step="10"></label>
+          <label>Center Y<input id="cy" type="number" step="10"></label>
+          <div class="span2 row">
+            <button type="button" id="fit">Fit</button>
+            <button type="button" id="real">100%</button>
+            <button type="button" id="rotate" title="Rotate 90° clockwise">Rotate ↻</button>
+          </div>
+          <label class="span2 check" title="Lines whose ends meet (within 0.1 mm) are drawn as one stroke, saving a pen lift each time"><input id="join" type="checkbox"> Join touching lines</label>
+        </div>
+        <div id="z-controls" class="zbox" hidden>
+          <p class="small"><b>Pen pressure from Z.</b> Your file's Z values are converted to plotter heights, from 1000 (pen fully up) to 0 (pressing hardest). The pen just touches the paper at about 400.</p>
+          <div class="zmap" id="z-map">
+            <label for="z-up">Pen up (travel)</label><input id="z-up" type="number" min="0" max="1000" step="10" value="1000"><span class="small muted" id="z-up-src"></span>
+            <label for="z-light">Lightest stroke</label><input id="z-light" type="number" min="0" max="1000" step="10" value="400"><span class="small muted" id="z-light-src"></span>
+            <label for="z-heavy">Heaviest stroke</label><input id="z-heavy" type="number" min="0" max="1000" step="10" value="0"><span class="small muted" id="z-heavy-src"></span>
+          </div>
+          <p class="small muted" id="z-info"></p>
+        </div>
+        <ul id="warnings" class="warnings"></ul>
+        <p class="small" id="stats"></p>
+      </section>
+
+      <section class="card">
+        <h2>Plot</h2>
+        <div class="row">
+          <button id="plot" class="primary" disabled>Plot</button>
+          <button id="pause" disabled>Pause</button>
+          <button id="stop" disabled>Stop</button>
+        </div>
+        <label class="small row" for="depth">Commands in flight
+          <select id="depth">
+            <option value="auto">Auto (3 on firmware 3+, else 1)</option>
+            <option value="1">1 (like the official app)</option>
+            <option value="2">2</option>
+            <option value="3">3 (smoother)</option>
+          </select>
+        </label>
+        <progress id="progress" max="1" value="0"></progress>
+        <p class="small" id="job-text"></p>
+        <p class="small muted">Keep this tab open while plotting. Closing it stops the plot.</p>
+        <div class="row">
+          <button data-cmd="penUp" class="needs-conn">Pen up</button>
+          <button data-cmd="penDown" class="needs-conn">Pen down</button>
+          <button data-cmd="home" class="needs-conn">Home</button>
+        </div>
+      </section>
+
+      <details class="card">
+        <summary><h2>Pen height</h2></summary>
+        <ol class="small steps">
+          <li>Press <b>Read</b> to load the stored values, then <b>Seat pen</b>. Loosen the pen, let it rest on the paper, tighten it, then <b>Raise</b>.</li>
+          <li>For each corner, press <b>Start</b>. The pen steps down, drawing a short dash. Press <b>Stop</b> as soon as ink appears.</li>
+          <li>Press <b>Save</b> to store the four heights on the plotter.</li>
+        </ol>
+        <div class="row">
+          <button data-ph="prepare" class="needs-conn">Read</button>
+          <button data-ph="seat" class="needs-conn">Seat pen</button>
+          <button data-ph="raise" class="needs-conn">Raise</button>
+        </div>
+        <div class="corners">
+          <div class="corner" data-corner="0"><span>Top left</span><input type="number" min="0" max="1000" value="0" aria-label="Top left height"><button class="needs-conn">Start</button></div>
+          <div class="corner" data-corner="1"><span>Top right</span><input type="number" min="0" max="1000" value="0" aria-label="Top right height"><button class="needs-conn">Start</button></div>
+          <div class="corner" data-corner="3"><span>Bottom left</span><input type="number" min="0" max="1000" value="0" aria-label="Bottom left height"><button class="needs-conn">Start</button></div>
+          <div class="corner" data-corner="2"><span>Bottom right</span><input type="number" min="0" max="1000" value="0" aria-label="Bottom right height"><button class="needs-conn">Start</button></div>
+        </div>
+        <div class="row">
+          <button data-ph="save" class="primary needs-conn">Save</button>
+          <button data-ph="clear" class="needs-conn">Clear stored map</button>
+        </div>
+      </details>
+
+      <details class="card">
+        <summary><h2>Home calibration</h2></summary>
+        <p class="small">Press <b>Go home</b>, nudge the pen until it sits over the small hole in the base plate, then press <b>Save home</b>.</p>
+        <div class="jog">
+          <span></span><button data-jog="0,1" class="needs-conn" aria-label="Nudge up">▲</button><span></span>
+          <button data-jog="-1,0" class="needs-conn" aria-label="Nudge left">◀</button>
+          <button data-cmd="jogHome" class="needs-conn">Go home</button>
+          <button data-jog="1,0" class="needs-conn" aria-label="Nudge right">▶</button>
+          <span></span><button data-jog="0,-1" class="needs-conn" aria-label="Nudge down">▼</button><span></span>
+        </div>
+        <p class="small muted" id="jog-pos"></p>
+        <div class="row">
+          <button data-cmd="saveHome" class="primary needs-conn">Save home</button>
+          <button data-cmd="clearHome" class="needs-conn">Clear calibration</button>
+        </div>
+      </details>
+
+      <details class="card">
+        <summary><h2>Wi-Fi setup</h2></summary>
+        <p class="small">In order to receive drawings, the Line-us plotter needs to join your local Wi-Fi network. However, telling the plotter which Wi-Fi to join can't be done from this page: the plotter only accepts this information over a direct connection, which a web browser can't make. Instead, it takes one terminal command and just a few seconds. You only need to do this once per network.</p>
+        <p class="small">Line-us can only join <b>2.4 GHz</b> networks with <b>WPA2-Personal</b> (password-only) security, such as a home Wi-Fi or a phone hotspot. Networks that need a username as well as a password, such as eduroam, won't work.</p>
+        <ol class="small steps">
+          <li>Hold the plotter's button for about 2 seconds, until its light <b>flashes red</b> (setup mode).</li>
+          <li>On your computer, join the <b>Line-us-Setup</b> Wi-Fi network.</li>
+          <li>Fill in your network's name and password, below. This information stays local.
+            <div class="grid2" style="margin:6px 0">
+              <label>Wi-Fi network name<input id="ssid" type="text" autocomplete="off" spellcheck="false" placeholder="myNetwork"></label>
+              <label>Wi-Fi password<input id="wifi-pw" type="text" autocomplete="off" spellcheck="false"></label>
+            </div>
+          </li>
+          <li>Open the <b>Terminal</b> app and run this (click Copy, paste, press Enter). <code>nc</code> opens a network connection, similar to <code>telnet</code>. <code>192.168.4.1</code> is the Line-us's own address while it's in Wi-Fi setup mode.
+            <div class="cmd"><input id="cmd-connect" readonly aria-label="Connect command"><button type="button" class="copy" data-copy="cmd-connect">Copy</button></div>
+          </li>
+          <li>Wait a few seconds for the arm to wave and a <code>hello…</code> line to appear. Then paste this line and press Enter:
+            <div class="cmd"><input id="cmd-wifi" readonly aria-label="Set Wi-Fi command"><button type="button" class="copy" data-copy="cmd-wifi">Copy</button></div>
+            The light turns <b>solid blue</b> when it joins. If it <b>flashes red</b>, the password was wrong, so try step 5 again.
+          </li>
+          <li>Done. Close the Terminal window (press Ctrl-C first), and rejoin your normal Wi-Fi. The plotter is now at <code id="new-host">line-us.local</code> — connect to it at the top of this page.</li>
+        </ol>
+        <p class="small muted">On Windows, use <b>PuTTY</b> in "Raw" mode (host <code>192.168.4.1</code>, port <code>1337</code>) instead of the Terminal command in step 4, then type the line from step 5.</p>
+      </details>
+
+      <details class="card">
+        <summary><h2>Machine</h2></summary>
+        <p class="small">Rename the plotter (letters, digits and hyphens). After renaming, restart the plotter, then reconnect: put the new name plus <code>.local</code> in the address box at the top of this page. For example, if you rename it to <code>studio-plotter</code>, connect to <code>studio-plotter.local</code>.</p>
+        <form id="rename-form" class="row">
+          <input id="new-name" type="text" placeholder="new-name" aria-label="New plotter name" spellcheck="false">
+          <button type="submit" class="needs-conn">Rename</button>
+        </form>
+        <div class="row">
+          <button data-cmd="info" class="needs-conn">Machine info</button>
+          <button data-cmd="caps" class="needs-conn">Capabilities</button>
+        </div>
+      </details>
+
+      <details class="card" open>
+        <summary><h2>Log</h2></summary>
+        <div id="log" class="log" aria-live="polite"></div>
+        <form id="raw-form" class="row">
+          <input id="raw" type="text" placeholder="Raw G-code, e.g. M114" spellcheck="false" aria-label="Raw G-code command">
+          <button type="submit" class="needs-conn">Send</button>
+        </form>
+      </details>
+    </aside>
+  </main>
+  <div id="svg-host" aria-hidden="true"></div>
+  <script src="js/area.js"></script>
+  <script src="js/svg.js"></script>
+  <script src="js/gcode.js"></script>
+  <script src="js/plotter.js"></script>
+  <script src="js/controller.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
