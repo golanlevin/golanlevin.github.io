@@ -101,13 +101,9 @@
           <button id="stop" disabled>Stop</button>
         </div>
         <label class="small row" for="depth">Commands in flight
-          <select id="depth">
-            <option value="auto">Auto (3 on firmware 3+, else 1)</option>
-            <option value="1">1 (like the official app)</option>
-            <option value="2">2</option>
-            <option value="3">3 (smoother)</option>
-          </select>
+          <input id="depth" type="number" min="1" max="32" step="1" value="3" inputmode="numeric">
         </label>
+        <p class="small muted">How many moves to queue on the plotter at once. 1 = like the official app; 3 = smoother. Higher values can help dense drawings but old firmware always uses 1.</p>
         <progress id="progress" max="1" value="0"></progress>
         <p class="small" id="job-text"></p>
         <p class="small muted">Keep this tab open while plotting. Closing it stops the plot.</p>
@@ -194,6 +190,10 @@
         <div class="row">
           <button data-cmd="info" class="needs-conn">Machine info</button>
           <button data-cmd="caps" class="needs-conn">Capabilities</button>
+        </div>
+        <p class="small">Stops the plotter's own button from drawing by itself: clears any saved drawings and unfollows the cloud "drawing of the day" feed. (Re-follow with <code>M23 S2 Kdefault</code> in the Log.)</p>
+        <div class="row">
+          <button id="clear-mem" disabled>Clear on-board plotter memory</button>
         </div>
       </details>
 

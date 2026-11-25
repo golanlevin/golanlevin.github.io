@@ -92,6 +92,8 @@ Line-us can only join **2.4 GHz** networks with **WPA2-Personal** (password-only
 
 The **Machine** section renames the plotter and shows machine information. After renaming, restart the plotter and connect using the new name followed by `.local` (for example `studio-plotter.local`).
 
+It also has **Clear on-board plotter memory**. Pressing the plotter's own button makes it draw by itself — either a drawing saved in its memory, or the latest "drawing of the day" from the Line-us cloud feed it follows by default — which can happen by accident. This button clears any saved drawings and stops the cloud feed, so a button press does nothing. (To re-subscribe to the daily feed, send `M23 S2 Kdefault` in the Log.)
+
 ## The virtual plotter
 
 To try things out without a real Line-us, choose **Virtual plotter** and press **Connect**. It behaves like the real machine:

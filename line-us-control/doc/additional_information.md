@@ -96,12 +96,47 @@ Commands are plain text. Each may end with `\r`, `\n`, `\0` or a combination; re
 | `M374` | Save home calibration (after jogging the pen over the home hole). | ✓ |
 | `M374 Sclear` | Clear home calibration. | ✓ |
 
+#### Where the per-device calibration lives
+
+Each Line-us keeps its calibration as tiny files on its internal flash
+filesystem (SPIFFS). These are **hidden from the normal `M20` file list** —
+which shows only user drawings — but they appear in the `M122` diagnostics
+dump. There are two of them:
+
+- **`/cal`** — the XY calibration written by `M374`. On a real unit it is only
+  about **30 bytes**: it holds exactly three comma-separated floats and nothing
+  else. The firmware applies it to ordinary ("mapped") moves and `G40` bypasses
+  it. Three numbers is a **rigid/affine correction** (an XY offset plus a small
+  rotation or skew term), **not** a point-by-point nonlinearity map — there
+  simply isn't room in 30 bytes for one, and fine calibration grids still show
+  residual "wiggle." The arm's inherent nonlinearity (its two-servo
+  shoulder/elbow kinematics) is handled by firmware inverse kinematics that is
+  identical on every unit, not by this file. The spec never defines the three
+  fields (`M170` is "reserved, not available via WebSocket"), so their exact
+  assignment would need the firmware source.
+- **`/key`** — about **344 bytes**: the RSA signature used by the official app's
+  genuine-device check (see [`findings.md`](findings.md)). Also hidden from `M20`.
+
+The Z-map is **separate** from `/cal`: it is the four corner pen heights set by
+`G31` (default `0;100;300;200`), reported as the `ZMap` field.
+
+Real `M122` reply from a device (trimmed), showing both the visibility
+difference and the real values:
+
+```
+M122 → … FS:"/0000001.txt-76033;/cal-30;/key-344; " Cal:"-10.29633,3.509979,-11.20068" ZMap:"0;260;560;320"
+M20  → ok FS:"/0000001.txt-76033;"
+```
+
+Here `/0000001.txt` is the built-in demo drawing; `M20` lists only it, while
+`M122` also exposes `/cal` and `/key`.
+
 ### Machine info and naming
 
 | Command | Meaning | App |
 |---|---|---|
 | `M115` | Capabilities. | ✓ |
-| `M122` | Info / diagnostics. | ✓ |
+| `M122` | Info / diagnostics. Its `FS:` list reveals the hidden `/cal` and `/key` files (see Calibration). | ✓ |
 | `M550 P<name>` | Rename the machine (changes its `.local` name). Not disabled over WebSocket. | ✓ |
 | `M997` | Firmware update (the plotter fetches it itself). | — |
 | `M170` | Returns `INFO`/`NAME`/`CAL`/`ZMAP` fields, used by the official genuine-device check. **Disabled over WebSocket.** | — |
@@ -124,11 +159,11 @@ Used for offline, computer-free drawing (see the next section). None are disable
 |---|---|---|
 | `M28 S<n>` | Start recording the following moves into file *n* (1–32). | — |
 | `M29` | Stop recording. | — |
-| `M30 S<n>` | Delete file *n*. | — |
-| `M20` | List stored files (`FS:"/0000001.txt-9496;..."`). | — |
+| `M30 S<n>` | Delete file *n*. Used by **Clear on-board plotter memory**. | ✓ |
+| `M20` | List stored files (`FS:"/0000001.txt-9496;..."`). Shows only user drawings; hides the `/cal` and `/key` system files (see Calibration). Used to find which slots to delete. | ✓ |
 | `M39` | Storage report (`FSUsed:.. FSTotal:1562625 FSFree:.. FSPercent:..`). | — |
 | `M23 S0` / `S1` | Draw from memory: Red mode / Blue mode (the playback command). | — |
-| `M23 S2 [Kdefault]` / `S3` | Subscribe to / stop following a cloud sketchbook feed. | — |
+| `M23 S2 [Kdefault]` / `S3` | Subscribe to / stop following a cloud sketchbook feed. **Clear on-board plotter memory** sends `M23 S3` so the button stops drawing the cloud "drawing of the day." | ✓ |
 | `M552 S1..S4` | Startup/button mode: default Blue / Red / locked Red / Blue with 7-s long-press. | — |
 
 ### Other
@@ -176,7 +211,7 @@ While recording (between `M28` and `M29`) the firmware disables `M374`, `M997`, 
 
 **Unknowns to check on hardware first**
 - Does the arm draw while recording, or only record?
-- Which file does the button play, and how is it chosen (`M23 S0` vs `M552` startup mode)?
+- ~~Which file does the button play, and how is it chosen?~~ **Confirmed on hardware:** in **Blue** mode (connected to Wi-Fi) the button draws the latest drawing from the cloud sketchbook the plotter follows — the default **"drawing of the day"** feed — *not* a stored file; in **Red** mode it draws the internal memory (`M23 S0`, cycling through saved drawings and the factory "chicken"/quality-test drawing). So emptying the filesystem does **not** silence the button in Blue mode; `M23 S3` (stop following) does. The **Clear on-board plotter memory** button sends `M23 S3` and then deletes any saved slots.
 - Size limit: the old app capped drawings at `maxDrawlength` 36000 points ("about 700K").
 - Are continuous Z values (pen pressure) stored and replayed faithfully? Probably, if commands are stored verbatim.
 

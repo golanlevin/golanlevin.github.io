@@ -112,8 +112,9 @@
       return cmds;
     }
 
-    // depth: 'auto' (3 on firmware 3.0.0+, else 1) or 1-4.
-    plot(polylines, depthSetting = 'auto', upZ = PEN_UP) {
+    // depthSetting: how many moves to keep in flight, a whole number >= 1
+    // (3 by default). Firmware without command buffering is clamped to 1.
+    plot(polylines, depthSetting = 3, upZ = PEN_UP) {
       if (!(upZ >= 0 && upZ <= PEN_UP)) throw new Error('The pen-up height must be between 0 and 1000');
       this.requireIdle();
       if (!Array.isArray(polylines) || !polylines.length) throw new Error('Nothing to plot');
@@ -126,8 +127,10 @@
         }
       }
       if (outside) throw new Error(`${outside} points are outside the drawing area`);
-      const depth = depthSetting === 'auto' ? (this.plotter.supportsBuffering ? 3 : 1) : Number(depthSetting);
-      if (![1, 2, 3, 4].includes(depth)) throw new Error('Commands in flight must be auto or 1-4');
+      const n = Number(depthSetting);
+      if (!Number.isInteger(n) || n < 1) throw new Error('Commands in flight must be a whole number of 1 or more');
+      // Old firmware (no command buffering) can only handle one command at a time.
+      const depth = this.plotter.supportsBuffering ? n : 1;
       this.runJob(Controller.buildPlot(polylines, upZ), depth, upZ);
     }
 
@@ -296,6 +299,23 @@
       }
     }
 
+    // Stored-drawing slots on the plotter, parsed from M20's file list
+    // (`FS:"/0000001.txt-76033;..."`). The slot number is the integer in the
+    // filename; M28/M30 address files by that number. Sent directly (not
+    // logged) so probing the memory on connect doesn't clutter the log.
+    async drawingSlots() {
+      if (!this.plotter.connected) return [];
+      const reply = await this.plotter.send('M20');
+      const m = /FS:"([^"]*)"/.exec(reply);
+      if (!m) return [];
+      const slots = [];
+      for (const entry of m[1].split(';')) {
+        const nm = /\/0*(\d+)\.txt/i.exec(entry.trim());
+        if (nm) slots.push(Number(nm[1]));
+      }
+      return slots;
+    }
+
     // --------------------------------------------------- one-off commands
 
     async command(action, opts = {}) {
@@ -323,6 +343,14 @@
           return { reply: await this.talk('M374') };
         case 'clearHome':
           return { reply: await this.talk('M374 Sclear') };
+        case 'clearDrawings': {
+          // Stop following the cloud "drawing of the day" feed, which the button
+          // draws by default in Blue mode, then delete any saved drawings.
+          await this.talk('M23 S3', { requireOk: false });
+          const slots = await this.drawingSlots();
+          for (const n of slots) await this.talk(`M30 S${n}`, { requireOk: false });
+          return { cleared: slots.length };
+        }
         case 'info':
           return { reply: await this.talk('M122', { requireOk: false }) };
         case 'caps':

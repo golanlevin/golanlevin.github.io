@@ -116,6 +116,7 @@ code { font-size: 12px; }
 .zmap { display: grid; grid-template-columns: auto 80px 1fr; gap: 6px 8px; align-items: center; margin: 6px 0; font-size: 13px; }
 .zbox, .sim { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 4px 10px; margin-top: 8px; }
 .row select { width: auto; flex: 1; min-width: 0; }
+#depth { width: 4.5em; flex: 0 0 auto; }
 
 #svg-host { position: fixed; left: 0; top: 0; width: 10px; height: 10px; overflow: hidden; opacity: 0; pointer-events: none; z-index: -1; }
 

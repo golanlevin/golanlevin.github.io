@@ -558,6 +558,10 @@
     $('#hello').textContent = conn && hi ? [hi.NAME, hi.VERSION && `firmware ${hi.VERSION}`, hi.SERIAL && `s/n ${hi.SERIAL}`].filter(Boolean).join(' · ') : '';
 
     for (const b of $$('.needs-conn')) b.disabled = !conn || active;
+    // "Clear on-board plotter memory": available whenever connected to a real
+    // plotter and idle. The cloud-follow state can't be queried, so we don't try
+    // to grey it out when "already clear" — clicking again is harmless.
+    $('#clear-mem').disabled = !conn || active || plotter.simulated || S.phCorner !== null;
     const plottable = S.machine && S.machine.lines.length > 0;
     $('#plot').disabled = !conn || active || !plottable || S.phCorner !== null;
     $('#pause').disabled = !['running', 'paused'].includes(S.job.state);
@@ -673,12 +677,18 @@
   // fills the D-shaped reachable area rather than a rectangle: every line is
   // aligned to a 1 cm lattice that has a vertex exactly on the home point, and
   // each row/column runs as far as it can while its vertices stay inside the
-  // area (with a small margin). The edges therefore follow the D's outline.
+  // area (with a small margin). The edges therefore follow the D's outline,
+  // except for a flat floor near the bottom that keeps the pen on the base
+  // plate (see Y_FLOOR).
   function buildTestGrid() {
     const P = 10 * UNITS_PER_MM; // 1 cm cell, in machine units
     const M = 40; // keep each vertex at least this far inside the edge (~2 mm)
     const R = 15; // lattice steps to scan each way from Home (covers the area)
+    // Don't draw below this: lower than the base of the plotter, the pen can
+    // catch off the edge of the floor plate. (-1200 is lattice index j=-11.)
+    const Y_FLOOR = -1200;
     const safe = (x, y) =>
+      y >= Y_FLOOR &&
       insideArea(x, y) && insideArea(x + M, y) && insideArea(x - M, y) && insideArea(x, y + M) && insideArea(x, y - M);
     // Innermost/outermost safe lattice index along one row (fixed j) or
     // column (fixed i). The D is convex at every y and x, so the safe indices
@@ -988,6 +998,19 @@
   for (const b of $$('[data-cmd]')) {
     b.addEventListener('click', () => guarded(async () => showJog(await ctl.command(b.dataset.cmd))));
   }
+  // Clear everything the plotter's button could draw on its own: stop following
+  // the cloud daily-drawing feed (M23 S3) and delete any saved drawings (M30).
+  $('#clear-mem').addEventListener('click', () =>
+    guarded(async () => {
+      const { cleared } = await ctl.command('clearDrawings');
+      logLine(
+        `Cleared the plotter's on-board memory${
+          cleared ? ` (${cleared} saved drawing${cleared === 1 ? '' : 's'})` : ''
+        } and stopped the cloud drawing-of-the-day feed. The plotter's button won't draw on its own now.`,
+        'info',
+      );
+    }),
+  );
   for (const b of $$('[data-jog]')) {
     b.addEventListener('click', () =>
       guarded(async () => {
@@ -1124,8 +1147,8 @@
     $('#sim-speed').value = savedSpeed;
     sim.timeScale = Number(savedSpeed);
   }
-  const savedDepth = store.get('lineus-depth');
-  if (savedDepth && [...$('#depth').options].some((o) => o.value === savedDepth)) $('#depth').value = savedDepth;
+  const savedDepth = Number(store.get('lineus-depth'));
+  if (Number.isInteger(savedDepth) && savedDepth >= 1) $('#depth').value = String(savedDepth);
   $('#depth').addEventListener('change', () => store.set('lineus-depth', $('#depth').value));
 
   window.addEventListener('resize', resize);
